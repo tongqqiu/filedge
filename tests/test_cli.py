@@ -9,7 +9,6 @@ from etl.db import (
     claim_processing,
     create_audit_tables,
     insert_pending,
-    mark_committed,
     mark_failed,
 )
 

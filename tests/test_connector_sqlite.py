@@ -82,12 +82,6 @@ def test_write_rows_append_accumulates_different_hashes(connector, config):
 
 
 def test_write_rows_truncate_replaces_rows(connector, config):
-    c = SQLiteConnector(
-        url=connector._path if hasattr(connector, "_path") else f"sqlite:///{connector._path}",
-        write_mode="truncate",
-        batch_size=100,
-    )
-    # Rebuild with truncate mode
     url = f"sqlite:///{pytest.importorskip('tempfile').mkdtemp()}/trunc.db"
     tc = SQLiteConnector(url=url, write_mode="truncate", batch_size=100)
     tc.ensure_table(config)
