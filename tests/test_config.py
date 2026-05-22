@@ -1,4 +1,3 @@
-import pytest
 
 from etl.config import load_config
 

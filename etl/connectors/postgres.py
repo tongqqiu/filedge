@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, Iterator, List, Optional
+from typing import Iterator, List, Optional
 
 from etl.config import PipelineConfig
 from etl.connectors import Connector

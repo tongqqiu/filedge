@@ -4,7 +4,6 @@ from etl.config import load_config
 from etl.connectors import get_connector
 from etl.db import (
     Database,
-    SchemaError,
     claim_processing,
     create_audit_tables,
     find_file_by_hash,
