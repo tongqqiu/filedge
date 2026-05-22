@@ -25,7 +25,8 @@ def run(watched_dir, config_path, db_url):
             f"Failed: {result['failed']}  "
             f"Skipped: {result['skipped']}  "
             f"New: {result['new_files']}  "
-            f"Reclaimed: {result['reclaimed']}"
+            f"Reclaimed: {result['reclaimed']}  "
+            f"Retried: {result['retried']}"
         )
     except SchemaError as e:
         click.echo(f"Schema error: {e}", err=True)

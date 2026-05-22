@@ -12,6 +12,7 @@ from etl.db import (
     mark_committed,
     mark_failed,
     reclaim_stale_processing,
+    reset_eligible_failed,
 )
 from etl.hashing import compute_hash
 from etl.loader import load_file
@@ -27,7 +28,12 @@ def run_pipeline(watched_dir: str, config_path: str, db_url: str) -> dict:
 
     try:
         create_audit_tables(db)
+
+        # Reset FAILED files below retry_cap → PENDING so they're picked up this Run
+        retried = reset_eligible_failed(db, config.retry_cap)
+        # Reclaim stale PROCESSING locks from crashed workers
         reclaimed = reclaim_stale_processing(db, config.stale_timeout_minutes)
+
         ensure_destination_table(db, config)
         db.commit()
 
@@ -55,6 +61,9 @@ def run_pipeline(watched_dir: str, config_path: str, db_url: str) -> dict:
             content_hash = file_hashes[path]
             record = find_file_by_hash(db, content_hash)
             if record is None or record.state != "PENDING":
+                # Count terminal FAILED files (at or above retry_cap) as skipped
+                if record is not None and record.state == "FAILED":
+                    skipped += 1
                 continue
 
             # Tx 1: claim the File as PROCESSING (distributed lock)
@@ -80,6 +89,7 @@ def run_pipeline(watched_dir: str, config_path: str, db_url: str) -> dict:
             "failed": failed,
             "skipped": skipped,
             "reclaimed": reclaimed,
+            "retried": retried,
         }
     finally:
         db.close()

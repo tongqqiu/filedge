@@ -133,6 +133,16 @@ def mark_failed(db: Database, content_hash: str, error: str) -> None:
     )
 
 
+def reset_eligible_failed(db: Database, retry_cap: int) -> int:
+    """Reset FAILED files with attempt_count < retry_cap back to PENDING for retry."""
+    cursor = db.execute(
+        "UPDATE etl_file_audit SET state='PENDING', updated_at=?"
+        " WHERE state='FAILED' AND attempt_count < ?",
+        [_now(), retry_cap],
+    )
+    return cursor.rowcount
+
+
 def reclaim_stale_processing(db: Database, stale_minutes: int) -> int:
     cutoff = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=stale_minutes)).isoformat()
     cursor = db.execute(
