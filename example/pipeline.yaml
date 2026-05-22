@@ -1,0 +1,23 @@
+format: csv
+dest_table: orders
+retry_cap: 3
+stale_timeout_minutes: 30
+batch_size: 1000
+
+columns:
+  - source: order_id
+    dest: order_id
+    type: string
+    required: true
+  - source: customer_name
+    dest: customer_name
+    type: string
+    required: true
+  - source: amount
+    dest: amount
+    type: string
+    required: true
+  - source: order_date
+    dest: order_date
+    type: string
+    required: false
