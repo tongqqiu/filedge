@@ -49,7 +49,10 @@ Two-level audit: (1) file-level — captures filename, content hash, state, atte
 The relational database (SQLite for development, PostgreSQL for production) that holds the file-level audit records and drives the state machine (PENDING → PROCESSING → COMMITTED/FAILED). This is the control plane — it is always a SQL database with full transaction support, separate from the Destination.
 
 ### Connector
-A pluggable adapter that owns all interactions with a specific Destination backend: creating or validating the destination table, writing rows, and enforcing write-mode semantics. The Connector is the only component that knows about the Destination's SDK, DDL dialect, and bulk-load API. Adding a new Destination means writing a new Connector — no changes to the pipeline or audit logic. Built-in Connectors: `sqlite`, `postgres`, `bigquery`, `databricks`.
+A pluggable adapter that owns all interactions with a specific Destination backend: creating or validating the destination table, writing rows, and enforcing write-mode semantics. The Connector is the only component that knows about the Destination's SDK, DDL dialect, and bulk-load API. Adding a new Destination means writing a new Connector — no changes to the pipeline or audit logic. Built-in Connectors: `sqlite`, `postgres`, `bigquery`, `databricks`, `duckdb`.
+
+### DuckDB Connector
+A Connector that writes rows to a `.duckdb` file on disk. Targeted at local analytics and lightweight deployments where a full OLAP warehouse (BigQuery, Databricks) is overkill. DuckDB is file-based and supports only one writer at a time — the Connector fails fast with a clear error if the file is locked by another process rather than retrying. DuckDB is a destination only; the audit DB always remains SQLite or PostgreSQL. Rows are written via standard batched `executemany`; bulk Parquet loading is a future optimization.
 
 ### Destination
 The system where ingested rows land. Decoupled from the Audit DB — each has its own connection and transaction scope. Because rows and the audit COMMITTED marker can no longer be written in a single transaction, the Connector is responsible for making `write_rows` idempotent per `file_hash`, so retries produce the same destination state as a first write.

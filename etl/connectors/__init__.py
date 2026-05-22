@@ -20,12 +20,14 @@ _REGISTRY = {
     "postgres": "etl.connectors.postgres.PostgresConnector",
     "bigquery": "etl.connectors.bigquery.BigQueryConnector",
     "databricks": "etl.connectors.databricks.DatabricksConnector",
+    "duckdb": "etl.connectors.duckdb.DuckDBConnector",
 }
 
 _INSTALL_HINTS = {
     "postgres": "pip install etl-big-idea[postgres]",
     "bigquery": "pip install etl-big-idea[bigquery]",
     "databricks": "pip install etl-big-idea[databricks]",
+    "duckdb": "pip install etl-big-idea[duckdb]",
 }
 
 
