@@ -46,7 +46,7 @@ class Database:
 
 # --- Audit table ---
 
-_AUDIT_DDL = """
+_AUDIT_DDL_SQLITE = """
 CREATE TABLE IF NOT EXISTS etl_file_audit (
     id INTEGER PRIMARY KEY,
     filename TEXT NOT NULL,
@@ -60,9 +60,24 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
 )
 """
 
+_AUDIT_DDL_POSTGRES = """
+CREATE TABLE IF NOT EXISTS etl_file_audit (
+    id BIGSERIAL PRIMARY KEY,
+    filename TEXT NOT NULL,
+    content_hash TEXT NOT NULL UNIQUE,
+    state TEXT NOT NULL,
+    attempt_count INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    claimed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+)
+"""
+
 
 def create_audit_tables(db: Database) -> None:
-    db.execute(_AUDIT_DDL)
+    ddl = _AUDIT_DDL_POSTGRES if db._placeholder == "%s" else _AUDIT_DDL_SQLITE
+    db.execute(ddl)
     db.commit()
 
 
@@ -174,13 +189,22 @@ class SchemaError(Exception):
     pass
 
 
-_TYPE_TO_SQL = {
+_TYPE_TO_SQL_SQLITE = {
     "string": "TEXT",
     "integer": "INTEGER",
     "float": "REAL",
     "date": "TEXT",
     "timestamp": "TEXT",
     "boolean": "INTEGER",
+}
+
+_TYPE_TO_SQL_POSTGRES = {
+    "string": "TEXT",
+    "integer": "INTEGER",
+    "float": "DOUBLE PRECISION",
+    "date": "DATE",
+    "timestamp": "TIMESTAMP WITH TIME ZONE",
+    "boolean": "BOOLEAN",
 }
 
 
@@ -197,20 +221,35 @@ def ensure_destination_table(db: Database, config: PipelineConfig) -> None:
 
 
 def _get_existing_columns(db: Database, table: str) -> Optional[Dict[str, str]]:
-    cursor = db.execute(f"PRAGMA table_info({table})")
-    rows = cursor.fetchall()
-    if not rows:
-        return None  # Table does not exist
-    return {row[1]: row[2].upper() for row in rows}
+    if db._placeholder == "%s":
+        cursor = db.execute(
+            "SELECT column_name, data_type FROM information_schema.columns"
+            " WHERE table_name = ?",
+            [table],
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+        return {row[0]: row[1].upper() for row in rows}
+    else:
+        cursor = db.execute(f"PRAGMA table_info({table})")
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+        return {row[1]: row[2].upper() for row in rows}
 
 
 def _create_destination_table(db: Database, config: PipelineConfig) -> None:
-    col_defs = ["_id INTEGER PRIMARY KEY"]
+    is_postgres = db._placeholder == "%s"
+    type_map = _TYPE_TO_SQL_POSTGRES if is_postgres else _TYPE_TO_SQL_SQLITE
+    id_col = "_id BIGSERIAL PRIMARY KEY" if is_postgres else "_id INTEGER PRIMARY KEY"
+    ingested_col = "_ingested_at TIMESTAMP WITH TIME ZONE NOT NULL" if is_postgres else "_ingested_at TEXT NOT NULL"
+    col_defs = [id_col]
     for col in config.columns:
-        sql_type = _TYPE_TO_SQL.get(col.type, "TEXT")
+        sql_type = type_map.get(col.type, "TEXT")
         col_defs.append(f"{col.dest} {sql_type}")
     col_defs.append("_source_file_hash TEXT NOT NULL")
-    col_defs.append("_ingested_at TEXT NOT NULL")
+    col_defs.append(ingested_col)
     ddl = f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})"
     db.execute(ddl)
 
