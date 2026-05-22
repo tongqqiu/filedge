@@ -27,21 +27,20 @@ This project addresses three root causes:
 
 ## Installation
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
+Requires [uv](https://docs.astral.sh/uv/).
 
+```bash
 # Core only (SQLite destination, no extra SDKs needed)
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # With PostgreSQL destination support
-pip install -e ".[dev,postgres]"
+uv sync --extra dev --extra postgres
 
 # With BigQuery destination support
-pip install -e ".[dev,bigquery]"
+uv sync --extra dev --extra bigquery
 
 # With Databricks destination support
-pip install -e ".[dev,databricks]"
+uv sync --extra dev --extra databricks
 ```
 
 ## Quick Start
@@ -186,7 +185,7 @@ UPDATE etl_file_audit SET state='PENDING', attempt_count=0 WHERE content_hash='<
 ## Running Tests
 
 ```bash
-pytest
+uv run pytest
 ```
 
 72 tests covering hashing, config loading, audit DB state machine, parsing, type coercion, connector contracts (SQLite), registry, the full pipeline, and the CLI.
