@@ -62,21 +62,17 @@ class DuckDBConnector(Connector):
         return {row[0]: row[1].upper() for row in result}
 
     def _create_table(self, config: PipelineConfig) -> None:
-        col_defs = ["_id INTEGER PRIMARY KEY"]
-        for col in config.columns:
-            col_defs.append(f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'VARCHAR')}")
-        col_defs.append("_source_file_hash VARCHAR NOT NULL")
-        col_defs.append("_ingested_at TIMESTAMP NOT NULL")
         self._conn.execute(
             f"CREATE SEQUENCE IF NOT EXISTS {config.dest_table}_id_seq"
+        )
+        col_defs = ", ".join(
+            f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'VARCHAR')}"
+            for col in config.columns
         )
         ddl = (
             f"CREATE TABLE {config.dest_table} ("
             f"_id INTEGER DEFAULT nextval('{config.dest_table}_id_seq') PRIMARY KEY, "
-            + ", ".join(
-                f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'VARCHAR')}"
-                for col in config.columns
-            )
+            + col_defs
             + ", _source_file_hash VARCHAR NOT NULL"
             + ", _ingested_at TIMESTAMP NOT NULL"
             + ")"
