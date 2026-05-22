@@ -78,8 +78,6 @@ def test_committed_files_not_touched_by_reset(db):
 
 def test_pipeline_retries_failed_file(tmp_path):
     """A file that fails on run 1 is retried on run 2 if below retry_cap."""
-    from etl.config import ColumnMapping, PipelineConfig
-    from etl.db import ensure_destination_table
     from etl.pipeline import run_pipeline
     import os
 
@@ -93,18 +91,18 @@ def test_pipeline_retries_failed_file(tmp_path):
         "  - source: name\n    dest: name\n    type: string\n    required: true\n"
         "  - source: value\n    dest: value\n    type: string\n    required: true\n"
     )
-    db_url = f"sqlite:///{tmp_path}/test.db"
+    audit_db_url = f"sqlite:///{tmp_path}/test.db"
 
     # Run 1: bad CSV (missing 'value' column) → FAILED
     bad = watched / "data.csv"
     bad.write_text("name\nAlice\n")
-    result1 = run_pipeline(str(watched), str(config_file), db_url)
+    result1 = run_pipeline(str(watched), str(config_file), audit_db_url)
     assert result1["failed"] == 1
     assert result1["committed"] == 0
 
     # Replace with good CSV (same path, different content → different hash)
     bad.write_text("name,value\nAlice,100\n")
-    result2 = run_pipeline(str(watched), str(config_file), db_url)
+    result2 = run_pipeline(str(watched), str(config_file), audit_db_url)
     # Old bad hash stays FAILED (below cap → retried but still fails on retry
     # since file content changed — new hash is new PENDING file)
     assert result2["committed"] == 1  # new good file committed

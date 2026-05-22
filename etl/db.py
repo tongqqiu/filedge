@@ -2,8 +2,6 @@ import datetime
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
-from etl.config import PipelineConfig
-
 
 # --- Database wrapper ---
 
@@ -183,81 +181,5 @@ def get_status_summary(db: Database) -> dict:
     return {**counts, "recent_failures": recent_failures}
 
 
-# --- Destination table management ---
-
 class SchemaError(Exception):
     pass
-
-
-_TYPE_TO_SQL_SQLITE = {
-    "string": "TEXT",
-    "integer": "INTEGER",
-    "float": "REAL",
-    "date": "TEXT",
-    "timestamp": "TEXT",
-    "boolean": "INTEGER",
-}
-
-_TYPE_TO_SQL_POSTGRES = {
-    "string": "TEXT",
-    "integer": "INTEGER",
-    "float": "DOUBLE PRECISION",
-    "date": "DATE",
-    "timestamp": "TIMESTAMP WITH TIME ZONE",
-    "boolean": "BOOLEAN",
-}
-
-
-def ensure_destination_table(db: Database, config: PipelineConfig) -> None:
-    existing = _get_existing_columns(db, config.dest_table)
-    if existing is None:
-        _create_destination_table(db, config)
-        return
-    mismatches = _detect_schema_mismatch(existing, config)
-    if mismatches:
-        raise SchemaError(
-            f"Schema mismatch for table '{config.dest_table}':\n" + "\n".join(mismatches)
-        )
-
-
-def _get_existing_columns(db: Database, table: str) -> Optional[Dict[str, str]]:
-    if db._placeholder == "%s":
-        cursor = db.execute(
-            "SELECT column_name, data_type FROM information_schema.columns"
-            " WHERE table_name = ?",
-            [table],
-        )
-        rows = cursor.fetchall()
-        if not rows:
-            return None
-        return {row[0]: row[1].upper() for row in rows}
-    else:
-        cursor = db.execute(f"PRAGMA table_info({table})")
-        rows = cursor.fetchall()
-        if not rows:
-            return None
-        return {row[1]: row[2].upper() for row in rows}
-
-
-def _create_destination_table(db: Database, config: PipelineConfig) -> None:
-    is_postgres = db._placeholder == "%s"
-    type_map = _TYPE_TO_SQL_POSTGRES if is_postgres else _TYPE_TO_SQL_SQLITE
-    id_col = "_id BIGSERIAL PRIMARY KEY" if is_postgres else "_id INTEGER PRIMARY KEY"
-    ingested_col = "_ingested_at TIMESTAMP WITH TIME ZONE NOT NULL" if is_postgres else "_ingested_at TEXT NOT NULL"
-    col_defs = [id_col]
-    for col in config.columns:
-        sql_type = type_map.get(col.type, "TEXT")
-        col_defs.append(f"{col.dest} {sql_type}")
-    col_defs.append("_source_file_hash TEXT NOT NULL")
-    col_defs.append(ingested_col)
-    ddl = f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})"
-    db.execute(ddl)
-
-
-def _detect_schema_mismatch(existing: Dict[str, str], config: PipelineConfig) -> List[str]:
-    required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}
-    return [
-        f"  Column '{name}' declared in pipeline.yaml but missing from table"
-        for name in sorted(required)
-        if name not in existing
-    ]

@@ -1,26 +1,11 @@
-import pytest
-
-from etl.config import ColumnMapping, PipelineConfig
 from etl.db import (
-    SchemaError,
     claim_processing,
-    ensure_destination_table,
     find_file_by_hash,
     get_status_summary,
     insert_pending,
     mark_committed,
     mark_failed,
-    reclaim_stale_processing,
 )
-
-
-@pytest.fixture
-def config():
-    return PipelineConfig(
-        format="csv",
-        dest_table="test_orders",
-        columns=[ColumnMapping(source="name", dest="name", type="string", required=True)],
-    )
 
 
 def test_insert_and_find_pending(db):
@@ -101,29 +86,3 @@ def test_get_status_summary(db):
     assert summary["recent_failures"][0]["error_message"] == "parse error"
 
 
-def test_ensure_destination_table_creates_with_provenance_columns(db, config):
-    ensure_destination_table(db, config)
-    db.commit()
-
-    cursor = db.execute("PRAGMA table_info(test_orders)")
-    cols = {row[1] for row in cursor.fetchall()}
-    assert "name" in cols
-    assert "_source_file_hash" in cols
-    assert "_ingested_at" in cols
-
-
-def test_ensure_destination_table_is_idempotent(db, config):
-    ensure_destination_table(db, config)
-    db.commit()
-    ensure_destination_table(db, config)  # must not raise
-
-
-def test_ensure_destination_table_raises_on_missing_column(db, config):
-    ensure_destination_table(db, config)
-    db.commit()
-
-    config.columns.append(
-        ColumnMapping(source="new_col", dest="new_col", type="string", required=True)
-    )
-    with pytest.raises(SchemaError, match="new_col"):
-        ensure_destination_table(db, config)

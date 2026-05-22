@@ -25,7 +25,7 @@ A single execution of `etl run` — a short-lived process that scans the Watched
 Files are processed in row batches (configurable size, default 1,000) rather than loaded entirely into memory. The wrapping database transaction stays open across all batches and commits only when the full file is processed — preserving atomicity at constant memory cost regardless of file size.
 
 ### Append-Only Load
-The default write behavior: records from each File are inserted into the destination table without replacing prior records. The ETL layer does not resolve whether a re-dropped file is a correction or a supplement — that is downstream responsibility, resolvable via provenance columns. Two Files with the same filename but different content hashes produce two distinct sets of rows in the destination.
+The default Write Mode (`write_mode: append`): records from each File are inserted into the destination table without replacing prior records. The ETL layer does not resolve whether a re-dropped file is a correction or a supplement — that is downstream responsibility, resolvable via provenance columns. Two Files with the same filename but different content hashes produce two distinct sets of rows in the destination. See also: Write Mode.
 
 ### Column Tolerance
 Extra columns in a source file (not declared in Pipeline Config) are silently ignored. Missing columns declared as required in Pipeline Config cause the File to fail in Strict Mode. This asymmetry makes the pipeline tolerant of upstream additions while strict about data contract violations.
@@ -45,8 +45,20 @@ A `pipeline.yaml` file co-located with each Watched Directory. Declares: file fo
 ### Audit Record
 Two-level audit: (1) file-level — captures filename, content hash, state, attempt count, timestamps, and worker identity; (2) row-level provenance — every destination row carries `_source_file_hash` and `_ingested_at` columns linking it back to its source File. Row-level provenance is non-negotiable: it is the basis for data lineage, debugging, and compliance.
 
+### Audit DB
+The relational database (SQLite for development, PostgreSQL for production) that holds the file-level audit records and drives the state machine (PENDING → PROCESSING → COMMITTED/FAILED). This is the control plane — it is always a SQL database with full transaction support, separate from the Destination.
+
+### Connector
+A pluggable adapter that owns all interactions with a specific Destination backend: creating or validating the destination table, writing rows, and enforcing write-mode semantics. The Connector is the only component that knows about the Destination's SDK, DDL dialect, and bulk-load API. Adding a new Destination means writing a new Connector — no changes to the pipeline or audit logic. Built-in Connectors: `sqlite`, `postgres`, `bigquery`, `databricks`.
+
 ### Destination
-PostgreSQL in production; SQLite for local development and testing. Both the ingested records and the audit tracking tables live in the same database — this is what makes the single-transaction Commit possible. A single ingestion worker process is the starting model; multi-worker concurrency is deferred.
+The system where ingested rows land. Decoupled from the Audit DB — each has its own connection and transaction scope. Because rows and the audit COMMITTED marker can no longer be written in a single transaction, the Connector is responsible for making `write_rows` idempotent per `file_hash`, so retries produce the same destination state as a first write.
+
+### Write Mode
+The strategy a Connector uses when writing a file's rows to the destination table. Declared as `write_mode` in `pipeline.yaml`. Two modes are supported: `append` (default) — rows are added alongside prior records, idempotent via delete-where-hash then insert; `truncate` — the table is wiped then replaced with this file's rows, naturally idempotent. A third mode, `merge` (upsert by business key), is deferred.
+
+### Connector Registry
+The internal mapping from a `connector.type` string (e.g. `bigquery`) to a Connector implementation class. Resolved lazily at instantiation time so that missing optional SDK dependencies surface as a clear error only when the Connector is actually used. Declared in `pipeline.yaml` under a `connector:` block; secrets (API tokens, service account credentials) come from environment variables, never from YAML.
 
 ### Retry
 Automatic re-attempt of a FAILED File with exponential backoff, up to a configured max attempt count (default: 3). After the cap is reached, the File enters terminal FAILED state requiring explicit human re-queue (resetting state to PENDING). Prevents bad files from burning retries indefinitely.

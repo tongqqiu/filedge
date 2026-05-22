@@ -25,7 +25,7 @@ def db_url(tmp_path):
 
 def test_status_default_output(db_url):
     runner = CliRunner()
-    result = runner.invoke(cli, ["status", "--db-url", db_url])
+    result = runner.invoke(cli, ["status", "--audit-db-url", db_url])
     assert result.exit_code == 0
     assert "COMMITTED:" in result.output
     assert "FAILED:" in result.output
@@ -33,7 +33,7 @@ def test_status_default_output(db_url):
 
 def test_status_json_output_shape(db_url):
     runner = CliRunner()
-    result = runner.invoke(cli, ["status", "--db-url", db_url, "--json"])
+    result = runner.invoke(cli, ["status", "--audit-db-url", db_url, "--json"])
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert "PENDING" in data
@@ -46,7 +46,7 @@ def test_status_json_output_shape(db_url):
 
 def test_status_json_counts_are_numbers(db_url):
     runner = CliRunner()
-    result = runner.invoke(cli, ["status", "--db-url", db_url, "--json"])
+    result = runner.invoke(cli, ["status", "--audit-db-url", db_url, "--json"])
     data = json.loads(result.output)
     assert isinstance(data["COMMITTED"], int)
 
@@ -60,7 +60,7 @@ def test_status_default_shows_recent_failures(db_url):
     db.close()
 
     runner = CliRunner()
-    result = runner.invoke(cli, ["status", "--db-url", db_url])
+    result = runner.invoke(cli, ["status", "--audit-db-url", db_url])
     assert "broken.csv" in result.output
     assert "missing column" in result.output
 
@@ -74,7 +74,7 @@ def test_status_json_includes_failure_details(db_url):
     db.close()
 
     runner = CliRunner()
-    result = runner.invoke(cli, ["status", "--db-url", db_url, "--json"])
+    result = runner.invoke(cli, ["status", "--audit-db-url", db_url, "--json"])
     data = json.loads(result.output)
     assert data["FAILED"] == 1
     assert data["recent_failures"][0]["filename"] == "broken.csv"

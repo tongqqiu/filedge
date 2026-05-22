@@ -15,11 +15,11 @@ def cli():
 @cli.command()
 @click.option("--dir", "watched_dir", required=True, help="Watched directory path")
 @click.option("--config", "config_path", required=True, help="Path to pipeline.yaml")
-@click.option("--db-url", required=True, envvar="ETL_DB_URL", help="Database URL")
-def run(watched_dir, config_path, db_url):
+@click.option("--audit-db-url", required=True, envvar="ETL_AUDIT_DB_URL", help="Audit database URL")
+def run(watched_dir, config_path, audit_db_url):
     """Run the ETL pipeline for a Watched Directory."""
     try:
-        result = run_pipeline(watched_dir, config_path, db_url)
+        result = run_pipeline(watched_dir, config_path, audit_db_url)
         click.echo(
             f"Committed: {result['committed']}  "
             f"Failed: {result['failed']}  "
@@ -37,11 +37,11 @@ def run(watched_dir, config_path, db_url):
 
 
 @cli.command()
-@click.option("--db-url", required=True, envvar="ETL_DB_URL", help="Database URL")
+@click.option("--audit-db-url", required=True, envvar="ETL_AUDIT_DB_URL", help="Audit database URL")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def status(db_url, output_json):
+def status(audit_db_url, output_json):
     """Show pipeline status summary."""
-    db = Database(db_url)
+    db = Database(audit_db_url)
     create_audit_tables(db)
     summary = get_status_summary(db)
     db.close()

@@ -1,12 +1,12 @@
 import os
 
 from etl.config import load_config
+from etl.connectors import get_connector
 from etl.db import (
     Database,
     SchemaError,
     claim_processing,
     create_audit_tables,
-    ensure_destination_table,
     find_file_by_hash,
     insert_pending,
     mark_committed,
@@ -18,24 +18,19 @@ from etl.hashing import compute_hash
 from etl.loader import load_file
 
 
-def run_pipeline(watched_dir: str, config_path: str, db_url: str) -> dict:
-    """
-    Execute one Run: scan Watched Directory, enqueue new Files as PENDING,
-    load each PENDING File, commit records + COMMITTED marker in a single transaction.
-    """
+def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
     config = load_config(config_path)
-    db = Database(db_url)
+    db = Database(audit_db_url)
+    connector = get_connector(config, audit_db_url)
 
     try:
         create_audit_tables(db)
 
-        # Reset FAILED files below retry_cap → PENDING so they're picked up this Run
         retried = reset_eligible_failed(db, config.retry_cap)
-        # Reclaim stale PROCESSING locks from crashed workers
         reclaimed = reclaim_stale_processing(db, config.stale_timeout_minutes)
-
-        ensure_destination_table(db, config)
         db.commit()
+
+        connector.ensure_table(config)
 
         files = sorted(
             os.path.join(watched_dir, name)
@@ -43,10 +38,8 @@ def run_pipeline(watched_dir: str, config_path: str, db_url: str) -> dict:
             if os.path.isfile(os.path.join(watched_dir, name))
         )
 
-        # Hash each File once per Run
         file_hashes = {path: compute_hash(path) for path in files}
 
-        # Enqueue new Files as PENDING
         new_files = 0
         for path in files:
             content_hash = file_hashes[path]
@@ -55,30 +48,25 @@ def run_pipeline(watched_dir: str, config_path: str, db_url: str) -> dict:
                 new_files += 1
         db.commit()
 
-        # Process PENDING Files
         committed = failed = skipped = 0
         for path in files:
             content_hash = file_hashes[path]
             record = find_file_by_hash(db, content_hash)
             if record is None or record.state != "PENDING":
-                # Count terminal FAILED files (at or above retry_cap) as skipped
                 if record is not None and record.state == "FAILED":
                     skipped += 1
                 continue
 
-            # Tx 1: claim the File as PROCESSING (distributed lock)
             claim_processing(db, content_hash)
             db.commit()
 
-            rows, error = load_file(db, config, path, content_hash)
+            rows, error = load_file(connector, config, path, content_hash)
 
             if error is None:
-                # Tx 2: commit rows + COMMITTED marker together (ADR-0001)
                 mark_committed(db, content_hash)
                 db.commit()
                 committed += 1
             else:
-                db.rollback()  # undo any partial row inserts
                 mark_failed(db, content_hash, error)
                 db.commit()
                 failed += 1
@@ -92,4 +80,5 @@ def run_pipeline(watched_dir: str, config_path: str, db_url: str) -> dict:
             "retried": retried,
         }
     finally:
+        connector.close()
         db.close()
