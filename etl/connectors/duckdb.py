@@ -78,6 +78,10 @@ class DuckDBConnector(Connector):
             + ")"
         )
         self._conn.execute(ddl)
+        self._conn.execute(
+            f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
+            f" ON {config.dest_table} (_source_file_hash)"
+        )
 
     def _detect_mismatches(self, existing: Dict[str, str], config: PipelineConfig) -> List[str]:
         required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}

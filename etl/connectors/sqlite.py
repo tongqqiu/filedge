@@ -50,6 +50,10 @@ class SQLiteConnector(Connector):
         col_defs.append("_source_file_hash TEXT NOT NULL")
         col_defs.append("_ingested_at TEXT NOT NULL")
         conn.execute(f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})")
+        conn.execute(
+            f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
+            f" ON {config.dest_table} (_source_file_hash)"
+        )
 
     def _detect_mismatches(self, existing: Dict[str, str], config: PipelineConfig) -> List[str]:
         required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}
