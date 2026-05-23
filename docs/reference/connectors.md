@@ -105,6 +105,9 @@ uv sync --extra databricks
 
 Append mode stages each file as newline-delimited JSON and runs `COPY INTO` into a temporary staging table, then `MERGE INTO` the destination on `_source_file_hash`. Re-running the same file is a no-op for rows that already committed. Truncate mode truncates the destination and inserts the staged rows.
 
+!!! note "Integration test coverage"
+    The Databricks connector currently has unit-style coverage with a fake SQL connection, but no live Databricks integration test suite. A live test requires a SQL warehouse plus a `staging_location` that the warehouse can read with `COPY INTO`; Databricks Free Edition staging/access constraints may make that setup non-trivial.
+
 ---
 
 ## DuckDB

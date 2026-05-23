@@ -43,6 +43,10 @@ uv sync --extra dev --extra bigquery
 uv sync --extra dev --extra databricks
 ```
 
+## License
+
+Filedge is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+
 ## Quick Start
 
 **1. Write a pipeline config**
@@ -146,6 +150,8 @@ connector:
 ```
 
 Auth token from `DATABRICKS_TOKEN`. Requires `pip install filedge[databricks]`. For Unity Catalog volume staging, the token must be able to write files under `staging_location`.
+
+Note: the Databricks connector has unit-style coverage, but no live Databricks integration test suite yet. A live test needs a SQL warehouse and a staging location that the warehouse can read with `COPY INTO`.
 
 ## Write Modes
 

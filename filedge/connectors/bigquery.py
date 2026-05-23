@@ -59,10 +59,11 @@ class BigQueryConnector(Connector):
 
     def _bq_schema(self, config: PipelineConfig):
         from google.cloud.bigquery import SchemaField
-        fields = [
+        fields = [SchemaField("_id", "INT64")]
+        fields.extend(
             SchemaField(col.dest, _TYPE_TO_BQ.get(col.type, "STRING"))
             for col in config.columns
-        ]
+        )
         fields.append(SchemaField("_source_file_hash", "STRING", mode="REQUIRED"))
         fields.append(SchemaField("_ingested_at", "TIMESTAMP", mode="REQUIRED"))
         return fields
@@ -83,6 +84,11 @@ class BigQueryConnector(Connector):
         mismatches = schema_mismatches(
             existing_columns,
             expected_columns(config, _TYPE_TO_BQ, "INT64", "TIMESTAMP"),
+            type_aliases={
+                "INTEGER": "INT64",
+                "FLOAT": "FLOAT64",
+                "BOOLEAN": "BOOL",
+            },
         )
         if mismatches:
             raise SchemaError(
