@@ -26,7 +26,7 @@ A crash between phases 1 and 2 leaves the file in PROCESSING. The stale-lock rec
 Because the two-phase window means a Connector write may be retried, every Connector must make `write_rows` idempotent per `file_hash`:
 
 - **postgres**: `DELETE FROM dest WHERE _source_file_hash = $1` then insert.
-- **bigquery**: use `file_hash` as the BigQuery load job ID — BigQuery deduplicates jobs with the same ID.
+- **bigquery**: use destination table plus `file_hash` as the BigQuery load job ID — BigQuery deduplicates jobs with the same ID.
 - **databricks**: `MERGE INTO ... WHEN NOT MATCHED` on `_source_file_hash`.
 
 The `_source_file_hash` provenance column (established in the MVP) is what makes this possible.
