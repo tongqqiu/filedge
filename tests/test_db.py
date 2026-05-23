@@ -1,10 +1,14 @@
 from filedge.db import (
     claim_processing,
+    claim_pending_file,
+    discover_file,
+    finish_file,
     find_file_by_hash,
     get_status_summary,
     insert_pending,
     mark_committed,
     mark_failed,
+    prepare_run,
     reclaim_stale_processing,
 )
 
@@ -83,6 +87,68 @@ def test_reclaim_stale_processing_clears_worker_id(db):
     assert record.worker_id is None
 
 
+def test_prepare_run_resets_retryable_failed_and_reclaims_stale_processing(db):
+    insert_pending(db, "failed.csv", "hf")
+    claim_processing(db, "hf")
+    mark_failed(db, "hf", "bad row")
+
+    insert_pending(db, "stale.csv", "hs")
+    claim_processing(db, "hs", worker_id="stale-worker")
+    db.execute(
+        "UPDATE etl_file_audit SET claimed_at='2000-01-01T00:00:00+00:00'"
+        " WHERE content_hash='hs'"
+    )
+    db.commit()
+
+    result = prepare_run(db, retry_cap=3, stale_timeout_minutes=1)
+    db.commit()
+
+    assert result.retried == 1
+    assert result.reclaimed == 1
+    assert find_file_by_hash(db, "hf").state == "PENDING"
+    stale = find_file_by_hash(db, "hs")
+    assert stale.state == "PENDING"
+    assert stale.worker_id is None
+
+
+def test_discover_file_inserts_new_hash_once(db):
+    first = discover_file(db, "first.csv", "samehash")
+    second = discover_file(db, "second.csv", "samehash")
+    db.commit()
+
+    assert first is True
+    assert second is False
+    record = find_file_by_hash(db, "samehash")
+    assert record.state == "PENDING"
+    assert record.filename == "first.csv"
+
+
+def test_claim_pending_file_and_finish_file_commit(db):
+    discover_file(db, "done.csv", "hdone")
+
+    assert claim_pending_file(db, "hdone", worker_id="worker-a") is True
+    finish_file(db, "hdone")
+    db.commit()
+
+    record = find_file_by_hash(db, "hdone")
+    assert record.state == "COMMITTED"
+    assert record.worker_id is None
+
+
+def test_finish_file_failure_records_error_and_attempt(db):
+    discover_file(db, "bad.csv", "hbad")
+    claim_pending_file(db, "hbad", worker_id="worker-b")
+
+    finish_file(db, "hbad", error="Row 2: bad value")
+    db.commit()
+
+    record = find_file_by_hash(db, "hbad")
+    assert record.state == "FAILED"
+    assert record.error_message == "Row 2: bad value"
+    assert record.attempt_count == 1
+    assert record.worker_id is None
+
+
 def test_duplicate_hash_insert_is_noop(db):
     insert_pending(db, "first.csv", "samehash")
     db.commit()
@@ -119,4 +185,3 @@ def test_get_status_summary(db):
     assert len(summary["recent_failures"]) == 1
     assert summary["recent_failures"][0]["filename"] == "d.csv"
     assert summary["recent_failures"][0]["error_message"] == "parse error"
-

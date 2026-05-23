@@ -110,6 +110,12 @@ class FileRecord:
     claimed_at: Optional[str]
 
 
+@dataclass
+class RunPreparation:
+    retried: int
+    reclaimed: int
+
+
 def _now() -> str:
     return datetime.datetime.now(datetime.UTC).isoformat()
 
@@ -140,6 +146,13 @@ def insert_pending(db: Database, filename: str, content_hash: str) -> None:
     )
 
 
+def discover_file(db: Database, filename: str, content_hash: str) -> bool:
+    if find_file_by_hash(db, content_hash) is not None:
+        return False
+    insert_pending(db, filename, content_hash)
+    return True
+
+
 def claim_processing(db: Database, content_hash: str, worker_id: Optional[str] = None) -> bool:
     now = _now()
     cursor = db.execute(
@@ -149,6 +162,10 @@ def claim_processing(db: Database, content_hash: str, worker_id: Optional[str] =
         [worker_id, now, now, content_hash],
     )
     return cursor.rowcount == 1
+
+
+def claim_pending_file(db: Database, content_hash: str, worker_id: Optional[str] = None) -> bool:
+    return claim_processing(db, content_hash, worker_id=worker_id)
 
 
 def mark_committed(db: Database, content_hash: str) -> None:
@@ -164,6 +181,13 @@ def mark_failed(db: Database, content_hash: str, error: str) -> None:
         " worker_id=NULL, attempt_count=attempt_count+1, updated_at=? WHERE content_hash=?",
         [error, _now(), content_hash],
     )
+
+
+def finish_file(db: Database, content_hash: str, error: Optional[str] = None) -> None:
+    if error is None:
+        mark_committed(db, content_hash)
+    else:
+        mark_failed(db, content_hash, error)
 
 
 def reset_eligible_failed(db: Database, retry_cap: int) -> int:
@@ -187,6 +211,12 @@ def reclaim_stale_processing(db: Database, stale_minutes: int) -> int:
     return cursor.rowcount
 
 
+def prepare_run(db: Database, retry_cap: int, stale_timeout_minutes: int) -> RunPreparation:
+    retried = reset_eligible_failed(db, retry_cap)
+    reclaimed = reclaim_stale_processing(db, stale_timeout_minutes)
+    return RunPreparation(retried=retried, reclaimed=reclaimed)
+
+
 def get_status_summary(db: Database) -> dict:
     cursor = db.execute("SELECT state, COUNT(*) FROM etl_file_audit GROUP BY state")
     counts: Dict[str, int] = {"PENDING": 0, "PROCESSING": 0, "COMMITTED": 0, "FAILED": 0}
@@ -200,4 +230,3 @@ def get_status_summary(db: Database) -> dict:
     recent_failures = [{"filename": row[0], "error_message": row[1]} for row in cursor.fetchall()]
 
     return {**counts, "recent_failures": recent_failures}
-

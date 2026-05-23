@@ -2,14 +2,12 @@ from filedge.config import load_config
 from filedge.connectors import get_connector
 from filedge.db import (
     Database,
-    claim_processing,
+    claim_pending_file,
     create_audit_tables,
+    discover_file,
+    finish_file,
     find_file_by_hash,
-    insert_pending,
-    mark_committed,
-    mark_failed,
-    reclaim_stale_processing,
-    reset_eligible_failed,
+    prepare_run,
 )
 from filedge.filesystem import file_basename, get_filesystem, list_files
 from filedge.hashing import compute_hash
@@ -25,8 +23,7 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
     try:
         create_audit_tables(db)
 
-        retried = reset_eligible_failed(db, config.retry_cap)
-        reclaimed = reclaim_stale_processing(db, config.stale_timeout_minutes)
+        preparation = prepare_run(db, config.retry_cap, config.stale_timeout_minutes)
         db.commit()
 
         connector.ensure_table(config)
@@ -37,8 +34,7 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
         new_files = 0
         for path in files:
             content_hash = file_hashes[path]
-            if find_file_by_hash(db, content_hash) is None:
-                insert_pending(db, file_basename(path), content_hash)
+            if discover_file(db, file_basename(path), content_hash):
                 new_files += 1
         db.commit()
 
@@ -51,20 +47,18 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
                     skipped += 1
                 continue
 
-            claimed = claim_processing(db, content_hash)
+            claimed = claim_pending_file(db, content_hash)
             db.commit()
             if not claimed:
                 continue
 
             rows, error = load_file(connector, config, path, content_hash, fs)
 
+            finish_file(db, content_hash, error=error)
+            db.commit()
             if error is None:
-                mark_committed(db, content_hash)
-                db.commit()
                 committed += 1
             else:
-                mark_failed(db, content_hash, error)
-                db.commit()
                 failed += 1
 
         return {
@@ -72,8 +66,8 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
             "committed": committed,
             "failed": failed,
             "skipped": skipped,
-            "reclaimed": reclaimed,
-            "retried": retried,
+            "reclaimed": preparation.reclaimed,
+            "retried": preparation.retried,
         }
     finally:
         connector.close()
