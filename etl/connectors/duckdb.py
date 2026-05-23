@@ -78,6 +78,10 @@ class DuckDBConnector(Connector):
             + ")"
         )
         self._conn.execute(ddl)
+        self._conn.execute(
+            f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
+            f" ON {config.dest_table} (_source_file_hash)"
+        )
 
     def _detect_mismatches(self, existing: Dict[str, str], config: PipelineConfig) -> List[str]:
         required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}
@@ -88,8 +92,9 @@ class DuckDBConnector(Connector):
         ]
 
     def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
+        import pyarrow as pa
+
         ingested_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat()
-        dest_cols: Optional[List[str]] = None
 
         try:
             self._conn.begin()
@@ -100,27 +105,30 @@ class DuckDBConnector(Connector):
                     f"DELETE FROM {table} WHERE _source_file_hash = ?", [file_hash]
                 )
 
-            batch = []
+            batch: List[dict] = []
             for row in rows:
-                if dest_cols is None:
-                    dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
-                    placeholders = ", ".join(["?"] * len(dest_cols))
-                    insert_sql = (
-                        f"INSERT INTO {table} ({', '.join(dest_cols)})"
-                        f" VALUES ({placeholders})"
-                    )
-                batch.append(list(row.values()) + [file_hash, ingested_at])
+                record = dict(row)
+                record["_source_file_hash"] = file_hash
+                record["_ingested_at"] = ingested_at
+                batch.append(record)
                 if len(batch) >= self._batch_size:
-                    self._conn.executemany(insert_sql, batch)
+                    self._flush(table, batch, pa)
                     batch = []
 
             if batch:
-                self._conn.executemany(insert_sql, batch)
+                self._flush(table, batch, pa)
 
             self._conn.commit()
         except Exception:
             self._conn.rollback()
             raise
+
+    def _flush(self, table: str, batch: List[dict], pa) -> None:
+        arrow_table = pa.Table.from_pylist(batch)
+        cols = ", ".join(arrow_table.column_names)
+        self._conn.register("_etl_batch", arrow_table)
+        self._conn.execute(f"INSERT INTO {table} ({cols}) SELECT {cols} FROM _etl_batch")
+        self._conn.unregister("_etl_batch")
 
     def close(self) -> None:
         self._conn.close()
