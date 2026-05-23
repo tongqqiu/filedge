@@ -99,7 +99,7 @@ See the [Compact guide](../guides/compact.md) for full details.
 Ingest files from a watched directory with atomic commits, retry, and full audit trail.
 
 ```bash
-filedge run --dir <path> --config <path> --audit-db-url <url>
+filedge run --dir <path> --config <path> --audit-db-url <url> [--progress|--no-progress]
 ```
 
 | Option | Env var | Default | Description |
@@ -107,6 +107,7 @@ filedge run --dir <path> --config <path> --audit-db-url <url>
 | `--dir` | — | required | Watched directory path (local or cloud URI) |
 | `--config` | — | required | Path to `pipeline.yaml` |
 | `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--progress / --no-progress` | — | auto | Show live progress bars; defaults to on for interactive terminals |
 
 **Exit codes:** `0` on success, `1` on error.
 

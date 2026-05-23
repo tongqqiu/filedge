@@ -79,3 +79,23 @@ def test_load_file_streams_across_batch_boundary(connector, config, tmp_path):
     conn = connector._get_conn()
     count = conn.execute("SELECT COUNT(*) FROM items").fetchone()[0]
     assert count == 5
+
+
+def test_load_file_reports_rows_at_interval(connector, config, tmp_path):
+    lines = ["name,value"] + [f"row{i},{i}" for i in range(5)]
+    f = tmp_path / "data.csv"
+    f.write_text("\n".join(lines) + "\n")
+    events = []
+
+    rows, error = load_file(
+        connector,
+        config,
+        str(f),
+        "progresshash",
+        progress=events.append,
+        row_report_interval=2,
+    )
+
+    assert error is None
+    assert rows == 5
+    assert [event.rows for event in events] == [2, 4]
