@@ -1,10 +1,10 @@
 from typing import Optional, Tuple
 
-from etl.config import PipelineConfig
-from etl.connectors import Connector
-from etl.filesystem import open_file
-from etl.parser import get_parser
-from etl.transform import TransformError, transform_row
+from filedge.config import PipelineConfig
+from filedge.connectors import Connector
+from filedge.filesystem import open_file
+from filedge.parser import get_parser
+from filedge.transform import TransformError, transform_row
 
 
 def load_file(

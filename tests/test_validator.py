@@ -1,5 +1,5 @@
-from etl.config import ColumnMapping
-from etl.validator import validate_file
+from filedge.config import ColumnMapping
+from filedge.validator import validate_file
 
 
 def _col(source, type="string", required=False):

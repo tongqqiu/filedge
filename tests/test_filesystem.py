@@ -1,11 +1,11 @@
 import pytest
 import fsspec
 
-from etl.filesystem import file_basename, get_filesystem, list_files, open_file
-from etl.hashing import compute_hash
-from etl.loader import load_file
-from etl.config import ColumnMapping, PipelineConfig
-from etl.connectors.sqlite import SQLiteConnector
+from filedge.filesystem import file_basename, get_filesystem, list_files, open_file
+from filedge.hashing import compute_hash
+from filedge.loader import load_file
+from filedge.config import ColumnMapping, PipelineConfig
+from filedge.connectors.sqlite import SQLiteConnector
 
 
 # fsspec memory:// filesystem — no cloud credentials required

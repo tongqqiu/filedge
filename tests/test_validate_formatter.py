@@ -1,7 +1,7 @@
 import json
 
-from etl.validate_formatter import format_json, format_text
-from etl.validator import RowFailure, ValidationResult
+from filedge.validate_formatter import format_json, format_text
+from filedge.validator import RowFailure, ValidationResult
 
 
 def _result(rows_checked=0, failures=None, undeclared=None):

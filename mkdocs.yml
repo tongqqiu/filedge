@@ -1,8 +1,8 @@
-site_name: ETL Big Idea
-site_description: Reliable batch ETL for file ingestion — atomic commits, content-based idempotency, full audit trail
-site_url: https://tongqqiu.github.io/etl-big-idea/
-repo_url: https://github.com/tongqqiu/etl-big-idea
-repo_name: tongqqiu/etl-big-idea
+site_name: Filedge
+site_description: Reliable file ingestion toolkit — atomic commits, content-based idempotency, full audit trail
+site_url: https://tongqqiu.github.io/filedge/
+repo_url: https://github.com/tongqqiu/filedge
+repo_name: tongqqiu/filedge
 
 theme:
   name: material

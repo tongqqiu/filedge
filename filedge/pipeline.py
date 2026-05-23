@@ -1,6 +1,6 @@
-from etl.config import load_config
-from etl.connectors import get_connector
-from etl.db import (
+from filedge.config import load_config
+from filedge.connectors import get_connector
+from filedge.db import (
     Database,
     claim_processing,
     create_audit_tables,
@@ -11,9 +11,9 @@ from etl.db import (
     reclaim_stale_processing,
     reset_eligible_failed,
 )
-from etl.filesystem import file_basename, get_filesystem, list_files
-from etl.hashing import compute_hash
-from etl.loader import load_file
+from filedge.filesystem import file_basename, get_filesystem, list_files
+from filedge.hashing import compute_hash
+from filedge.loader import load_file
 
 
 def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:

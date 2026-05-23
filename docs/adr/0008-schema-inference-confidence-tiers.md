@@ -1,6 +1,6 @@
 # Schema Inference uses annotated Confidence Tiers rather than aggressive or conservative type inference
 
-`etl inspect` annotates each inferred column type with a Confidence Tier (high / low / ambiguous) rather than silently picking the most specific type or defaulting everything to `string`.
+`filedge inspect` annotates each inferred column type with a Confidence Tier (high / low / ambiguous) rather than silently picking the most specific type or defaulting everything to `string`.
 
 Two alternatives were considered. **Aggressive inference** — infer the most specific type whenever the majority of sampled values parse — produces better starting configs but silently misleads operators when sparse nulls or format exceptions appear beyond the sample window. An operator who accepts an `integer (high)` inference on a column that turns out to have `N/A` on row 50,000 gets a pipeline that FAILs in production with no warning they were given. **Conservative inference** — default to `string` unless 100% of sampled values parse cleanly — avoids false positives but produces configs full of `string` columns that operators must correct manually, defeating the tool's purpose.
 

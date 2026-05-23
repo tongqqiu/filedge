@@ -3,8 +3,8 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from etl.cli import cli
-from etl.db import (
+from filedge.cli import cli
+from filedge.db import (
     Database,
     claim_processing,
     create_audit_tables,

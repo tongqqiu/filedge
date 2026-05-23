@@ -1,4 +1,4 @@
-from etl.hashing import compute_hash
+from filedge.hashing import compute_hash
 
 
 def test_hash_is_stable(tmp_path):

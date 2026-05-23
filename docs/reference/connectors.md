@@ -100,7 +100,7 @@ uv sync --extra duckdb
 ```
 
 !!! note "Single writer"
-    DuckDB supports only one writer at a time. The connector fails fast with a clear error if the file is locked by another process — it does not retry. Run `etl run` serially, not concurrently, when using DuckDB.
+    DuckDB supports only one writer at a time. The connector fails fast with a clear error if the file is locked by another process — it does not retry. Run `filedge run` serially, not concurrently, when using DuckDB.
 
 ---
 

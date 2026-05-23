@@ -1,6 +1,6 @@
 import hashlib
 
-from etl.filesystem import open_file
+from filedge.filesystem import open_file
 
 
 def compute_hash(path: str, fs=None) -> str:

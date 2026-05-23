@@ -1,19 +1,19 @@
 # Compact small files
 
-`etl compact` merges many small NDJSON files from a source prefix into fewer, larger files in a separate output prefix. It's a pre-processing step — run it before `etl run`.
+`filedge compact` merges many small NDJSON files from a source prefix into fewer, larger files in a separate output prefix. It's a pre-processing step — run it before `filedge run`.
 
 ## When to use it
 
 The problem it solves: event streams and cloud object stores often produce thousands of tiny files (one per event, or one per API response page). Ingesting them one-by-one is expensive — each file is a separate database transaction, and cloud object stores charge per-listing operation.
 
-Compaction groups them into batches, so `etl run` processes far fewer, larger transactions.
+Compaction groups them into batches, so `filedge run` processes far fewer, larger transactions.
 
 Typical trigger: when your watched directory consistently contains more than a few hundred files per run.
 
 ## Basic usage
 
 ```bash
-etl compact --watched-dir ./incoming --output ./compacted
+filedge compact --watched-dir ./incoming --output ./compacted
 ```
 
 This reads all NDJSON files under `./incoming`, groups them into batches of up to 1,000 files each, and writes one merged NDJSON file per batch to `./compacted`. The originals in `./incoming` are **never modified**.
@@ -21,7 +21,7 @@ This reads all NDJSON files under `./incoming`, groups them into batches of up t
 Then run the pipeline against the compacted output:
 
 ```bash
-etl run --dir ./compacted --config pipeline.yaml --audit-db-url sqlite:///etl.db
+filedge run --dir ./compacted --config pipeline.yaml --audit-db-url sqlite:///filedge.db
 ```
 
 ## Cloud paths
@@ -29,7 +29,7 @@ etl run --dir ./compacted --config pipeline.yaml --audit-db-url sqlite:///etl.db
 Both `--watched-dir` and `--output` accept any [fsspec](https://filesystem-spec.readthedocs.io/en/latest/)-supported URI:
 
 ```bash
-etl compact \
+filedge compact \
   --watched-dir s3://my-bucket/landing/events/ \
   --output s3://my-bucket/compacted/
 ```
@@ -39,7 +39,7 @@ etl compact \
 Control how many input files are merged into each output file:
 
 ```bash
-etl compact --watched-dir ./incoming --output ./compacted --max-files 500
+filedge compact --watched-dir ./incoming --output ./compacted --max-files 500
 ```
 
 Default is 1,000. Larger batches mean fewer output files but more memory per batch. For cloud warehouses like BigQuery or Databricks, larger batches often produce better bulk load performance.
@@ -49,10 +49,10 @@ Default is 1,000. Larger batches mean fewer output files but more memory per bat
 Write gzip-compressed output with `--compress`:
 
 ```bash
-etl compact --watched-dir ./incoming --output ./compacted --compress
+filedge compact --watched-dir ./incoming --output ./compacted --compress
 ```
 
-Output files are named `<timestamp>_<batch>.ndjson.gz`. Use this when storage cost or transfer bandwidth matters. Your `etl run` command handles `.ndjson.gz` files transparently — no config change needed.
+Output files are named `<timestamp>_<batch>.ndjson.gz`. Use this when storage cost or transfer bandwidth matters. Your `filedge run` command handles `.ndjson.gz` files transparently — no config change needed.
 
 ## Output
 

@@ -1,5 +1,5 @@
 
-from etl.config import load_config
+from filedge.config import load_config
 
 _FULL_YAML = """
 format: csv

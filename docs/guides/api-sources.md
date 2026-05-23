@@ -1,14 +1,14 @@
 # Ingesting API Sources (SaaS Tools)
 
-API data from SaaS tools (Stripe, Salesforce, HubSpot, Jira, GitHub, etc.) passes through the same pipeline as file drops — PENDING → COMMITTED, content-hash deduplication, row-level provenance, `etl status` visibility. See ADR-0006.
+API data from SaaS tools (Stripe, Salesforce, HubSpot, Jira, GitHub, etc.) passes through the same pipeline as file drops — PENDING → COMMITTED, content-hash deduplication, row-level provenance, `filedge status` visibility. See ADR-0006.
 
 The pattern:
 
 ```
-etl fetch  →  staging prefix  →  Watched Directory  →  etl run  →  Destination
+filedge fetch  →  staging prefix  →  Watched Directory  →  etl run  →  Destination
 ```
 
-`etl fetch` handles the API pull, staging, and promotion to the Watched Directory. `etl run` handles ingestion identically to any file-drop source.
+`filedge fetch` handles the API pull, staging, and promotion to the Watched Directory. `filedge run` handles ingestion identically to any file-drop source.
 
 ---
 
@@ -65,12 +65,12 @@ export STRIPE_API_KEY=sk_live_...
 ### 2. Fetch
 
 ```bash
-etl fetch \
+filedge fetch \
   --config stripe-sources.yaml \
   --output s3://my-bucket/landing/stripe/
 ```
 
-`etl fetch` behaviour:
+`filedge fetch` behaviour:
 
 1. Checks `staging_prefix/.fetch.lock` — fails fast if a fetch is already running
 2. Writes `.fetch.lock` (timestamp + worker identity)
@@ -81,10 +81,10 @@ etl fetch \
 ### 3. Ingest
 
 ```bash
-etl run \
+filedge run \
   --watched-dir s3://my-bucket/landing/stripe/ \
   --config      pipeline.yaml \
-  --audit-db-url $ETL_AUDIT_DB_URL
+  --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```
 
 ### 4. pipeline.yaml
@@ -120,21 +120,21 @@ export SALESFORCE_USERNAME=user@company.com
 export SALESFORCE_PASSWORD=...
 export SALESFORCE_SECURITY_TOKEN=...
 
-etl fetch \
+filedge fetch \
   --config salesforce-sources.yaml \
   --output /data/landing/salesforce/
 
-etl run \
+filedge run \
   --watched-dir /data/landing/salesforce/ \
   --config      pipeline.yaml \
-  --audit-db-url $ETL_AUDIT_DB_URL
+  --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```
 
 ---
 
 ## Scheduling
 
-`etl fetch` and `etl run` are independent jobs. Schedule fetch before run. Different sources can run on different cadences.
+`filedge fetch` and `filedge run` are independent jobs. Schedule fetch before run. Different sources can run on different cadences.
 
 **Cloud Scheduler / EventBridge:**
 
@@ -171,7 +171,7 @@ fetch_stripe >> ingest_stripe
 Because API-sourced data passes through the same pipeline:
 
 ```bash
-etl status --audit-db-url $ETL_AUDIT_DB_URL
+filedge status --audit-db-url $FILEDGE_AUDIT_DB_URL
 
 PENDING:    0
 PROCESSING: 0
@@ -194,10 +194,10 @@ Every destination row carries `_source_file_hash` linking it back to the exact d
 | Pagination | dlt |
 | Rate limiting | dlt |
 | Incremental cursor (last fetched ID/timestamp) | dlt pipeline state |
-| Concurrent fetch prevention (Fetch Lock) | `etl fetch` |
-| Partial-fetch atomicity (staging → Watched Dir) | `etl fetch` |
-| File-level deduplication (content hash) | `etl run` |
-| PENDING → COMMITTED state machine | `etl run` |
-| Row-level provenance (`_source_file_hash`) | `etl run` |
-| Retry on ingestion failure | `etl run` |
-| Operator visibility (`etl status`) | `etl run` |
+| Concurrent fetch prevention (Fetch Lock) | `filedge fetch` |
+| Partial-fetch atomicity (staging → Watched Dir) | `filedge fetch` |
+| File-level deduplication (content hash) | `filedge run` |
+| PENDING → COMMITTED state machine | `filedge run` |
+| Row-level provenance (`_source_file_hash`) | `filedge run` |
+| Retry on ingestion failure | `filedge run` |
+| Operator visibility (`filedge status`) | `filedge run` |
