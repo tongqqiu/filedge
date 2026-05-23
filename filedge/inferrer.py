@@ -70,6 +70,45 @@ def _has_time(v: str) -> bool:
     return bool(_DATETIME_RE.match(v))
 
 
+def infer_schema_from_parquet(schema) -> list[InferredColumn]:
+    try:
+        import pyarrow as pa
+    except ImportError:
+        raise ImportError("Parquet support requires pyarrow — run: uv sync --extra parquet")
+
+    results = []
+    for i in range(len(schema)):
+        f = schema.field(i)
+        t = f.type
+        notes = ["schema read directly from Parquet file"]
+
+        if pa.types.is_integer(t):
+            filedge_type = "integer"
+        elif pa.types.is_floating(t):
+            filedge_type = "float"
+        elif pa.types.is_boolean(t):
+            filedge_type = "boolean"
+        elif pa.types.is_date(t):
+            filedge_type = "date"
+        elif pa.types.is_timestamp(t):
+            filedge_type = "timestamp"
+        elif pa.types.is_string(t) or pa.types.is_large_string(t):
+            filedge_type = "string"
+        elif pa.types.is_struct(t):
+            keys = sorted(t.field(j).name for j in range(t.num_fields))
+            filedge_type = "string"
+            notes.append(f"nested struct — keys: {', '.join(keys)}")
+        elif pa.types.is_list(t) or pa.types.is_large_list(t):
+            filedge_type = "string"
+            notes.append("array value — cannot be ingested directly")
+        else:
+            filedge_type = "string"
+
+        results.append(InferredColumn(f.name, filedge_type, "high", 0, 0, notes))
+
+    return results
+
+
 def infer_schema(rows: Iterator[dict], sample_rows: int = 1000) -> list[InferredColumn]:
     col_values: dict[str, list] = {}
     total_seen = 0

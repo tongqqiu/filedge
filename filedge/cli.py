@@ -9,7 +9,7 @@ from filedge.connectors import SchemaError
 from filedge.db import Database, create_audit_tables, get_status_summary
 from filedge.filesystem import get_filesystem, open_file
 from filedge.config import load_config
-from filedge.inferrer import infer_schema
+from filedge.inferrer import infer_schema, infer_schema_from_parquet
 from filedge.inspect_formatter import format_summary, format_yaml
 from filedge.parser import get_parser
 from filedge.preview_formatter import format_preview
@@ -21,6 +21,7 @@ _EXT_TO_FORMAT = {
     ".csv": "csv",
     ".ndjson": "ndjson",
     ".jsonl": "ndjson",
+    ".parquet": "parquet",
 }
 
 
@@ -114,9 +115,14 @@ def inspect(file, fmt, sample_rows, output_path):
 
     try:
         fs, path = get_filesystem(file)
-        parser = get_parser(fmt)
-        with open_file(path, fs=fs) as f:
-            columns = infer_schema(parser.parse(f), sample_rows=sample_rows)
+        if fmt == "parquet":
+            import pyarrow.parquet as pq
+            with open_file(path, fs=fs, mode="rb") as f:
+                columns = infer_schema_from_parquet(pq.ParquetFile(f).schema_arrow)
+        else:
+            parser = get_parser(fmt)
+            with open_file(path, fs=fs) as f:
+                columns = infer_schema(parser.parse(f), sample_rows=sample_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -155,7 +161,7 @@ def preview(file, fmt, num_rows, start_row):
         from itertools import islice
         fs, path = get_filesystem(file)
         parser = get_parser(fmt)
-        with open_file(path, fs=fs) as f:
+        with open_file(path, fs=fs, mode=parser.mode) as f:
             rows = list(islice(parser.parse(f), start_row - 1, start_row - 1 + num_rows))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -187,7 +193,7 @@ def validate(file, config_path, fmt, sample_rows, output_json):
         config = load_config(config_path)
         fs, path = get_filesystem(file)
         parser = get_parser(fmt)
-        with open_file(path, fs=fs) as f:
+        with open_file(path, fs=fs, mode=parser.mode) as f:
             rows = parser.parse(f)
             if sample_rows is not None:
                 from itertools import islice
