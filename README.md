@@ -146,9 +146,10 @@ connector:
   http_path: /sql/1.0/warehouses/xxx
   catalog: main
   schema: default
+  staging_location: /Volumes/workspace/default/test/filedge-staging
 ```
 
-Auth token from `DATABRICKS_TOKEN`. Requires `pip install filedge[databricks]`.
+Auth token from `DATABRICKS_TOKEN`. Requires `pip install filedge[databricks]`. For Unity Catalog volume staging, the token must be able to write files under `staging_location`.
 
 Note: the Databricks connector has unit-style coverage, but no live Databricks integration test suite yet. A live test needs a SQL warehouse and a staging location that the warehouse can read with `COPY INTO`.
 

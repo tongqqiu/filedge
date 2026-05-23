@@ -69,12 +69,13 @@ def fake_databricks(monkeypatch):
 
 def _connector(tmp_path, fake_databricks, **kwargs):
     module = importlib.import_module("filedge.connectors.databricks")
+    staging_location = kwargs.pop("staging_location", str(tmp_path))
     return module.DatabricksConnector(
         server_hostname="adb.example.databricks.com",
         http_path="/sql/1.0/warehouses/abc",
         catalog="main",
         schema="default",
-        staging_location=str(tmp_path),
+        staging_location=staging_location,
         **kwargs,
     )
 
@@ -156,6 +157,62 @@ def test_write_rows_truncate_replaces_table_from_staging(tmp_path, fake_databric
     assert "TRUNCATE TABLE `main`.`default`.`orders`" in statements
     assert "INSERT INTO `main`.`default`.`orders`" in statements
     assert "MERGE INTO" not in statements
+
+
+def test_write_rows_uploads_volume_staging_file_with_files_api(
+    tmp_path, fake_databricks, monkeypatch
+):
+    module = importlib.import_module("filedge.connectors.databricks")
+    requests = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def read(self):
+            return b""
+
+    def fake_urlopen(request):
+        requests.append(request)
+        return FakeResponse()
+
+    monkeypatch.setattr(module, "urlopen", fake_urlopen)
+    connector = _connector(
+        tmp_path,
+        fake_databricks,
+        staging_location="/Volumes/main/default/test/filedge-staging",
+    )
+
+    connector.write_rows("orders", iter([{"name": "Alice"}]), "hash1")
+
+    methods_and_urls = [(r.get_method(), r.full_url) for r in requests]
+    assert methods_and_urls[0] == (
+        "PUT",
+        "https://adb.example.databricks.com/api/2.0/fs/directories"
+        "/Volumes/main/default/test/filedge-staging",
+    )
+    assert methods_and_urls[1][0] == "PUT"
+    assert (
+        "https://adb.example.databricks.com/api/2.0/fs/files"
+        "/Volumes/main/default/test/filedge-staging/filedge_hash1_"
+    ) in methods_and_urls[1][1]
+    assert methods_and_urls[1][1].endswith(".json?overwrite=true")
+    assert b'"name": "Alice"' in requests[1].data
+    assert b'"_source_file_hash": "hash1"' in requests[1].data
+    assert b'"_ingested_at": "' in requests[1].data
+    assert methods_and_urls[2][0] == "DELETE"
+    assert "/api/2.0/fs/files/Volumes/main/default/test/filedge-staging/" in (
+        methods_and_urls[2][1]
+    )
+    assert "COPY INTO `main`.`default`.`_filedge_staging_" in "\n".join(
+        fake_databricks.statements
+    )
+    assert " FROM '/Volumes/main/default/test/filedge-staging/" in "\n".join(
+        fake_databricks.statements
+    )
 
 
 def test_write_rows_requires_staging_location(fake_databricks, monkeypatch):
