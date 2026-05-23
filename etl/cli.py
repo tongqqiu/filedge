@@ -8,9 +8,12 @@ from etl.compactor import compact as run_compact
 from etl.connectors import SchemaError
 from etl.db import Database, create_audit_tables, get_status_summary
 from etl.filesystem import get_filesystem, open_file
+from etl.config import load_config
 from etl.inferrer import infer_schema
 from etl.inspect_formatter import format_summary, format_yaml
 from etl.parser import get_parser
+from etl.validate_formatter import format_json, format_text
+from etl.validator import validate_file
 from etl.pipeline import run_pipeline
 
 _EXT_TO_FORMAT = {
@@ -127,3 +130,44 @@ def inspect(file, fmt, sample_rows, output_path):
             f.write(yaml_block)
     else:
         click.echo(yaml_block, nl=False)
+
+
+@cli.command()
+@click.argument("file")
+@click.option("--config", "config_path", required=True, help="Path to pipeline.yaml")
+@click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
+@click.option("--sample-rows", default=None, type=int, help="Validate only the first N rows")
+@click.option("--json", "output_json", is_flag=True, help="Output as JSON to stdout")
+def validate(file, config_path, fmt, sample_rows, output_json):
+    """Validate a file against a pipeline.yaml schema without loading it."""
+    if fmt is None:
+        _, ext = os.path.splitext(file)
+        fmt = _EXT_TO_FORMAT.get(ext.lower())
+        if fmt is None:
+            click.echo(
+                f"Error: cannot detect format for {file!r}. "
+                f"Use --format csv or --format ndjson.",
+                err=True,
+            )
+            sys.exit(2)
+
+    try:
+        config = load_config(config_path)
+        fs, path = get_filesystem(file)
+        parser = get_parser(fmt)
+        with open_file(path, fs=fs) as f:
+            rows = parser.parse(f)
+            if sample_rows is not None:
+                from itertools import islice
+                rows = islice(rows, sample_rows)
+            result = validate_file(rows, config.columns)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(2)
+
+    click.echo(format_text(result), err=True)
+    if output_json:
+        click.echo(json_lib.dumps(format_json(result)))
+
+    if result.failures:
+        sys.exit(1)
