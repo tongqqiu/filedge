@@ -121,7 +121,17 @@ connector:
   dataset: my_dataset
 ```
 
-Credentials from `GOOGLE_APPLICATION_CREDENTIALS` (Application Default Credentials). Requires `pip install filedge[bigquery]`.
+Credentials from `GOOGLE_APPLICATION_CREDENTIALS` or Application Default Credentials. Requires `pip install filedge[bigquery]`.
+
+Live BigQuery integration tests are opt-in:
+
+```bash
+export FILEDGE_BIGQUERY_INTEGRATION=1
+export BIGQUERY_PROJECT=my-gcp-project
+export BIGQUERY_DATASET=filedge_ci_test
+uv sync --extra dev --extra bigquery
+uv run pytest tests/test_connector_bigquery.py
+```
 
 ### Databricks
 

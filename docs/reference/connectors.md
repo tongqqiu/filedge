@@ -55,10 +55,27 @@ Install the driver:
 uv sync --extra bigquery
 ```
 
-Idempotency in append mode is achieved by encoding the `file_hash` in the BigQuery load job ID. If a job with the same ID already succeeded, the retry is a no-op.
+Idempotency in append mode is achieved by encoding the destination table and `file_hash` in the BigQuery load job ID. If a job with the same ID already succeeded, the retry is a no-op.
 
 !!! warning "7-day job metadata limit"
     BigQuery only retains job metadata for 7 days. If a file is re-ingested more than 7 days after its original load, the retry will submit a new job and produce duplicate rows. For pipelines where re-ingestion after this window is possible, use `write_mode: truncate` or implement a pre-load DML `DELETE`.
+
+### BigQuery integration tests
+
+Live BigQuery integration tests are opt-in and skipped by default. They require a pre-created test dataset:
+
+```bash
+export FILEDGE_BIGQUERY_INTEGRATION=1
+export BIGQUERY_PROJECT=my-gcp-project
+export BIGQUERY_DATASET=filedge_ci_test
+uv sync --extra dev --extra bigquery
+uv run pytest tests/test_connector_bigquery.py
+```
+
+For GitHub Actions, prefer Workload Identity Federation with a dedicated CI service account instead of a service account key. The service account should have `roles/bigquery.jobUser` on the project and `roles/bigquery.dataEditor` on only the test dataset. The included `BigQuery Integration` workflow expects:
+
+- GitHub secrets: `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_BIGQUERY_TEST_SERVICE_ACCOUNT`
+- GitHub variables: `BIGQUERY_PROJECT`, `BIGQUERY_DATASET`
 
 ---
 

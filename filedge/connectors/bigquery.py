@@ -18,6 +18,11 @@ _TYPE_TO_BQ = {
 }
 
 
+def _safe_job_id_part(value: str, max_length: int) -> str:
+    safe = "".join(c if c.isalnum() or c == "_" else "_" for c in value)
+    return safe[:max_length] or "unknown"
+
+
 class BigQueryConnector(Connector):
     def __init__(
         self,
@@ -101,8 +106,9 @@ class BigQueryConnector(Connector):
         # rows (append mode). For long-lived pipelines, prefer truncate mode or
         # implement a pre-load DELETE via BigQuery DML.
 
-        safe_hash = file_hash[:40].replace("/", "_").replace("+", "_")
-        job_id = f"etl_load_{safe_hash}"
+        safe_table = _safe_job_id_part(table, 40)
+        safe_hash = _safe_job_id_part(file_hash, 40)
+        job_id = f"etl_load_{safe_table}_{safe_hash}"
 
         tmp_path = None
         try:
