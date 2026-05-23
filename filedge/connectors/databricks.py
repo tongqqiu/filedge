@@ -142,18 +142,21 @@ class DatabricksConnector(Connector):
                 "or DATABRICKS_STAGING_LOCATION for COPY INTO staging"
             )
 
-        ingested_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat()
+        ingested_at = (
+            datetime.datetime.now(datetime.UTC)
+            .replace(tzinfo=None)
+            .strftime("%Y-%m-%d %H:%M:%S.%f")
+        )
         row_columns = list(first.keys())
-        load_columns = row_columns + ["_source_file_hash", "_ingested_at"]
         staging_table = f"_filedge_staging_{uuid.uuid4().hex}"
         staging_uri = self._staging_uri(file_hash)
-        local_path = self._write_local_staging_file(
-            first, rows, file_hash, ingested_at, staging_uri
-        )
+        local_path = self._write_local_staging_file(first, rows)
 
         try:
             self._upload_staging_file(local_path, staging_uri)
-            self._load_and_commit(table, staging_table, staging_uri, load_columns)
+            self._load_and_commit(
+                table, staging_table, staging_uri, row_columns, file_hash, ingested_at
+            )
         finally:
             os.unlink(local_path)
             self._remove_staging_file(staging_uri)
@@ -162,16 +165,10 @@ class DatabricksConnector(Connector):
         self,
         first: dict,
         rows: Iterator[dict],
-        file_hash: str,
-        ingested_at: str,
-        staging_uri: str,
     ) -> str:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             for row in _chain_first(first, rows):
-                record = dict(row)
-                record["_source_file_hash"] = file_hash
-                record["_ingested_at"] = ingested_at
-                tmp.write(json.dumps(record) + "\n")
+                tmp.write(json.dumps(dict(row)) + "\n")
             return tmp.name
 
     def _load_and_commit(
@@ -179,47 +176,61 @@ class DatabricksConnector(Connector):
         table: str,
         staging_table: str,
         staging_uri: str,
-        load_columns: List[str],
+        row_columns: List[str],
+        file_hash: str,
+        ingested_at: str,
     ) -> None:
         dest = self._table_ref(table)
         staging = self._table_ref(staging_table)
+        dest_column_types = self._get_existing_columns(table) or {}
         column_defs = ", ".join(
-            f"{self._quote(col)} {self._staging_column_type(col)}"
-            for col in load_columns
+            f"{self._quote(col)} {self._staging_column_type(col, dest_column_types)}"
+            for col in row_columns
         )
-        cols = ", ".join(self._quote(col) for col in load_columns)
-        merge_values = ", ".join(f"staging.{self._quote(col)}" for col in load_columns)
+        dest_columns = row_columns + ["_source_file_hash", "_ingested_at"]
+        dest_cols = ", ".join(self._quote(col) for col in dest_columns)
+        staged_values = [f"staging.{self._quote(col)}" for col in row_columns]
+        provenance_values = [
+            f"'{self._string_literal(file_hash)}'",
+            f"TIMESTAMP '{self._string_literal(ingested_at)}'",
+        ]
+        select_values = ", ".join(staged_values + provenance_values)
 
         try:
             with self._conn.cursor() as cur:
                 cur.execute(f"CREATE TABLE {staging} ({column_defs})")
                 cur.execute(
-                    f"COPY INTO {staging} ({cols})"
+                    f"COPY INTO {staging}"
                     f" FROM '{self._string_literal(staging_uri)}'"
                     " FILEFORMAT = JSON"
                 )
                 if self._write_mode == "truncate":
                     cur.execute(f"TRUNCATE TABLE {dest}")
                     cur.execute(
-                        f"INSERT INTO {dest} ({cols}) SELECT {cols} FROM {staging}"
+                        f"INSERT INTO {dest} ({dest_cols})"
+                        f" SELECT {select_values} FROM {staging} AS staging"
                     )
                 else:
                     cur.execute(
                         f"MERGE INTO {dest} AS dest"
                         f" USING {staging} AS staging"
-                        " ON dest._source_file_hash = staging._source_file_hash"
-                        f" WHEN NOT MATCHED THEN INSERT ({cols}) VALUES ({merge_values})"
+                        " ON dest._source_file_hash = "
+                        f"'{self._string_literal(file_hash)}'"
+                        f" WHEN NOT MATCHED THEN INSERT ({dest_cols})"
+                        f" VALUES ({select_values})"
                     )
         finally:
             with self._conn.cursor() as cur:
                 cur.execute(f"DROP TABLE IF EXISTS {staging}")
 
-    def _staging_column_type(self, column: str) -> str:
+    def _staging_column_type(
+        self, column: str, dest_column_types: Dict[str, str]
+    ) -> str:
         if column == "_source_file_hash":
             return "STRING"
         if column == "_ingested_at":
             return "TIMESTAMP"
-        return "STRING"
+        return dest_column_types.get(column, "STRING")
 
     def _staging_uri(self, file_hash: str) -> str:
         safe_hash = "".join(c if c.isalnum() else "_" for c in file_hash[:40])

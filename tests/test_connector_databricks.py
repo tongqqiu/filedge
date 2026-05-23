@@ -131,6 +131,13 @@ def test_ensure_table_raises_schema_error_on_mismatch(
 
 
 def test_write_rows_append_uses_copy_into_and_merge(tmp_path, fake_databricks):
+    fake_databricks.existing_columns = [
+        ("_id", "BIGINT"),
+        ("name", "STRING"),
+        ("amount", "DOUBLE"),
+        ("_source_file_hash", "STRING"),
+        ("_ingested_at", "TIMESTAMP"),
+    ]
     connector = _connector(tmp_path, fake_databricks)
 
     connector.write_rows(
@@ -140,9 +147,16 @@ def test_write_rows_append_uses_copy_into_and_merge(tmp_path, fake_databricks):
     )
 
     statements = "\n".join(fake_databricks.statements)
+    assert "CREATE TABLE `main`.`default`.`_filedge_staging_" in statements
+    assert "`name` STRING" in statements
+    assert "`amount` DOUBLE" in statements
     assert "COPY INTO `main`.`default`.`_filedge_staging_" in statements
+    assert "`) FROM" not in statements
     assert "MERGE INTO `main`.`default`.`orders` AS dest" in statements
-    assert "ON dest._source_file_hash = staging._source_file_hash" in statements
+    assert "ON dest._source_file_hash = 'hash1'" in statements
+    assert (
+        "VALUES (staging.`name`, staging.`amount`, 'hash1', TIMESTAMP "
+    ) in statements
     assert "WHEN NOT MATCHED THEN INSERT" in statements
     assert "DELETE FROM" not in statements
     assert "DROP TABLE IF EXISTS `main`.`default`.`_filedge_staging_" in statements
@@ -201,8 +215,8 @@ def test_write_rows_uploads_volume_staging_file_with_files_api(
     ) in methods_and_urls[1][1]
     assert methods_and_urls[1][1].endswith(".json?overwrite=true")
     assert b'"name": "Alice"' in requests[1].data
-    assert b'"_source_file_hash": "hash1"' in requests[1].data
-    assert b'"_ingested_at": "' in requests[1].data
+    assert b"_source_file_hash" not in requests[1].data
+    assert b"_ingested_at" not in requests[1].data
     assert methods_and_urls[2][0] == "DELETE"
     assert "/api/2.0/fs/files/Volumes/main/default/test/filedge-staging/" in (
         methods_and_urls[2][1]
@@ -210,6 +224,7 @@ def test_write_rows_uploads_volume_staging_file_with_files_api(
     assert "COPY INTO `main`.`default`.`_filedge_staging_" in "\n".join(
         fake_databricks.statements
     )
+    assert "`) FROM" not in "\n".join(fake_databricks.statements)
     assert " FROM '/Volumes/main/default/test/filedge-staging/" in "\n".join(
         fake_databricks.statements
     )
