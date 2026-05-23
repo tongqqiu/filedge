@@ -2,9 +2,7 @@ from typing import Optional, Tuple
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector
-from filedge.filesystem import open_file
-from filedge.parser import get_parser
-from filedge.transform import TransformError, transform_row
+from filedge.load_stream import LoadStream, LoadStreamError, iter_transformed_rows
 
 
 def load_file(
@@ -14,20 +12,13 @@ def load_file(
     file_hash: str,
     fs=None,
 ) -> Tuple[int, Optional[str]]:
-    parser = get_parser(config.format)
-    rows_loaded = [0]
-
-    def row_iter():
-        with open_file(path, fs=fs, encoding=config.encoding) as f:
-            for raw_row in parser.parse(f):
-                transformed = transform_row(raw_row, config.columns)
-                rows_loaded[0] += 1
-                yield transformed
+    stream = LoadStream()
 
     try:
-        connector.write_rows(config.dest_table, row_iter(), file_hash)
-        return rows_loaded[0], None
-    except TransformError as e:
-        return rows_loaded[0], str(e)
+        rows = iter_transformed_rows(config, path, fs=fs, stream=stream)
+        connector.write_rows(config.dest_table, rows, file_hash)
+        return stream.rows_loaded, None
+    except LoadStreamError as e:
+        return stream.rows_loaded, str(e)
     except Exception as e:
-        return rows_loaded[0], f"Unexpected error: {e}"
+        return stream.rows_loaded, f"Unexpected error: {e}"

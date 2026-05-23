@@ -58,6 +58,7 @@ def test_load_file_returns_error_on_bad_row(connector, config, tmp_path):
 
     rows, error = load_file(connector, config, str(f), "badhash")
     assert error is not None
+    assert "Row 1" in error
     assert "value" in error
 
     # Connector rolled back internally — no rows should be present
