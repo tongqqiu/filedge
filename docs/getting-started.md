@@ -10,8 +10,8 @@ This guide walks you from a raw CSV file to a running pipeline in about 5 minute
 ## Install
 
 ```bash
-git clone https://github.com/tongqqiu/etl-big-idea.git
-cd etl-big-idea
+git clone https://github.com/tongqqiu/filedge.git
+cd filedge
 uv sync
 ```
 
