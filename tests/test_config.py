@@ -1,4 +1,6 @@
+import pytest
 
+from filedge.identifiers import IdentifierError
 from filedge.config import load_config
 
 _FULL_YAML = """
@@ -79,3 +81,19 @@ def test_load_config_encoding(tmp_path):
     f.write_text(_MINIMAL_YAML + "encoding: cp500\n")
     config = load_config(str(f))
     assert config.encoding == "cp500"
+
+
+def test_load_config_rejects_invalid_destination_table(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML.replace("dest_table: test", "dest_table: bad-table"))
+
+    with pytest.raises(IdentifierError, match="destination table"):
+        load_config(str(f))
+
+
+def test_load_config_rejects_invalid_destination_column(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML.replace("dest: name", "dest: bad-column"))
+
+    with pytest.raises(IdentifierError, match="destination column"):
+        load_config(str(f))

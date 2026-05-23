@@ -3,6 +3,7 @@ from typing import Dict, Iterator, List, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
+from filedge.identifiers import quote_identifier, quote_identifiers, validate_pipeline_identifiers
 from filedge.schema import expected_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
@@ -38,6 +39,7 @@ class DuckDBConnector(Connector):
         self._batch_size = batch_size
 
     def ensure_table(self, config: PipelineConfig) -> None:
+        validate_pipeline_identifiers(config)
         existing = self._get_existing_columns(config.dest_table)
         if existing is None:
             self._create_table(config)
@@ -65,39 +67,43 @@ class DuckDBConnector(Connector):
         return {row[0]: row[1].upper() for row in result}
 
     def _create_table(self, config: PipelineConfig) -> None:
+        table = quote_identifier(config.dest_table)
+        sequence = quote_identifier(f"{config.dest_table}_id_seq")
+        index = quote_identifier(f"{config.dest_table}_source_file_hash_idx")
         self._conn.execute(
-            f"CREATE SEQUENCE IF NOT EXISTS {config.dest_table}_id_seq"
+            f"CREATE SEQUENCE IF NOT EXISTS {sequence}"
         )
         col_defs = ", ".join(
-            f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'VARCHAR')}"
+            f"{quote_identifier(col.dest)} {_TYPE_TO_SQL.get(col.type, 'VARCHAR')}"
             for col in config.columns
         )
         ddl = (
-            f"CREATE TABLE {config.dest_table} ("
-            f"_id INTEGER DEFAULT nextval('{config.dest_table}_id_seq') PRIMARY KEY, "
+            f"CREATE TABLE {table} ("
+            f"{quote_identifier('_id')} INTEGER DEFAULT nextval('{config.dest_table}_id_seq') PRIMARY KEY, "
             + col_defs
-            + ", _source_file_hash VARCHAR NOT NULL"
-            + ", _ingested_at TIMESTAMP NOT NULL"
+            + f", {quote_identifier('_source_file_hash')} VARCHAR NOT NULL"
+            + f", {quote_identifier('_ingested_at')} TIMESTAMP NOT NULL"
             + ")"
         )
         self._conn.execute(ddl)
         self._conn.execute(
-            f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
-            f" ON {config.dest_table} (_source_file_hash)"
+            f"CREATE INDEX {index}"
+            f" ON {table} ({quote_identifier('_source_file_hash')})"
         )
 
     def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
         import pyarrow as pa
 
+        quoted_table = quote_identifier(table)
         ingested_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat()
 
         try:
             self._conn.begin()
             if self._write_mode == "truncate":
-                self._conn.execute(f"DELETE FROM {table}")
+                self._conn.execute(f"DELETE FROM {quoted_table}")
             else:
                 self._conn.execute(
-                    f"DELETE FROM {table} WHERE _source_file_hash = ?", [file_hash]
+                    f"DELETE FROM {quoted_table} WHERE {quote_identifier('_source_file_hash')} = ?", [file_hash]
                 )
 
             batch: List[dict] = []
@@ -107,22 +113,22 @@ class DuckDBConnector(Connector):
                 record["_ingested_at"] = ingested_at
                 batch.append(record)
                 if len(batch) >= self._batch_size:
-                    self._flush(table, batch, pa)
+                    self._flush(quoted_table, batch, pa)
                     batch = []
 
             if batch:
-                self._flush(table, batch, pa)
+                self._flush(quoted_table, batch, pa)
 
             self._conn.commit()
         except Exception:
             self._conn.rollback()
             raise
 
-    def _flush(self, table: str, batch: List[dict], pa) -> None:
+    def _flush(self, quoted_table: str, batch: List[dict], pa) -> None:
         arrow_table = pa.Table.from_pylist(batch)
-        cols = ", ".join(arrow_table.column_names)
+        cols = ", ".join(quote_identifiers(arrow_table.column_names))
         self._conn.register("_etl_batch", arrow_table)
-        self._conn.execute(f"INSERT INTO {table} ({cols}) SELECT {cols} FROM _etl_batch")
+        self._conn.execute(f"INSERT INTO {quoted_table} ({cols}) SELECT {cols} FROM _etl_batch")
         self._conn.unregister("_etl_batch")
 
     def close(self) -> None:

@@ -49,7 +49,7 @@ def load_config(path: str) -> PipelineConfig:
         connector_type = raw.pop("type")
         connector = ConnectorConfig(type=connector_type, options=raw)
 
-    return PipelineConfig(
+    config = PipelineConfig(
         format=data["format"],
         dest_table=data["dest_table"],
         columns=columns,
@@ -60,3 +60,7 @@ def load_config(path: str) -> PipelineConfig:
         connector=connector,
         encoding=data.get("encoding", "utf-8"),
     )
+    from filedge.identifiers import validate_pipeline_identifiers
+
+    validate_pipeline_identifiers(config)
+    return config
