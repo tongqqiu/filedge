@@ -1,4 +1,4 @@
-from etl.inferrer import InferredColumn, infer_schema
+from etl.inferrer import infer_schema
 
 
 def rows(*dicts):

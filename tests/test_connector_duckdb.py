@@ -2,7 +2,7 @@ import pytest
 
 from etl.config import ColumnMapping, PipelineConfig
 from etl.connectors.duckdb import DuckDBConnector
-from etl.db import SchemaError
+from etl.connectors import SchemaError
 
 
 @pytest.fixture

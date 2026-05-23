@@ -19,7 +19,7 @@ from etl.loader import load_file
 def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
     config = load_config(config_path)
     db = Database(audit_db_url)
-    connector = get_connector(config, audit_db_url)
+    connector = get_connector(config)
     fs, root = get_filesystem(watched_dir)
 
     try:
