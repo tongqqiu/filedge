@@ -38,6 +38,12 @@ Files already `COMMITTED` are silently skipped — their content hash is already
 
 ## Output
 
+In an interactive terminal, `filedge run` shows live progress for hashing,
+registering, and loading files. The loading progress counts only files eligible
+to process in this run, and the current file shows a throttled row count while
+rows are streamed. Use `--no-progress` to keep output compact, or `--progress`
+to force progress rendering.
+
 ```
 Committed: 3  Failed: 0  Skipped: 0  New: 3  Reclaimed: 0  Retried: 0
 ```
