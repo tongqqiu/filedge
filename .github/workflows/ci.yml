@@ -48,7 +48,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-caching: true
 
-      - run: uv sync --extra dev --extra postgres
+      - run: uv sync --extra dev --extra postgres --extra duckdb
 
       - name: Test
         env:

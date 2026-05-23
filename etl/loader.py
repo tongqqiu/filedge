@@ -10,7 +10,7 @@ from etl.transform import TransformError, transform_row
 def load_file(
     connector: Connector,
     config: PipelineConfig,
-    file_path: str,
+    path: str,
     file_hash: str,
     fs=None,
 ) -> Tuple[int, Optional[str]]:
@@ -18,7 +18,7 @@ def load_file(
     rows_loaded = [0]
 
     def row_iter():
-        with open_file(file_path, fs=fs) as f:
+        with open_file(path, fs=fs) as f:
             for raw_row in parser.parse(f):
                 transformed = transform_row(raw_row, config.columns)
                 rows_loaded[0] += 1

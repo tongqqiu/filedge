@@ -1,5 +1,3 @@
-import os
-
 from etl.config import load_config
 from etl.connectors import get_connector
 from etl.db import (
@@ -13,6 +11,7 @@ from etl.db import (
     reclaim_stale_processing,
     reset_eligible_failed,
 )
+from etl.filesystem import file_basename, get_filesystem, list_files
 from etl.hashing import compute_hash
 from etl.loader import load_file
 
@@ -21,6 +20,7 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
     config = load_config(config_path)
     db = Database(audit_db_url)
     connector = get_connector(config, audit_db_url)
+    fs, root = get_filesystem(watched_dir)
 
     try:
         create_audit_tables(db)
@@ -31,19 +31,14 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
 
         connector.ensure_table(config)
 
-        files = sorted(
-            os.path.join(watched_dir, name)
-            for name in os.listdir(watched_dir)
-            if os.path.isfile(os.path.join(watched_dir, name))
-        )
-
-        file_hashes = {path: compute_hash(path) for path in files}
+        files = list_files(fs, root)
+        file_hashes = {path: compute_hash(path, fs) for path in files}
 
         new_files = 0
         for path in files:
             content_hash = file_hashes[path]
             if find_file_by_hash(db, content_hash) is None:
-                insert_pending(db, os.path.basename(path), content_hash)
+                insert_pending(db, file_basename(path), content_hash)
                 new_files += 1
         db.commit()
 
@@ -59,7 +54,7 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
             claim_processing(db, content_hash)
             db.commit()
 
-            rows, error = load_file(connector, config, path, content_hash)
+            rows, error = load_file(connector, config, path, content_hash, fs)
 
             if error is None:
                 mark_committed(db, content_hash)

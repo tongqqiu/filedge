@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import tempfile
 from typing import Iterator, Optional
 
@@ -85,6 +86,7 @@ class BigQueryConnector(Connector):
 
     def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
         from google.cloud import bigquery
+        from google.api_core.exceptions import Conflict
 
         ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
         write_disposition = (
@@ -93,38 +95,52 @@ class BigQueryConnector(Connector):
             else bigquery.WriteDisposition.WRITE_APPEND
         )
 
-        # Stream rows to a newline-delimited JSON temp file, then bulk load
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".ndjson", delete=False
-        ) as tmp:
-            tmp_path = tmp.name
-            for row in rows:
-                record = dict(row)
-                record["_source_file_hash"] = file_hash
-                record["_ingested_at"] = ingested_at
-                tmp.write(json.dumps(record) + "\n")
+        # NOTE: job-ID deduplication is only guaranteed for 7 days. After that,
+        # retrying the same file_hash will produce a new job and append duplicate
+        # rows (append mode). For long-lived pipelines, prefer truncate mode or
+        # implement a pre-load DELETE via BigQuery DML.
 
-        table_ref = self._table_ref(table)
-        job_config = bigquery.LoadJobConfig(
-            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
-            write_disposition=write_disposition,
-            # Use file_hash as job ID suffix for idempotency on append mode
-        )
+        safe_hash = file_hash[:40].replace("/", "_").replace("+", "_")
+        job_id = f"etl_load_{safe_hash}"
 
-        with open(tmp_path, "rb") as f:
-            # job_id prefix encodes file_hash so BigQuery deduplicates retries
-            safe_hash = file_hash[:40].replace("/", "_").replace("+", "_")
-            job_id = f"etl_load_{safe_hash}"
-            try:
-                job = self._bq.load_table_from_file(
-                    f, table_ref, job_config=job_config, job_id=job_id
-                )
-                job.result()
-            except Exception as e:
-                # If job already exists (duplicate retry), treat as success
-                if "Already Exists" in str(e):
-                    return
-                raise
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".ndjson", delete=False) as tmp:
+                tmp_path = tmp.name
+                for row in rows:
+                    record = dict(row)
+                    record["_source_file_hash"] = file_hash
+                    record["_ingested_at"] = ingested_at
+                    tmp.write(json.dumps(record) + "\n")
+
+            table_ref = self._table_ref(table)
+            job_config = bigquery.LoadJobConfig(
+                source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+                write_disposition=write_disposition,
+            )
+
+            with open(tmp_path, "rb") as f:
+                try:
+                    job = self._bq.load_table_from_file(
+                        f, table_ref, job_config=job_config, job_id=job_id
+                    )
+                    job.result()
+                except Conflict:
+                    # A job with this ID already exists from a previous attempt.
+                    existing = self._bq.get_job(job_id)
+                    if existing.state == "DONE" and not existing.errors:
+                        return  # previous run succeeded — idempotent, nothing to do
+                    # Previous job failed; BigQuery won't accept the same job ID again,
+                    # so retry under a unique ID.
+                    fallback_id = f"{job_id}_{int(datetime.datetime.now(datetime.UTC).timestamp())}"
+                    f.seek(0)
+                    job = self._bq.load_table_from_file(
+                        f, table_ref, job_config=job_config, job_id=fallback_id
+                    )
+                    job.result()
+        finally:
+            if tmp_path:
+                os.unlink(tmp_path)
 
     def close(self) -> None:
         self._bq.close()
