@@ -5,7 +5,8 @@ import sys
 import click
 
 from etl.compactor import compact as run_compact
-from etl.db import Database, SchemaError, create_audit_tables, get_status_summary
+from etl.connectors import SchemaError
+from etl.db import Database, create_audit_tables, get_status_summary
 from etl.filesystem import get_filesystem, open_file
 from etl.inferrer import infer_schema
 from etl.inspect_formatter import format_summary, format_yaml

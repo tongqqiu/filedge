@@ -13,13 +13,6 @@ def base_config():
     )
 
 
-def test_registry_resolves_sqlite_from_audit_url(tmp_path, base_config):
-    url = f"sqlite:///{tmp_path}/test.db"
-    connector = get_connector(base_config, audit_db_url=url)
-    assert type(connector).__name__ == "SQLiteConnector"
-    connector.close()
-
-
 def test_registry_resolves_explicit_sqlite(tmp_path, base_config):
     url = f"sqlite:///{tmp_path}/test.db"
     base_config.connector = ConnectorConfig(type="sqlite", options={"url": url})
@@ -41,6 +34,6 @@ def test_registry_raises_import_error_with_hint_for_missing_sdk(base_config):
         get_connector(base_config)
 
 
-def test_registry_raises_on_no_connector_and_unknown_url(base_config):
-    with pytest.raises(ValueError):
-        get_connector(base_config, audit_db_url="mysql://localhost/db")
+def test_registry_raises_on_missing_connector_block(base_config):
+    with pytest.raises(ValueError, match="connector: block"):
+        get_connector(base_config)

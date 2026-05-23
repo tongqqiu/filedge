@@ -2,8 +2,7 @@ import datetime
 from typing import Iterator, List, Optional
 
 from etl.config import PipelineConfig
-from etl.connectors import Connector
-from etl.db import SchemaError
+from etl.connectors import Connector, SchemaError
 
 _TYPE_TO_SQL = {
     "string": "TEXT",

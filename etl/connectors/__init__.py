@@ -4,12 +4,34 @@ from typing import Iterator
 from etl.config import PipelineConfig
 
 
+class SchemaError(Exception):
+    """Raised when the destination table schema does not match the Pipeline Config."""
+
+
 class Connector(ABC):
     @abstractmethod
-    def ensure_table(self, config: PipelineConfig) -> None: ...
+    def ensure_table(self, config: PipelineConfig) -> None:
+        """Create or validate the destination table against the Pipeline Config.
+
+        Raises SchemaError if the table already exists with a schema that does
+        not match the declared columns.
+        """
 
     @abstractmethod
-    def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None: ...
+    def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
+        """Write rows to table.
+
+        Must be idempotent per file_hash: calling write_rows twice with the
+        same file_hash must produce the same destination state as calling it
+        once. Implementations typically achieve this via a DELETE WHERE
+        _source_file_hash = file_hash followed by INSERT (append mode), or by
+        encoding file_hash in a destination-native job ID (BigQuery).
+
+        Every written row must include _source_file_hash and _ingested_at
+        provenance columns.
+
+        Raises SchemaError if the destination table schema is incompatible.
+        """
 
     def close(self) -> None:
         pass
@@ -45,22 +67,17 @@ def _load_class(dotted_path: str, connector_type: str):
         ) from e
 
 
-def get_connector(config: PipelineConfig, audit_db_url: str = "") -> "Connector":
-    if config.connector is not None:
-        connector_type = config.connector.type
-        options = config.connector.options
-    else:
-        # Infer from audit DB URL for backward compatibility
-        if audit_db_url.startswith("sqlite:///"):
-            connector_type = "sqlite"
-            options = {"url": audit_db_url}
-        elif audit_db_url.startswith("postgresql://") or audit_db_url.startswith("postgres://"):
-            connector_type = "postgres"
-            options = {"url": audit_db_url}
-        else:
-            raise ValueError(
-                "No connector: block in pipeline.yaml and cannot infer connector from audit DB URL"
-            )
+def get_connector(config: PipelineConfig) -> "Connector":
+    if config.connector is None:
+        raise ValueError(
+            "pipeline.yaml is missing a connector: block. Add one, e.g.:\n"
+            "  connector:\n"
+            "    type: sqlite\n"
+            "    url: sqlite:///path/to/dest.db"
+        )
+
+    connector_type = config.connector.type
+    options = config.connector.options
 
     if connector_type not in _REGISTRY:
         raise ValueError(

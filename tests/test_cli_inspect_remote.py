@@ -2,7 +2,6 @@
 Remote file support for etl inspect — tested with fsspec's MemoryFileSystem
 so no real cloud credentials are required.
 """
-import io
 
 import pytest
 import yaml
