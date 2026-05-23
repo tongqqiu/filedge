@@ -1,6 +1,6 @@
 import datetime
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 
 
 # --- Database wrapper ---
@@ -38,6 +38,9 @@ class Database:
     def rollback(self):
         self._conn.rollback()
 
+    def dialect(self) -> Literal["sqlite", "postgres"]:
+        return "postgres" if self._placeholder == "%s" else "sqlite"
+
     def close(self):
         self._conn.close()
 
@@ -74,7 +77,7 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
 
 
 def create_audit_tables(db: Database) -> None:
-    ddl = _AUDIT_DDL_POSTGRES if db._placeholder == "%s" else _AUDIT_DDL_SQLITE
+    ddl = _AUDIT_DDL_POSTGRES if db.dialect() == "postgres" else _AUDIT_DDL_SQLITE
     db.execute(ddl)
     db.commit()
 
@@ -181,5 +184,3 @@ def get_status_summary(db: Database) -> dict:
     return {**counts, "recent_failures": recent_failures}
 
 
-class SchemaError(Exception):
-    pass

@@ -81,11 +81,14 @@ def test_pipeline_retries_failed_file(tmp_path):
     watched = tmp_path / "watch"
     watched.mkdir()
     config_file = tmp_path / "pipeline.yaml"
+    dest_db_url = f"sqlite:///{tmp_path}/dest.db"
     config_file.write_text(
-        "format: csv\ndest_table: items\nretry_cap: 3\nbatch_size: 100\n"
-        "stale_timeout_minutes: 30\ncolumns:\n"
-        "  - source: name\n    dest: name\n    type: string\n    required: true\n"
-        "  - source: value\n    dest: value\n    type: string\n    required: true\n"
+        f"format: csv\ndest_table: items\nretry_cap: 3\nbatch_size: 100\n"
+        f"stale_timeout_minutes: 30\n"
+        f"connector:\n  type: sqlite\n  url: {dest_db_url}\n"
+        f"columns:\n"
+        f"  - source: name\n    dest: name\n    type: string\n    required: true\n"
+        f"  - source: value\n    dest: value\n    type: string\n    required: true\n"
     )
     audit_db_url = f"sqlite:///{tmp_path}/test.db"
 

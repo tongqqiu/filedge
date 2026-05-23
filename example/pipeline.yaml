@@ -1,5 +1,8 @@
 format: csv
 dest_table: orders
+connector:
+  type: sqlite
+  url: sqlite:///orders_dest.db
 retry_cap: 3
 stale_timeout_minutes: 30
 batch_size: 1000

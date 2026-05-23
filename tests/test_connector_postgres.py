@@ -5,7 +5,7 @@ import pytest
 
 from etl.config import ColumnMapping, PipelineConfig
 from etl.connectors.postgres import PostgresConnector
-from etl.db import SchemaError
+from etl.connectors import SchemaError
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 pytestmark = pytest.mark.skipif(

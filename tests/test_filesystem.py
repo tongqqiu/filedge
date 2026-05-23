@@ -1,7 +1,7 @@
 import pytest
 import fsspec
 
-from etl.filesystem import file_basename, get_filesystem, list_files
+from etl.filesystem import file_basename, get_filesystem, list_files, open_file
 from etl.hashing import compute_hash
 from etl.loader import load_file
 from etl.config import ColumnMapping, PipelineConfig
@@ -64,6 +64,20 @@ def test_list_files_memory(memfs):
 def test_file_basename():
     assert file_basename("/local/path/file.csv") == "file.csv"
     assert file_basename("bucket/prefix/file.csv") == "file.csv"
+
+
+def test_open_file_binary_local(tmp_path):
+    f = tmp_path / "data.bin"
+    f.write_bytes(b"\x00\x01\x02")
+    with open_file(str(f), mode="rb") as fh:
+        assert fh.read() == b"\x00\x01\x02"
+
+
+def test_open_file_binary_memory(memfs):
+    with memfs.open("bucket/data.bin", "wb") as f:
+        f.write(b"\x00\x01\x02")
+    with open_file("bucket/data.bin", fs=memfs, mode="rb") as fh:
+        assert fh.read() == b"\x00\x01\x02"
 
 
 def test_compute_hash_memory(memfs):
