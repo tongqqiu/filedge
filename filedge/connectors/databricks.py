@@ -183,8 +183,9 @@ class DatabricksConnector(Connector):
     ) -> None:
         dest = self._table_ref(table)
         staging = self._table_ref(staging_table)
+        dest_column_types = self._get_existing_columns(table) or {}
         column_defs = ", ".join(
-            f"{self._quote(col)} {self._staging_column_type(col)}"
+            f"{self._quote(col)} {self._staging_column_type(col, dest_column_types)}"
             for col in load_columns
         )
         cols = ", ".join(self._quote(col) for col in load_columns)
@@ -214,12 +215,14 @@ class DatabricksConnector(Connector):
             with self._conn.cursor() as cur:
                 cur.execute(f"DROP TABLE IF EXISTS {staging}")
 
-    def _staging_column_type(self, column: str) -> str:
+    def _staging_column_type(
+        self, column: str, dest_column_types: Dict[str, str]
+    ) -> str:
         if column == "_source_file_hash":
             return "STRING"
         if column == "_ingested_at":
             return "TIMESTAMP"
-        return "STRING"
+        return dest_column_types.get(column, "STRING")
 
     def _staging_uri(self, file_hash: str) -> str:
         safe_hash = "".join(c if c.isalnum() else "_" for c in file_hash[:40])

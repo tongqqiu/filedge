@@ -131,6 +131,13 @@ def test_ensure_table_raises_schema_error_on_mismatch(
 
 
 def test_write_rows_append_uses_copy_into_and_merge(tmp_path, fake_databricks):
+    fake_databricks.existing_columns = [
+        ("_id", "BIGINT"),
+        ("name", "STRING"),
+        ("amount", "DOUBLE"),
+        ("_source_file_hash", "STRING"),
+        ("_ingested_at", "TIMESTAMP"),
+    ]
     connector = _connector(tmp_path, fake_databricks)
 
     connector.write_rows(
@@ -140,6 +147,9 @@ def test_write_rows_append_uses_copy_into_and_merge(tmp_path, fake_databricks):
     )
 
     statements = "\n".join(fake_databricks.statements)
+    assert "CREATE TABLE `main`.`default`.`_filedge_staging_" in statements
+    assert "`name` STRING" in statements
+    assert "`amount` DOUBLE" in statements
     assert "COPY INTO `main`.`default`.`_filedge_staging_" in statements
     assert "`) FROM" not in statements
     assert "MERGE INTO `main`.`default`.`orders` AS dest" in statements
