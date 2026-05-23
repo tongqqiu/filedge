@@ -158,16 +158,16 @@ Auth token from `DATABRICKS_TOKEN`. Requires `pip install filedge[databricks]`.
 
 ```
 Run N
-├── Reset FAILED files below retry_cap → PENDING
-├── Reclaim stale PROCESSING locks → PENDING
-├── Connector: ensure destination table exists (create or validate schema)
-├── Hash all files in watched directory
-├── Enqueue new content hashes as PENDING
-└── For each PENDING file:
-    ├── Audit DB: mark PROCESSING (distributed lock)
-    ├── Connector: write_rows — stream rows through parser + transform
-    │   └── Connector commits its own transaction (idempotent per file_hash)
-    └── Audit DB: mark COMMITTED  (or mark FAILED on error)
+├── Audit DB: prepare_run
+│   ├── reset retryable FAILED files → PENDING
+│   └── reclaim stale PROCESSING locks → PENDING
+├── Connector: ensure destination table exists (identifier + schema guard)
+├── Hash files and discover new Content Hashes
+└── For each claimable File:
+    ├── Audit DB: claim_pending_file → PROCESSING
+    ├── load_stream: parse + transform rows with Strict Mode
+    ├── Connector: write_rows idempotently with provenance columns
+    └── Audit DB: finish_file → COMMITTED or FAILED
 ```
 
 The audit DB and destination are separate systems. A crash between the connector write and the audit mark leaves the file in PROCESSING — the stale-lock reclaim picks it up on the next run and the connector's idempotency ensures no duplicate rows.
