@@ -194,7 +194,7 @@ class DatabricksConnector(Connector):
             with self._conn.cursor() as cur:
                 cur.execute(f"CREATE TABLE {staging} ({column_defs})")
                 cur.execute(
-                    f"COPY INTO {staging} ({cols})"
+                    f"COPY INTO {staging}"
                     f" FROM '{self._string_literal(staging_uri)}'"
                     " FILEFORMAT = JSON"
                 )
