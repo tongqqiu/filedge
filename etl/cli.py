@@ -1,11 +1,22 @@
 import json as json_lib
+import os
 import sys
 
 import click
 
 from etl.compactor import compact as run_compact
 from etl.db import Database, SchemaError, create_audit_tables, get_status_summary
+from etl.filesystem import get_filesystem, open_file
+from etl.inferrer import infer_schema
+from etl.inspect_formatter import format_summary, format_yaml
+from etl.parser import get_parser
 from etl.pipeline import run_pipeline
+
+_EXT_TO_FORMAT = {
+    ".csv": "csv",
+    ".ndjson": "ndjson",
+    ".jsonl": "ndjson",
+}
 
 
 @click.group()
@@ -76,3 +87,42 @@ def status(audit_db_url, output_json):
             click.echo("\nRecent failures:")
             for f in summary["recent_failures"]:
                 click.echo(f"  {f['filename']}: {f['error_message']}")
+
+
+@cli.command()
+@click.argument("file")
+@click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
+@click.option("--sample-rows", default=1000, show_default=True, help="Number of rows to sample")
+@click.option("--output", "output_path", default=None, help="Write YAML block to this file instead of stdout")
+def inspect(file, fmt, sample_rows, output_path):
+    """Infer schema from a file and output a columns: block for pipeline.yaml."""
+    if fmt is None:
+        _, ext = os.path.splitext(file)
+        fmt = _EXT_TO_FORMAT.get(ext.lower())
+        if fmt is None:
+            click.echo(
+                f"Error: cannot detect format for {file!r}. "
+                f"Use --format csv or --format ndjson.",
+                err=True,
+            )
+            sys.exit(1)
+
+    try:
+        fs, path = get_filesystem(file)
+        parser = get_parser(fmt)
+        with open_file(path, fs=fs) as f:
+            columns = infer_schema(parser.parse(f), sample_rows=sample_rows)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    yaml_block = format_yaml(columns, source_path=file, sample_rows=sample_rows)
+    summary = format_summary(columns)
+
+    click.echo(summary, err=True)
+
+    if output_path:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(yaml_block)
+    else:
+        click.echo(yaml_block, nl=False)

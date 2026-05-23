@@ -2,6 +2,7 @@ from typing import Optional, Tuple
 
 from etl.config import PipelineConfig
 from etl.connectors import Connector
+from etl.filesystem import open_file
 from etl.parser import get_parser
 from etl.transform import TransformError, transform_row
 
@@ -17,8 +18,7 @@ def load_file(
     rows_loaded = [0]
 
     def row_iter():
-        ctx = fs.open(path, "r", encoding="utf-8") if fs is not None else open(path, "r", encoding="utf-8", newline="")
-        with ctx as f:
+        with open_file(path, fs=fs) as f:
             for raw_row in parser.parse(f):
                 transformed = transform_row(raw_row, config.columns)
                 rows_loaded[0] += 1

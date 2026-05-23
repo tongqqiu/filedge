@@ -24,6 +24,13 @@ def get_filesystem(path: str) -> Tuple:
     return None, path
 
 
+def open_file(path: str, fs=None, mode: str = "r", encoding: str = "utf-8"):
+    """Open a local or remote file, returning a file-like object."""
+    if fs is not None:
+        return fs.open(path, mode, encoding=encoding)
+    return open(path, mode, encoding=encoding, newline="" if "b" not in mode else None)
+
+
 def list_files(fs, path: str) -> List[str]:
     """List files directly under path, sorted."""
     if fs is None:
