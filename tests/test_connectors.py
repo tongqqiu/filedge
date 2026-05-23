@@ -34,6 +34,25 @@ def test_registry_raises_import_error_with_hint_for_missing_sdk(base_config):
         get_connector(base_config)
 
 
+def test_registry_raises_import_error_with_hint_for_missing_databricks_sdk(
+    base_config, monkeypatch
+):
+    import sys
+
+    monkeypatch.setitem(sys.modules, "databricks", None)
+    base_config.connector = ConnectorConfig(
+        type="databricks",
+        options={
+            "server_hostname": "adb.example.databricks.com",
+            "http_path": "/sql/1.0/warehouses/abc",
+            "catalog": "main",
+            "schema": "default",
+        },
+    )
+    with pytest.raises(ImportError, match="pip install filedge\\[databricks\\]"):
+        get_connector(base_config)
+
+
 def test_registry_raises_on_missing_connector_block(base_config):
     with pytest.raises(ValueError, match="connector: block"):
         get_connector(base_config)
