@@ -1,5 +1,7 @@
 import pytest
 
+pytest.importorskip("duckdb")
+
 from filedge.config import ColumnMapping, PipelineConfig
 from filedge.connectors.duckdb import DuckDBConnector
 from filedge.connectors import SchemaError
@@ -53,6 +55,29 @@ def test_ensure_table_raises_schema_error_on_mismatch(connector, config):
         ColumnMapping(source="extra", dest="extra", type="string", required=True)
     )
     with pytest.raises(SchemaError, match="extra"):
+        connector.ensure_table(config)
+
+
+def test_ensure_table_raises_schema_error_on_type_mismatch(connector, config):
+    connector._conn.execute(
+        "CREATE TABLE orders ("
+        "_id INTEGER PRIMARY KEY, "
+        "name VARCHAR, "
+        "amount VARCHAR, "
+        "_source_file_hash VARCHAR NOT NULL, "
+        "_ingested_at TIMESTAMP NOT NULL"
+        ")"
+    )
+
+    with pytest.raises(SchemaError, match="amount.*VARCHAR.*DOUBLE"):
+        connector.ensure_table(config)
+
+
+def test_ensure_table_raises_schema_error_on_extra_live_column(connector, config):
+    connector.ensure_table(config)
+    connector._conn.execute("ALTER TABLE orders ADD COLUMN stale VARCHAR")
+
+    with pytest.raises(SchemaError, match="stale.*not declared"):
         connector.ensure_table(config)
 
 

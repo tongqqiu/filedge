@@ -51,8 +51,10 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
                     skipped += 1
                 continue
 
-            claim_processing(db, content_hash)
+            claimed = claim_processing(db, content_hash)
             db.commit()
+            if not claimed:
+                continue
 
             rows, error = load_file(connector, config, path, content_hash, fs)
 
