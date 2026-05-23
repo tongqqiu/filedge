@@ -647,6 +647,7 @@ bigquery = [
 ]
 databricks = [
     { name = "databricks-sql-connector" },
+    { name = "fsspec" },
 ]
 dev = [
     { name = "fsspec" },
@@ -682,6 +683,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.1" },
     { name = "databricks-sql-connector", marker = "extra == 'databricks'", specifier = ">=3.0" },
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.0" },
+    { name = "fsspec", marker = "extra == 'databricks'", specifier = ">=2023.0" },
     { name = "fsspec", marker = "extra == 'dev'", specifier = ">=2023.0" },
     { name = "fsspec", marker = "extra == 'gcs'", specifier = ">=2023.0" },
     { name = "fsspec", marker = "extra == 's3'", specifier = ">=2023.0" },

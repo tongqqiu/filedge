@@ -71,15 +71,20 @@ connector:
   http_path: /sql/1.0/warehouses/xxx
   catalog: main
   schema: default
+  staging_location: s3://my-bucket/filedge-staging
 ```
 
 Auth token from `DATABRICKS_TOKEN`.
+
+`staging_location` may also be supplied via `DATABRICKS_STAGING_LOCATION`. It must be a cloud or mounted location the Databricks SQL warehouse can read with `COPY INTO`, such as S3, ADLS Gen2, GCS, or a Databricks-accessible volume path.
 
 Install the driver:
 
 ```bash
 uv sync --extra databricks
 ```
+
+Append mode stages each file as newline-delimited JSON and runs `COPY INTO` into a temporary staging table, then `MERGE INTO` the destination on `_source_file_hash`. Re-running the same file is a no-op for rows that already committed. Truncate mode truncates the destination and inserts the staged rows.
 
 ---
 
