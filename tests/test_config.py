@@ -71,3 +71,11 @@ def test_load_config_defaults(tmp_path):
     assert config.retry_cap == 3
     assert config.batch_size == 1000
     assert config.stale_timeout_minutes == 30
+    assert config.encoding == "utf-8"
+
+
+def test_load_config_encoding(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML + "encoding: cp500\n")
+    config = load_config(str(f))
+    assert config.encoding == "cp500"

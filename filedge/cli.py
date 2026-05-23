@@ -100,7 +100,8 @@ def status(audit_db_url, output_json):
 @click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
 @click.option("--sample-rows", default=1000, show_default=True, help="Number of rows to sample")
 @click.option("--output", "output_path", default=None, help="Write YAML block to this file instead of stdout")
-def inspect(file, fmt, sample_rows, output_path):
+@click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
+def inspect(file, fmt, sample_rows, output_path, encoding):
     """Infer schema from a file and output a columns: block for pipeline.yaml."""
     if fmt is None:
         _, ext = os.path.splitext(file)
@@ -121,7 +122,7 @@ def inspect(file, fmt, sample_rows, output_path):
                 columns = infer_schema_from_parquet(pq.ParquetFile(f).schema_arrow)
         else:
             parser = get_parser(fmt)
-            with open_file(path, fs=fs) as f:
+            with open_file(path, fs=fs, encoding=encoding) as f:
                 columns = infer_schema(parser.parse(f), sample_rows=sample_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -144,7 +145,8 @@ def inspect(file, fmt, sample_rows, output_path):
 @click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
 @click.option("--rows", "num_rows", default=10, show_default=True, help="Number of rows to display")
 @click.option("--start-row", "start_row", default=1, show_default=True, help="First row to display (1-indexed)")
-def preview(file, fmt, num_rows, start_row):
+@click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
+def preview(file, fmt, num_rows, start_row, encoding):
     """Show N rows of a file as a formatted table, optionally starting at a given row."""
     if fmt is None:
         _, ext = os.path.splitext(file)
@@ -161,7 +163,7 @@ def preview(file, fmt, num_rows, start_row):
         from itertools import islice
         fs, path = get_filesystem(file)
         parser = get_parser(fmt)
-        with open_file(path, fs=fs, mode=parser.mode) as f:
+        with open_file(path, fs=fs, mode=parser.mode, encoding=encoding) as f:
             rows = list(islice(parser.parse(f), start_row - 1, start_row - 1 + num_rows))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -176,7 +178,8 @@ def preview(file, fmt, num_rows, start_row):
 @click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
 @click.option("--sample-rows", default=None, type=int, help="Validate only the first N rows")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON to stdout")
-def validate(file, config_path, fmt, sample_rows, output_json):
+@click.option("--encoding", default=None, help="Override file encoding from pipeline.yaml (e.g. cp500)")
+def validate(file, config_path, fmt, sample_rows, output_json, encoding):
     """Validate a file against a pipeline.yaml schema without loading it."""
     if fmt is None:
         _, ext = os.path.splitext(file)
@@ -191,9 +194,10 @@ def validate(file, config_path, fmt, sample_rows, output_json):
 
     try:
         config = load_config(config_path)
+        effective_encoding = encoding or config.encoding
         fs, path = get_filesystem(file)
         parser = get_parser(fmt)
-        with open_file(path, fs=fs, mode=parser.mode) as f:
+        with open_file(path, fs=fs, mode=parser.mode, encoding=effective_encoding) as f:
             rows = parser.parse(f)
             if sample_rows is not None:
                 from itertools import islice

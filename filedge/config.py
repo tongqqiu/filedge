@@ -28,6 +28,7 @@ class PipelineConfig:
     batch_size: int = 1000
     write_mode: str = "append"
     connector: Optional[ConnectorConfig] = None
+    encoding: str = "utf-8"
 
 
 def load_config(path: str) -> PipelineConfig:
@@ -57,4 +58,5 @@ def load_config(path: str) -> PipelineConfig:
         batch_size=data.get("batch_size", 1000),
         write_mode=data.get("write_mode", "append"),
         connector=connector,
+        encoding=data.get("encoding", "utf-8"),
     )

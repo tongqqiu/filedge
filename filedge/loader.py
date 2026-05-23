@@ -18,7 +18,7 @@ def load_file(
     rows_loaded = [0]
 
     def row_iter():
-        with open_file(path, fs=fs) as f:
+        with open_file(path, fs=fs, encoding=config.encoding) as f:
             for raw_row in parser.parse(f):
                 transformed = transform_row(raw_row, config.columns)
                 rows_loaded[0] += 1
