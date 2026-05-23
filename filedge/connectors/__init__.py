@@ -46,10 +46,10 @@ _REGISTRY = {
 }
 
 _INSTALL_HINTS = {
-    "postgres": "pip install etl-big-idea[postgres]",
-    "bigquery": "pip install etl-big-idea[bigquery]",
-    "databricks": "pip install etl-big-idea[databricks]",
-    "duckdb": "pip install etl-big-idea[duckdb]",
+    "postgres": "pip install filedge[postgres]",
+    "bigquery": "pip install filedge[bigquery]",
+    "databricks": "pip install filedge[databricks]",
+    "duckdb": "pip install filedge[duckdb]",
 }
 
 

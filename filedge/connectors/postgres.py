@@ -21,7 +21,7 @@ class PostgresConnector(Connector):
         except ImportError as e:
             raise ImportError(
                 "PostgreSQL connector requires an optional dependency"
-                " — run: pip install etl-big-idea[postgres]"
+                " — run: pip install filedge[postgres]"
             ) from e
         self._conn = psycopg2.connect(url)
         self._write_mode = write_mode

@@ -148,5 +148,5 @@ def test_native_duckdb_types(tmp_path):
 def test_missing_sdk_raises_import_error_with_hint(tmp_path, monkeypatch):
     import sys
     monkeypatch.setitem(sys.modules, "duckdb", None)
-    with pytest.raises(ImportError, match="pip install etl-big-idea\\[duckdb\\]"):
+    with pytest.raises(ImportError, match="pip install filedge\\[duckdb\\]"):
         DuckDBConnector(path=str(tmp_path / "x.duckdb"))

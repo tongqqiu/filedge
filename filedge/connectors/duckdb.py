@@ -21,7 +21,7 @@ class DuckDBConnector(Connector):
         except ImportError as e:
             raise ImportError(
                 "DuckDB connector requires an optional dependency"
-                " — run: pip install etl-big-idea[duckdb]"
+                " — run: pip install filedge[duckdb]"
             ) from e
 
         try:

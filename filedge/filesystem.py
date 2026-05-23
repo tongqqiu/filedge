@@ -17,7 +17,7 @@ def get_filesystem(path: str) -> Tuple:
         try:
             import fsspec
         except ImportError as e:
-            hint = f" — run: pip install etl-big-idea[{extra}]" if extra else ""
+            hint = f" — run: pip install filedge[{extra}]" if extra else ""
             raise ImportError(f"Cloud paths require fsspec{hint}") from e
         fs, root = fsspec.url_to_fs(path)
         return fs, root

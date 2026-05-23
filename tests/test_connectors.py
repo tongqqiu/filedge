@@ -30,7 +30,7 @@ def test_registry_raises_on_unknown_type(base_config):
 def test_registry_raises_import_error_with_hint_for_missing_sdk(base_config):
     # bigquery extra not installed in test env
     base_config.connector = ConnectorConfig(type="bigquery", options={})
-    with pytest.raises(ImportError, match="pip install etl-big-idea\\[bigquery\\]"):
+    with pytest.raises(ImportError, match="pip install filedge\\[bigquery\\]"):
         get_connector(base_config)
 
 
