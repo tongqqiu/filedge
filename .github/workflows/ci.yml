@@ -53,4 +53,4 @@ jobs:
       - name: Test
         env:
           DATABASE_URL: postgresql://postgres:etl@localhost/etldb
-        run: uv run pytest --cov=etl --cov-report=term-missing
+        run: uv run pytest --cov=filedge --cov-report=term-missing
