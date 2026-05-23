@@ -1,7 +1,5 @@
 """Tests for encoding support across inspect, preview, validate, and run."""
-import io
 
-import pytest
 from click.testing import CliRunner
 
 from filedge.cli import cli
