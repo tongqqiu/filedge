@@ -29,7 +29,7 @@ def test_get_parser_csv():
 
 def test_get_parser_unknown_raises():
     with pytest.raises(ValueError, match="Unknown format"):
-        get_parser("parquet")
+        get_parser("avro")
 
 
 # --- NDJSONParser ---

@@ -22,8 +22,9 @@ Four CLI commands, each useful on its own:
 
 | Command | What it does |
 |---------|-------------|
-| `etl inspect <file>` | Sample a file and generate a `pipeline.yaml` columns block |
-| `etl validate <file>` | Dry-run a file against a config — no data written |
+| `filedge inspect <file>` | Sample a file and generate a `pipeline.yaml` columns block |
+| `filedge preview <file>` | Display rows as a table — jump to any row with `--start-row` |
+| `filedge validate <file>` | Dry-run a file against a config — no data written |
 | `filedge compact` | Merge many small files into fewer large ones before ingestion |
 | `filedge run` | Ingest files with atomic commits, retry, and full audit trail |
 

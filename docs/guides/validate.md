@@ -96,6 +96,6 @@ filedge validate gs://my-bucket/events.ndjson --config pipeline.yaml
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--config` | required | Path to `pipeline.yaml` |
-| `--format` | auto from extension | File format: `csv` or `ndjson` |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
 | `--sample-rows` | all rows | Validate only the first N rows |
 | `--json` | off | Emit JSON to stdout in addition to text summary |

@@ -665,6 +665,9 @@ gcs = [
     { name = "fsspec" },
     { name = "gcsfs" },
 ]
+parquet = [
+    { name = "pyarrow" },
+]
 postgres = [
     { name = "psycopg2-binary" },
 ]
@@ -687,13 +690,14 @@ requires-dist = [
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0" },
     { name = "psycopg2-binary", marker = "extra == 'postgres'", specifier = ">=2.9" },
     { name = "pyarrow", marker = "extra == 'duckdb'", specifier = ">=14.0" },
+    { name = "pyarrow", marker = "extra == 'parquet'", specifier = ">=14.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9" },
     { name = "s3fs", marker = "extra == 's3'", specifier = ">=2023.0" },
 ]
-provides-extras = ["dev", "postgres", "bigquery", "databricks", "duckdb", "s3", "gcs", "docs"]
+provides-extras = ["dev", "postgres", "bigquery", "databricks", "duckdb", "parquet", "s3", "gcs", "docs"]
 
 [[package]]
 name = "frozenlist"
