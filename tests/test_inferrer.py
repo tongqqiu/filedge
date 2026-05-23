@@ -72,6 +72,77 @@ def test_total_seen_reflects_rows_consumed():
     assert result[0].total_seen == 2
 
 
+# --- boolean ---
+
+def test_true_false_strings_inferred_as_boolean():
+    result = infer_schema(rows({"b": "true"}, {"b": "false"}, {"b": "True"}))
+    col = result[0]
+    assert col.inferred_type == "boolean"
+    assert col.confidence == "high"
+
+
+def test_yes_no_strings_inferred_as_boolean():
+    result = infer_schema(rows({"b": "yes"}, {"b": "no"}))
+    assert result[0].inferred_type == "boolean"
+
+
+def test_one_zero_alone_stays_integer_not_boolean():
+    result = infer_schema(rows({"b": "1"}, {"b": "0"}, {"b": "1"}))
+    assert result[0].inferred_type == "integer"
+
+
+# --- date / timestamp ---
+
+def test_iso_date_column():
+    result = infer_schema(rows({"d": "2024-01-15"}, {"d": "2024-06-30"}))
+    col = result[0]
+    assert col.inferred_type == "date"
+    assert col.confidence == "high"
+
+
+def test_datetime_with_time_component_is_timestamp():
+    result = infer_schema(rows({"ts": "2024-01-15T10:30:00"}, {"ts": "2024-06-30 08:00:00"}))
+    assert result[0].inferred_type == "timestamp"
+
+
+def test_mixed_date_formats_is_string_ambiguous_with_note():
+    result = infer_schema(rows({"d": "2024-01-15"}, {"d": "01/15/2024"}))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "ambiguous"
+    assert any("date format" in n for n in col.notes)
+
+
+# --- nested objects / arrays (#22) ---
+
+def test_nested_dict_value_typed_as_string_with_keys_note():
+    result = infer_schema(rows(
+        {"meta": {"currency": "USD", "region": "US"}},
+        {"meta": {"currency": "EUR", "region": "EU"}},
+    ))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "ambiguous"
+    assert any("currency" in n and "region" in n for n in col.notes)
+
+
+def test_array_value_typed_as_string_with_note():
+    result = infer_schema(rows({"tags": ["a", "b"]}, {"tags": ["c"]}))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "ambiguous"
+    assert any("array" in n for n in col.notes)
+
+
+def test_mixed_scalar_and_dict_is_string_ambiguous():
+    result = infer_schema(rows({"x": "hello"}, {"x": {"nested": 1}}))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "ambiguous"
+
+
+# --- existing null tests (unchanged) ---
+
 def test_empty_string_counts_as_null():
     result = infer_schema(rows({"n": "1"}, {"n": ""}, {"n": "3"}))
     col = result[0]
