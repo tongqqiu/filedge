@@ -3,6 +3,7 @@ from typing import Dict, Iterator, List, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
+from filedge.schema import expected_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
     "string": "VARCHAR",
@@ -41,7 +42,10 @@ class DuckDBConnector(Connector):
         if existing is None:
             self._create_table(config)
             return
-        mismatches = self._detect_mismatches(existing, config)
+        mismatches = schema_mismatches(
+            existing,
+            expected_columns(config, _TYPE_TO_SQL, "INTEGER", "TIMESTAMP"),
+        )
         if mismatches:
             raise SchemaError(
                 f"Schema mismatch for table '{config.dest_table}':\n" + "\n".join(mismatches)
@@ -81,14 +85,6 @@ class DuckDBConnector(Connector):
             f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
             f" ON {config.dest_table} (_source_file_hash)"
         )
-
-    def _detect_mismatches(self, existing: Dict[str, str], config: PipelineConfig) -> List[str]:
-        required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}
-        return [
-            f"  Column '{name}' declared in pipeline.yaml but missing from table"
-            for name in sorted(required)
-            if name not in existing
-        ]
 
     def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
         import pyarrow as pa

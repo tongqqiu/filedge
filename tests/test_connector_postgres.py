@@ -73,6 +73,33 @@ def test_ensure_table_raises_schema_error_on_mismatch(connector, config):
         connector.ensure_table(config)
 
 
+def test_ensure_table_raises_schema_error_on_type_mismatch(connector, config):
+    with connector._conn.cursor() as cur:
+        cur.execute(
+            f"CREATE TABLE {config.dest_table} ("
+            "_id BIGSERIAL PRIMARY KEY, "
+            "name TEXT, "
+            "amount TEXT, "
+            "_source_file_hash TEXT NOT NULL, "
+            "_ingested_at TIMESTAMP WITH TIME ZONE NOT NULL"
+            ")"
+        )
+    connector._conn.commit()
+
+    with pytest.raises(SchemaError, match="amount.*TEXT.*DOUBLE PRECISION"):
+        connector.ensure_table(config)
+
+
+def test_ensure_table_raises_schema_error_on_extra_live_column(connector, config):
+    connector.ensure_table(config)
+    with connector._conn.cursor() as cur:
+        cur.execute(f"ALTER TABLE {config.dest_table} ADD COLUMN stale TEXT")
+    connector._conn.commit()
+
+    with pytest.raises(SchemaError, match="stale.*not declared"):
+        connector.ensure_table(config)
+
+
 def test_write_rows_append_inserts_rows(connector, config):
     connector.ensure_table(config)
     rows = [{"name": "Alice", "amount": 10.0}, {"name": "Bob", "amount": 20.0}]
