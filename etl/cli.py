@@ -3,6 +3,7 @@ import sys
 
 import click
 
+from etl.compactor import compact as run_compact
 from etl.db import Database, SchemaError, create_audit_tables, get_status_summary
 from etl.pipeline import run_pipeline
 
@@ -31,6 +32,24 @@ def run(watched_dir, config_path, audit_db_url):
     except SchemaError as e:
         click.echo(f"Schema error: {e}", err=True)
         sys.exit(1)
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option("--watched-dir", required=True, help="Source prefix containing small files")
+@click.option("--output", required=True, help="Output prefix for compacted files")
+@click.option("--max-files", default=1000, show_default=True, help="Max input files per output file")
+@click.option("--compress", is_flag=True, help="Gzip-compress output (.ndjson.gz)")
+def compact(watched_dir, output, max_files, compress):
+    """Merge small NDJSON files into fewer larger files before ingestion."""
+    try:
+        result = run_compact(watched_dir, output, max_files=max_files, compress=compress)
+        click.echo(
+            f"Batches written: {result['batches']}  "
+            f"Files compacted: {result['files_compacted']}"
+        )
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
