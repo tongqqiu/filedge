@@ -15,12 +15,13 @@ def format_preview(
     *,
     max_width: int = _MAX_WIDTH,
     max_cell: int = _MAX_CELL,
+    start_row: int = 1,
 ) -> str:
     if not rows:
         return "(no rows)"
 
     columns = list(rows[0].keys())
-    row_num_width = max(1, len(str(len(rows))))
+    row_num_width = max(1, len(str(start_row + len(rows) - 1)))
 
     col_widths: dict[str, int] = {}
     for col in columns:
@@ -53,7 +54,7 @@ def format_preview(
     )
 
     lines = [header, separator]
-    for i, row in enumerate(rows, 1):
+    for i, row in enumerate(rows, start_row):
         lines.append(_render_row(i, row))  # type: ignore[arg-type]
 
     if overflow:

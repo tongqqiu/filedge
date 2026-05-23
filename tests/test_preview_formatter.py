@@ -65,6 +65,21 @@ def test_none_values_render_as_empty():
     assert "None" not in output
 
 
+def test_start_row_offset_shows_in_row_numbers():
+    rows = _rows(3)
+    output = format_preview(rows, start_row=42)
+    lines = output.splitlines()
+    assert lines[2].startswith("42")
+    assert lines[3].startswith("43")
+    assert lines[4].startswith("44")
+
+
+def test_start_row_default_is_one():
+    output = format_preview(_rows(2))
+    lines = output.splitlines()
+    assert lines[2].startswith("1")
+
+
 def test_separator_line_present():
     output = format_preview(_rows())
     lines = output.splitlines()

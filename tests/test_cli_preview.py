@@ -63,6 +63,34 @@ def test_preview_shows_row_numbers():
     assert "2" in result.output
 
 
+def test_start_row_skips_earlier_rows(tmp_path):
+    csv = tmp_path / "data.csv"
+    csv.write_text("id,val\n" + "".join(f"{i},row{i}\n" for i in range(1, 11)))
+    result = _preview(str(csv), "--start-row", "5")
+    assert result.exit_code == 0
+    assert "| row5 " in result.output or "row5\n" in result.output
+    assert "| row4 " not in result.output
+    assert "| row1 " not in result.output
+
+
+def test_start_row_shows_file_row_numbers(tmp_path):
+    csv = tmp_path / "data.csv"
+    csv.write_text("id,val\n" + "".join(f"{i},row{i}\n" for i in range(1, 11)))
+    result = _preview(str(csv), "--start-row", "8", "--rows", "2")
+    assert result.exit_code == 0
+    lines = [ln for ln in result.output.splitlines() if ln.strip() and ln.strip()[0].isdigit()]
+    assert lines[0].strip().startswith("8")
+    assert lines[1].strip().startswith("9")
+
+
+def test_start_row_beyond_file_shows_no_rows(tmp_path):
+    csv = tmp_path / "data.csv"
+    csv.write_text("id,val\n1,a\n2,b\n")
+    result = _preview(str(csv), "--start-row", "99")
+    assert result.exit_code == 0
+    assert "(no rows)" in result.output
+
+
 def test_cloud_path_preview(tmp_path):
     pytest_skip = False
     try:

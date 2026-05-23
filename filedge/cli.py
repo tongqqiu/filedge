@@ -137,8 +137,9 @@ def inspect(file, fmt, sample_rows, output_path):
 @click.argument("file")
 @click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
 @click.option("--rows", "num_rows", default=10, show_default=True, help="Number of rows to display")
-def preview(file, fmt, num_rows):
-    """Show the first N rows of a file as a formatted table."""
+@click.option("--start-row", "start_row", default=1, show_default=True, help="First row to display (1-indexed)")
+def preview(file, fmt, num_rows, start_row):
+    """Show N rows of a file as a formatted table, optionally starting at a given row."""
     if fmt is None:
         _, ext = os.path.splitext(file)
         fmt = _EXT_TO_FORMAT.get(ext.lower())
@@ -155,12 +156,12 @@ def preview(file, fmt, num_rows):
         fs, path = get_filesystem(file)
         parser = get_parser(fmt)
         with open_file(path, fs=fs) as f:
-            rows = list(islice(parser.parse(f), num_rows))
+            rows = list(islice(parser.parse(f), start_row - 1, start_row - 1 + num_rows))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(2)
 
-    click.echo(format_preview(rows))
+    click.echo(format_preview(rows, start_row=start_row))
 
 
 @cli.command()
