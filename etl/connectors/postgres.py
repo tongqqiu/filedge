@@ -55,6 +55,10 @@ class PostgresConnector(Connector):
         ddl = f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})"
         with self._conn.cursor() as cur:
             cur.execute(ddl)
+            cur.execute(
+                f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
+                f" ON {config.dest_table} (_source_file_hash)"
+            )
 
     def _detect_mismatches(self, existing: set, config: PipelineConfig) -> List[str]:
         required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}
