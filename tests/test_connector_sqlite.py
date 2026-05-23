@@ -85,6 +85,36 @@ def test_ensure_table_raises_schema_error_on_extra_live_column(connector, config
         connector.ensure_table(config)
 
 
+def test_quoted_reserved_identifiers_are_supported(tmp_path):
+    config = PipelineConfig(
+        format="csv",
+        dest_table="select",
+        columns=[
+            ColumnMapping(source="from", dest="from", type="string", required=True),
+            ColumnMapping(source="value", dest="value", type="integer", required=True),
+        ],
+    )
+    connector = SQLiteConnector(url=f"sqlite:///{tmp_path}/quoted.db", write_mode="append")
+
+    connector.ensure_table(config)
+    connector.write_rows("select", iter([{"from": "source", "value": 1}]), "hash1")
+
+    row = connector._get_conn().execute('SELECT "from", "value" FROM "select"').fetchone()
+    assert row == ("source", 1)
+    connector.close()
+
+
+def test_invalid_destination_identifier_is_rejected(connector):
+    config = PipelineConfig(
+        format="csv",
+        dest_table="bad-table",
+        columns=[ColumnMapping(source="name", dest="name", type="string")],
+    )
+
+    with pytest.raises(ValueError, match="Invalid destination table identifier"):
+        connector.ensure_table(config)
+
+
 def test_write_rows_append_inserts_rows(connector, config):
     connector.ensure_table(config)
     rows = [{"name": "Alice", "amount": 10.0}, {"name": "Bob", "amount": 20.0}]

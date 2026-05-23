@@ -3,6 +3,7 @@ from typing import Iterator, List, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
+from filedge.identifiers import quote_identifier, quote_identifiers, validate_pipeline_identifiers
 from filedge.schema import expected_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
@@ -29,6 +30,7 @@ class PostgresConnector(Connector):
         self._batch_size = batch_size
 
     def ensure_table(self, config: PipelineConfig) -> None:
+        validate_pipeline_identifiers(config)
         with self._conn.cursor() as cur:
             cur.execute(
                 "SELECT column_name, data_type FROM information_schema.columns"
@@ -57,30 +59,34 @@ class PostgresConnector(Connector):
             )
 
     def _create_table(self, config: PipelineConfig) -> None:
-        col_defs = ["_id BIGSERIAL PRIMARY KEY"]
+        table = quote_identifier(config.dest_table)
+        index = quote_identifier(f"{config.dest_table}_source_file_hash_idx")
+        col_defs = [f"{quote_identifier('_id')} BIGSERIAL PRIMARY KEY"]
         for col in config.columns:
-            col_defs.append(f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'TEXT')}")
-        col_defs.append("_source_file_hash TEXT NOT NULL")
-        col_defs.append("_ingested_at TIMESTAMP WITH TIME ZONE NOT NULL")
-        ddl = f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})"
+            col_defs.append(f"{quote_identifier(col.dest)} {_TYPE_TO_SQL.get(col.type, 'TEXT')}")
+        col_defs.append(f"{quote_identifier('_source_file_hash')} TEXT NOT NULL")
+        col_defs.append(f"{quote_identifier('_ingested_at')} TIMESTAMP WITH TIME ZONE NOT NULL")
+        ddl = f"CREATE TABLE {table} ({', '.join(col_defs)})"
         with self._conn.cursor() as cur:
             cur.execute(ddl)
             cur.execute(
-                f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
-                f" ON {config.dest_table} (_source_file_hash)"
+                f"CREATE INDEX {index}"
+                f" ON {table} ({quote_identifier('_source_file_hash')})"
             )
 
     def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
+        quoted_table = quote_identifier(table)
         dest_cols: Optional[List[str]] = None
         ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
 
         try:
             with self._conn.cursor() as cur:
                 if self._write_mode == "truncate":
-                    cur.execute(f"TRUNCATE TABLE {table}")
+                    cur.execute(f"TRUNCATE TABLE {quoted_table}")
                 else:
                     cur.execute(
-                        f"DELETE FROM {table} WHERE _source_file_hash = %s", [file_hash]
+                        f"DELETE FROM {quoted_table} WHERE {quote_identifier('_source_file_hash')} = %s",
+                        [file_hash],
                     )
 
                 batch = []
@@ -89,7 +95,7 @@ class PostgresConnector(Connector):
                         dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
                         placeholders = ", ".join(["%s"] * len(dest_cols))
                         insert_sql = (
-                            f"INSERT INTO {table} ({', '.join(dest_cols)})"
+                            f"INSERT INTO {quoted_table} ({', '.join(quote_identifiers(dest_cols))})"
                             f" VALUES ({placeholders})"
                         )
                     values = list(row.values()) + [file_hash, ingested_at]

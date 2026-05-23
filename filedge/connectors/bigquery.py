@@ -6,6 +6,7 @@ from typing import Iterator, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
+from filedge.identifiers import validate_pipeline_identifiers
 from filedge.schema import expected_columns, schema_mismatches
 
 _TYPE_TO_BQ = {
@@ -66,6 +67,7 @@ class BigQueryConnector(Connector):
         from google.cloud import bigquery
         from google.api_core.exceptions import NotFound
 
+        validate_pipeline_identifiers(config)
         table_ref = self._table_ref(config.dest_table)
         try:
             existing = self._bq.get_table(table_ref)
