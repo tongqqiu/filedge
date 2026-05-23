@@ -146,6 +146,8 @@ connector:
 
 Auth token from `DATABRICKS_TOKEN`. Requires `pip install filedge[databricks]`.
 
+Note: the Databricks connector has unit-style coverage, but no live Databricks integration test suite yet. A live test needs a SQL warehouse and a staging location that the warehouse can read with `COPY INTO`.
+
 ## Write Modes
 
 | Mode | Behaviour | Idempotency |
