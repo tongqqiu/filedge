@@ -1,6 +1,7 @@
 import datetime
 import gzip
 import json
+import os
 from typing import List
 
 from etl.filesystem import get_filesystem, list_files
@@ -36,15 +37,28 @@ def compact(
 
 def _write_batch(src_fs, files: List[str], out_fs, out_path: str, compress: bool) -> None:
     open_out = out_fs.open if out_fs is not None else open
+    rename = out_fs.rename if out_fs is not None else os.replace
+    unlink = out_fs.rm if out_fs is not None else os.unlink
+    tmp_path = out_path + ".tmp"
+    success = False
 
-    with open_out(out_path, "wb") as raw:
-        dest = gzip.GzipFile(fileobj=raw, mode="wb") if compress else raw
-        try:
-            for path in files:
-                _copy_rows(src_fs, path, dest)
-        finally:
+    try:
+        with open_out(tmp_path, "wb") as raw:
             if compress:
-                dest.close()
+                with gzip.GzipFile(fileobj=raw, mode="wb") as dest:
+                    for path in files:
+                        _copy_rows(src_fs, path, dest)
+            else:
+                for path in files:
+                    _copy_rows(src_fs, path, raw)
+        rename(tmp_path, out_path)
+        success = True
+    finally:
+        if not success:
+            try:
+                unlink(tmp_path)
+            except OSError:
+                pass
 
 
 def _copy_rows(src_fs, path: str, dest) -> None:

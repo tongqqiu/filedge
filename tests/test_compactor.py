@@ -128,6 +128,16 @@ def test_compact_cli(tmp_path):
     assert "Files compacted: 1" in result.output
 
 
+def test_compact_cleans_up_partial_output_on_error(source, output):
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    (source / "b.ndjson").write_text("not valid json\n")
+
+    with pytest.raises(Exception):
+        compact(str(source), str(output))
+
+    assert list(output.iterdir()) == []
+
+
 def test_compact_cli_compress_flag(tmp_path):
     src = tmp_path / "src"
     src.mkdir()
