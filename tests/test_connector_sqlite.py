@@ -59,6 +59,32 @@ def test_ensure_table_raises_schema_error_on_mismatch(connector, config):
         connector.ensure_table(config)
 
 
+def test_ensure_table_raises_schema_error_on_type_mismatch(connector, config):
+    conn = connector._get_conn()
+    conn.execute(
+        "CREATE TABLE orders ("
+        "_id INTEGER PRIMARY KEY, "
+        "name TEXT, "
+        "amount TEXT, "
+        "_source_file_hash TEXT NOT NULL, "
+        "_ingested_at TEXT NOT NULL"
+        ")"
+    )
+    conn.commit()
+
+    with pytest.raises(SchemaError, match="amount.*TEXT.*REAL"):
+        connector.ensure_table(config)
+
+
+def test_ensure_table_raises_schema_error_on_extra_live_column(connector, config):
+    connector.ensure_table(config)
+    connector._get_conn().execute("ALTER TABLE orders ADD COLUMN stale TEXT")
+    connector._get_conn().commit()
+
+    with pytest.raises(SchemaError, match="stale.*not declared"):
+        connector.ensure_table(config)
+
+
 def test_write_rows_append_inserts_rows(connector, config):
     connector.ensure_table(config)
     rows = [{"name": "Alice", "amount": 10.0}, {"name": "Bob", "amount": 20.0}]

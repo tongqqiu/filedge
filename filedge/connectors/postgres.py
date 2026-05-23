@@ -3,6 +3,7 @@ from typing import Iterator, List, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
+from filedge.schema import expected_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
     "string": "TEXT",
@@ -30,7 +31,8 @@ class PostgresConnector(Connector):
     def ensure_table(self, config: PipelineConfig) -> None:
         with self._conn.cursor() as cur:
             cur.execute(
-                "SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+                "SELECT column_name, data_type FROM information_schema.columns"
+                " WHERE table_name = %s",
                 [config.dest_table],
             )
             rows = cur.fetchall()
@@ -38,8 +40,17 @@ class PostgresConnector(Connector):
             self._create_table(config)
             self._conn.commit()
             return
-        existing = {row[0] for row in rows}
-        mismatches = self._detect_mismatches(existing, config)
+        existing = {row[0]: row[1] for row in rows}
+        mismatches = schema_mismatches(
+            existing,
+            expected_columns(config, _TYPE_TO_SQL, "BIGINT", "TIMESTAMP WITH TIME ZONE"),
+            type_aliases={
+                "BIGSERIAL": "BIGINT",
+                "BIGINT": "BIGINT",
+                "DOUBLE PRECISION": "DOUBLE PRECISION",
+                "TIMESTAMP WITH TIME ZONE": "TIMESTAMP WITH TIME ZONE",
+            },
+        )
         if mismatches:
             raise SchemaError(
                 f"Schema mismatch for table '{config.dest_table}':\n" + "\n".join(mismatches)
@@ -58,14 +69,6 @@ class PostgresConnector(Connector):
                 f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
                 f" ON {config.dest_table} (_source_file_hash)"
             )
-
-    def _detect_mismatches(self, existing: set, config: PipelineConfig) -> List[str]:
-        required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}
-        return [
-            f"  Column '{name}' declared in pipeline.yaml but missing from table"
-            for name in sorted(required)
-            if name not in existing
-        ]
 
     def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
         dest_cols: Optional[List[str]] = None

@@ -6,6 +6,7 @@ from typing import Iterator, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
+from filedge.schema import expected_columns, schema_mismatches
 
 _TYPE_TO_BQ = {
     "string": "STRING",
@@ -73,14 +74,15 @@ class BigQueryConnector(Connector):
             self._bq.create_table(table)
             return
 
-        existing_names = {f.name for f in existing.schema}
-        required = {col.dest for col in config.columns} | {"_source_file_hash", "_ingested_at"}
-        missing = sorted(required - existing_names)
-        if missing:
+        existing_columns = {f.name: f.field_type for f in existing.schema}
+        mismatches = schema_mismatches(
+            existing_columns,
+            expected_columns(config, _TYPE_TO_BQ, "INT64", "TIMESTAMP"),
+        )
+        if mismatches:
             raise SchemaError(
                 f"Schema mismatch for table '{config.dest_table}':\n"
-                + "\n".join(f"  Column '{n}' declared in pipeline.yaml but missing from table"
-                            for n in missing)
+                + "\n".join(mismatches)
             )
 
     def write_rows(self, table: str, rows: Iterator[dict], file_hash: str) -> None:
