@@ -141,6 +141,7 @@ def test_write_rows_append_uses_copy_into_and_merge(tmp_path, fake_databricks):
 
     statements = "\n".join(fake_databricks.statements)
     assert "COPY INTO `main`.`default`.`_filedge_staging_" in statements
+    assert "`) FROM" not in statements
     assert "MERGE INTO `main`.`default`.`orders` AS dest" in statements
     assert "ON dest._source_file_hash = staging._source_file_hash" in statements
     assert "WHEN NOT MATCHED THEN INSERT" in statements
@@ -210,6 +211,7 @@ def test_write_rows_uploads_volume_staging_file_with_files_api(
     assert "COPY INTO `main`.`default`.`_filedge_staging_" in "\n".join(
         fake_databricks.statements
     )
+    assert "`) FROM" not in "\n".join(fake_databricks.statements)
     assert " FROM '/Volumes/main/default/test/filedge-staging/" in "\n".join(
         fake_databricks.statements
     )
