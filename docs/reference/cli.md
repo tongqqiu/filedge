@@ -30,6 +30,27 @@ See the [Inspect guide](../guides/inspect.md) for full details.
 
 ---
 
+## `filedge preview`
+
+Display rows of a file as a formatted table.
+
+```bash
+filedge preview <file> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `<file>` | required | File to preview (local path or cloud URI) |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
+| `--rows` | 10 | Number of rows to display |
+| `--start-row` | 1 | First row to display (1-indexed) |
+
+**Exit codes:** `0` on success, `2` on error (bad file path, unrecognised format).
+
+See the [Preview guide](../guides/preview.md) for full details.
+
+---
+
 ## `filedge validate`
 
 Dry-run a file against a `pipeline.yaml` config. No data is written.

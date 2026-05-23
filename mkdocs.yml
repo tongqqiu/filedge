@@ -44,6 +44,7 @@ nav:
   - Getting Started: getting-started.md
   - Guides:
     - Inspect a file: guides/inspect.md
+    - Preview a file: guides/preview.md
     - Validate a file: guides/validate.md
     - Compact small files: guides/compact.md
     - Run a pipeline: guides/run.md

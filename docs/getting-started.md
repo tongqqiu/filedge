@@ -158,8 +158,41 @@ filedge status --audit-db-url sqlite:///filedge.db
 
 ---
 
+---
+
+## Previewing rows
+
+If validation reports a bad row, jump straight to it without opening the file in an editor:
+
+```bash
+filedge preview data.csv --start-row 42 --rows 5
+```
+
+See the [Preview guide](guides/preview.md) for details.
+
+---
+
+## Parquet files
+
+Filedge supports Parquet natively. Install the optional extra first:
+
+```bash
+uv sync --extra parquet
+```
+
+Then use any read command as usual — the format is detected from the `.parquet` extension:
+
+```bash
+filedge inspect events.parquet
+filedge preview events.parquet
+filedge validate events.parquet --config pipeline.yaml
+```
+
+---
+
 ## Next steps
 
+- [Preview guide](guides/preview.md) — spot-check files and jump to specific rows
 - [Run guide](guides/run.md) — scheduling, retry behaviour, write modes
 - [Connectors](reference/connectors.md) — switch from SQLite to PostgreSQL or BigQuery
 - [Compact guide](guides/compact.md) — merge small files before ingestion

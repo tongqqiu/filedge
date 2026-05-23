@@ -9,7 +9,7 @@ filedge inspect data.csv
 filedge inspect events.ndjson
 ```
 
-Format is auto-detected from the file extension (`.csv`, `.ndjson`, `.jsonl`). Use `--format` to override:
+Format is auto-detected from the file extension (`.csv`, `.ndjson`, `.jsonl`, `.parquet`). Use `--format` to override:
 
 ```bash
 filedge inspect data.txt --format csv
@@ -94,6 +94,28 @@ uv sync --extra s3   # for S3
 uv sync --extra gcs  # for GCS
 ```
 
+## Parquet files
+
+Parquet files store schema metadata, so `filedge inspect` reads the embedded schema directly — no row sampling needed. All columns are reported with **high** confidence.
+
+```bash
+filedge inspect events.parquet
+```
+
+!!! note "Parquet requires pyarrow"
+    ```bash
+    uv sync --extra parquet
+    ```
+
+Nested Parquet columns (structs and lists) are mapped to `string` with a note listing the nested keys:
+
+```yaml
+  - source: address
+    dest: address
+    type: string
+    required: false   # ⚠ nested struct — keys: city, zip
+```
+
 ## NDJSON nested objects
 
 When a field in a NDJSON file contains a nested object (e.g. `{"address": {"city": "NYC"}}`), `filedge inspect` surfaces it as a `string` column with a warning listing the nested keys:
@@ -111,6 +133,6 @@ The pipeline has no flattening step, so a `string` column is the safe choice. If
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--format` | auto from extension | File format: `csv` or `ndjson` |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
 | `--sample-rows` | 1000 | Number of rows to sample |
 | `--output` | stdout | Write the YAML block to this file instead of stdout |
