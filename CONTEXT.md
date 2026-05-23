@@ -75,11 +75,16 @@ The validation policy for a File load: if any row fails schema validation, the e
 ### Transform
 A declarative, configuration-driven step that maps source column names to destination column names and coerces types (e.g. string → integer, ISO string → timestamp). Rejects rows that don't conform to the declared schema. No business logic — that belongs in the application layer consuming the destination.
 
+### Compaction
+A pre-processing step that merges many small Files in a source prefix into fewer, larger NDJSON files in a separate output prefix before ingestion. Solves the small-files problem common with event streams and cloud object stores — reducing object-store listing cost and enabling bulk loads into cloud warehouses. Invoked via `etl compact` as a separate CLI command, scheduled before `etl run`. Compaction reads via fsspec (no extra dependencies), groups files by count (`--max-files`), writes NDJSON with optional gzip compression (`--compress`), and names output files by timestamp and batch index. Originals in the source prefix are never modified. The output prefix becomes the Watched Directory for the subsequent `etl run`.
+
 ### Parser
 A pluggable component that takes a File path and yields rows. Implementations exist for CSV and newline-delimited JSON. Format is detected by file extension or per-directory configuration. Adding new formats (Parquet, Avro) is a new Parser implementation, not a system redesign.
 
 ### Watched Directory
-The source location polled on a schedule to discover new Files. The system scans the directory, computes content hashes, filters out already-COMMITTED files, and enqueues new ones as PENDING. Poll interval is configuration.
+The landing zone polled on a schedule to discover new Files. Accepts a local path or a cloud URI (`gs://`, `s3://`). The system scans the location on every Run, computes content hashes, filters out already-COMMITTED files, and enqueues new ones as PENDING. The Watched Directory is assumed to contain only complete, transfer-ready files — partial transfers and in-flight writes are the responsibility of whatever process deposits files there. SFTP is not a supported source; see ADR-0005.
+
+For large-scale deployments where object-store listing cost or latency becomes a concern, operators should use time-partitioned prefixes — e.g. `s3://bucket/landing/2026-05-23/` — and update the `--watched-dir` argument daily. This keeps each Run's listing bounded to that day's files without requiring the pipeline to move or delete objects after ingestion.
 
 ### File States
 The four states a File passes through: `PENDING` (discovered, not yet claimed), `PROCESSING` (claimed by a worker — acts as a distributed lock via content hash), `COMMITTED` (fully loaded, transaction complete), `FAILED` (load attempt failed, eligible for retry or human review). A file whose content hash is already `COMMITTED` is never admitted to the pipeline — it is silently deduplicated at the entry point.
