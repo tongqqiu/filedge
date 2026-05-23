@@ -13,6 +13,7 @@ from filedge.inferrer import infer_schema, infer_schema_from_parquet
 from filedge.inspect_formatter import format_summary, format_yaml
 from filedge.parser import get_parser
 from filedge.preview_formatter import format_preview
+from filedge.progress import RichPipelineProgress
 from filedge.validate_formatter import format_json, format_text
 from filedge.validator import validate_file
 from filedge.pipeline import run_pipeline
@@ -34,10 +35,32 @@ def cli():
 @click.option("--dir", "watched_dir", required=True, help="Watched directory path")
 @click.option("--config", "config_path", required=True, help="Path to pipeline.yaml")
 @click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
-def run(watched_dir, config_path, audit_db_url):
+@click.option(
+    "--progress/--no-progress",
+    "show_progress",
+    default=None,
+    help="Show live progress bars. Defaults to on for interactive terminals.",
+)
+def run(watched_dir, config_path, audit_db_url, show_progress):
     """Run the ETL pipeline for a Watched Directory."""
     try:
-        result = run_pipeline(watched_dir, config_path, audit_db_url)
+        if show_progress is None:
+            show_progress = sys.stderr.isatty()
+
+        if show_progress:
+            from rich.console import Console
+
+            console = Console(stderr=True)
+            with RichPipelineProgress(console) as progress:
+                result = run_pipeline(
+                    watched_dir,
+                    config_path,
+                    audit_db_url,
+                    progress=progress.handle,
+                )
+        else:
+            result = run_pipeline(watched_dir, config_path, audit_db_url)
+
         click.echo(
             f"Committed: {result['committed']}  "
             f"Failed: {result['failed']}  "

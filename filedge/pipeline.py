@@ -14,9 +14,15 @@ from filedge.db import (
 from filedge.filesystem import file_basename, get_filesystem, list_files
 from filedge.hashing import compute_hash
 from filedge.loader import load_file
+from filedge.progress import ProgressReporter, emit_progress
 
 
-def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
+def run_pipeline(
+    watched_dir: str,
+    config_path: str,
+    audit_db_url: str,
+    progress: ProgressReporter | None = None,
+) -> dict:
     config = load_config(config_path)
     db = Database(audit_db_url)
     connector = get_connector(config)
@@ -32,17 +38,26 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
         connector.ensure_table(config)
 
         files = list_files(fs, root)
-        file_hashes = {path: compute_hash(path, fs) for path in files}
+        emit_progress(progress, "hashing", "start", total=len(files))
+        file_hashes = {}
+        for path in files:
+            file_hashes[path] = compute_hash(path, fs)
+            emit_progress(progress, "hashing", "advance", path=path)
+        emit_progress(progress, "hashing", "finish", total=len(files))
 
+        emit_progress(progress, "registering", "start", total=len(files))
         new_files = 0
         for path in files:
             content_hash = file_hashes[path]
             if find_file_by_hash(db, content_hash) is None:
                 insert_pending(db, file_basename(path), content_hash)
                 new_files += 1
+            emit_progress(progress, "registering", "advance", path=path)
         db.commit()
+        emit_progress(progress, "registering", "finish", total=len(files))
 
         committed = failed = skipped = 0
+        pending_files = []
         for path in files:
             content_hash = file_hashes[path]
             record = find_file_by_hash(db, content_hash)
@@ -50,13 +65,33 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
                 if record is not None and record.state == "FAILED":
                     skipped += 1
                 continue
+            pending_files.append((path, content_hash))
 
+        emit_progress(progress, "loading", "start", total=len(pending_files))
+        for path, content_hash in pending_files:
             claimed = claim_processing(db, content_hash)
             db.commit()
             if not claimed:
+                emit_progress(progress, "loading", "advance", path=path)
                 continue
 
-            rows, error = load_file(connector, config, path, content_hash, fs)
+            emit_progress(progress, "loading", "file_start", path=path)
+            rows, error = load_file(
+                connector,
+                config,
+                path,
+                content_hash,
+                fs,
+                progress=progress,
+            )
+            emit_progress(
+                progress,
+                "loading",
+                "file_finish",
+                path=path,
+                rows=rows,
+                error=error,
+            )
 
             if error is None:
                 mark_committed(db, content_hash)
@@ -66,6 +101,8 @@ def run_pipeline(watched_dir: str, config_path: str, audit_db_url: str) -> dict:
                 mark_failed(db, content_hash, error)
                 db.commit()
                 failed += 1
+            emit_progress(progress, "loading", "advance", path=path)
+        emit_progress(progress, "loading", "finish", total=len(pending_files))
 
         return {
             "new_files": new_files,

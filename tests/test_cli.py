@@ -78,3 +78,77 @@ def test_status_json_includes_failure_details(db_url):
     assert data["FAILED"] == 1
     assert data["recent_failures"][0]["filename"] == "broken.csv"
     assert "bad type" in data["recent_failures"][0]["error_message"]
+
+
+def _write_run_config(path, dest_db_url):
+    path.write_text(
+        f"format: csv\n"
+        f"dest_table: items\n"
+        f"retry_cap: 3\n"
+        f"batch_size: 100\n"
+        f"stale_timeout_minutes: 30\n"
+        f"connector:\n"
+        f"  type: sqlite\n"
+        f"  url: {dest_db_url}\n"
+        f"columns:\n"
+        f"  - source: name\n"
+        f"    dest: name\n"
+        f"    type: string\n"
+        f"    required: true\n"
+        f"  - source: value\n"
+        f"    dest: value\n"
+        f"    type: string\n"
+        f"    required: true\n"
+    )
+
+
+def test_run_accepts_no_progress_flag(tmp_path):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "data.csv").write_text("name,value\nAlice,1\n")
+    config_file = tmp_path / "pipeline.yaml"
+    _write_run_config(config_file, f"sqlite:///{tmp_path}/dest.db")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--dir",
+            str(watched),
+            "--config",
+            str(config_file),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Committed: 1" in result.output
+
+
+def test_run_accepts_progress_flag(tmp_path):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "data.csv").write_text("name,value\nAlice,1\n")
+    config_file = tmp_path / "pipeline.yaml"
+    _write_run_config(config_file, f"sqlite:///{tmp_path}/dest.db")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--dir",
+            str(watched),
+            "--config",
+            str(config_file),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+            "--progress",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Committed: 1" in result.output
