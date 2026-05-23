@@ -5,6 +5,7 @@ import sys
 import click
 
 from etl.db import Database, SchemaError, create_audit_tables, get_status_summary
+from etl.filesystem import get_filesystem, open_file
 from etl.inferrer import infer_schema
 from etl.inspect_formatter import format_summary, format_yaml
 from etl.parser import get_parser
@@ -88,9 +89,10 @@ def inspect(file, fmt, sample_rows, output_path):
             sys.exit(1)
 
     try:
+        fs, path = get_filesystem(file)
         parser = get_parser(fmt)
-        rows = parser.parse(file)
-        columns = infer_schema(rows, sample_rows=sample_rows)
+        with open_file(path, fs=fs) as f:
+            columns = infer_schema(parser.parse(f), sample_rows=sample_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
