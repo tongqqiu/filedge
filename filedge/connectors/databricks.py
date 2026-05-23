@@ -5,7 +5,9 @@ import shutil
 import tempfile
 import uuid
 from typing import Dict, Iterator, List, Optional
-from urllib.parse import urlparse
+from urllib.error import HTTPError
+from urllib.parse import quote, urlparse
+from urllib.request import Request, urlopen
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
@@ -63,6 +65,8 @@ class DatabricksConnector(Connector):
         if not token:
             raise ValueError("DatabricksConnector requires DATABRICKS_TOKEN to be set")
 
+        self._server_hostname = str(server_hostname).removeprefix("https://").rstrip("/")
+        self._token = token
         self._conn = sql.connect(
             server_hostname=server_hostname,
             http_path=http_path,
@@ -236,6 +240,11 @@ class DatabricksConnector(Connector):
                 shutil.copyfileobj(source, dest)
             return
 
+        if _is_volume_path(staging_uri):
+            self._create_volume_directory(os.path.dirname(staging_uri))
+            self._upload_volume_file(local_path, staging_uri)
+            return
+
         target = parsed.path if parsed.scheme == "file" else staging_uri
         os.makedirs(os.path.dirname(target), exist_ok=True)
         shutil.copyfile(local_path, target)
@@ -249,10 +258,65 @@ class DatabricksConnector(Connector):
                 fs, _, paths = fsspec.get_fs_token_paths(staging_uri)
                 fs.rm(paths[0])
                 return
+            if _is_volume_path(staging_uri):
+                self._delete_volume_file(staging_uri)
+                return
             target = parsed.path if parsed.scheme == "file" else staging_uri
             os.unlink(target)
         except Exception:
             pass
+
+    def _create_volume_directory(self, path: str) -> None:
+        url = self._databricks_files_url("/api/2.0/fs/directories", path)
+        request = Request(url, method="PUT", headers=self._auth_headers())
+        try:
+            self._send_databricks_request(request)
+        except ValueError as e:
+            if "RESOURCE_ALREADY_EXISTS" in str(e):
+                return
+            raise
+
+    def _upload_volume_file(self, local_path: str, staging_uri: str) -> None:
+        url = self._databricks_files_url(
+            "/api/2.0/fs/files", staging_uri, query="?overwrite=true"
+        )
+        with open(local_path, "rb") as source:
+            request = Request(
+                url,
+                data=source.read(),
+                method="PUT",
+                headers={
+                    **self._auth_headers(),
+                    "Content-Type": "application/octet-stream",
+                },
+            )
+        self._send_databricks_request(request)
+
+    def _delete_volume_file(self, staging_uri: str) -> None:
+        url = self._databricks_files_url("/api/2.0/fs/files", staging_uri)
+        request = Request(url, method="DELETE", headers=self._auth_headers())
+        self._send_databricks_request(request)
+
+    def _databricks_files_url(
+        self, endpoint: str, path: str, query: str = ""
+    ) -> str:
+        return (
+            f"https://{self._server_hostname}"
+            f"{endpoint}{quote(path, safe='/')}{query}"
+        )
+
+    def _auth_headers(self) -> Dict[str, str]:
+        return {"Authorization": f"Bearer {self._token}"}
+
+    def _send_databricks_request(self, request: Request) -> None:
+        try:
+            with urlopen(request) as response:
+                response.read()
+        except HTTPError as e:
+            body = e.read().decode("utf-8", errors="replace")
+            raise ValueError(
+                f"Databricks Files API request failed with HTTP {e.code}: {body}"
+            ) from e
 
     def _table_ref(self, table: str) -> str:
         return ".".join(
@@ -272,3 +336,7 @@ class DatabricksConnector(Connector):
 def _chain_first(first: dict, rows: Iterator[dict]) -> Iterator[dict]:
     yield first
     yield from rows
+
+
+def _is_volume_path(path: str) -> bool:
+    return path.startswith("/Volumes/")

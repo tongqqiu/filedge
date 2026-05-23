@@ -93,7 +93,9 @@ connector:
 
 Auth token from `DATABRICKS_TOKEN`.
 
-`staging_location` may also be supplied via `DATABRICKS_STAGING_LOCATION`. It must be a cloud or mounted location the Databricks SQL warehouse can read with `COPY INTO`, such as S3, ADLS Gen2, GCS, or a Databricks-accessible volume path.
+`staging_location` may also be supplied via `DATABRICKS_STAGING_LOCATION`. It must be a cloud or mounted location the Databricks SQL warehouse can read with `COPY INTO`, such as S3, ADLS Gen2, GCS, or a Unity Catalog volume path like `/Volumes/workspace/default/test/filedge-staging`.
+
+When `staging_location` starts with `/Volumes/`, Filedge uploads the temporary NDJSON file with the Databricks Files API before running `COPY INTO`, then removes it after the load. The token must have permission to write files in the target volume.
 
 Install the driver:
 
