@@ -1,0 +1,58 @@
+site_name: ETL Big Idea
+site_description: Reliable batch ETL for file ingestion — atomic commits, content-based idempotency, full audit trail
+site_url: https://tongqqiu.github.io/etl-big-idea/
+repo_url: https://github.com/tongqqiu/etl-big-idea
+repo_name: tongqqiu/etl-big-idea
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.tabs.link
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Guides:
+    - Inspect a file: guides/inspect.md
+    - Validate a file: guides/validate.md
+    - Compact small files: guides/compact.md
+    - Run a pipeline: guides/run.md
+    - API sources: guides/api-sources.md
+  - Reference:
+    - pipeline.yaml: reference/pipeline-yaml.md
+    - CLI commands: reference/cli.md
+    - Connectors: reference/connectors.md
+    - Column types: reference/column-types.md
+  - Architecture:
+    - How it works: architecture/index.md
+    - Design decisions: architecture/decisions.md
