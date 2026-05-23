@@ -47,6 +47,52 @@ The system separates concerns into two independent stores:
 
 Because they are separate, a crash between the connector write and the audit mark leaves the file in `PROCESSING`. The stale-lock reclaim on the next run picks it up, and the connector's per-file-hash idempotency ensures no duplicate rows.
 
+## Runtime module responsibilities
+
+`filedge run` is intentionally thin orchestration around a few deeper modules:
+
+```
+Pipeline Config
+├── config: parse YAML and validate destination identifiers
+├── identifiers: validate/quote table and column names
+├── schema: build expected destination schema and compare live tables
+├── db: own File lifecycle in the Audit DB
+├── load_stream: parse, transform, count rows, and report row-numbered errors
+└── connector: own Destination DDL, idempotent writes, and provenance columns
+```
+
+This keeps the reliability rules close to the data they protect:
+
+- **Audit DB lifecycle** lives in `filedge.db`: run preparation, File discovery, claiming, and finishing.
+- **Strict Mode loading** lives in `filedge.load_stream`: a parse or transform failure includes row context and fails the whole File.
+- **Destination schema guard** lives behind `filedge.schema` plus Connector adapters: every Connector compares the live table against the same Pipeline Config contract.
+- **SQL identifier handling** lives in `filedge.identifiers`: destination table and column names are validated early and quoted consistently by SQL Connectors.
+- **Connector idempotency** lives in each Connector: retries with the same Content Hash produce the same Destination state.
+
+The result is that `filedge.pipeline` coordinates the Run but does not own the File state machine, row validation rules, or Destination SQL details.
+
+## Run lifecycle
+
+A Run proceeds in four phases:
+
+```
+Run N
+├── Audit DB: prepare_run
+│   ├── reset retryable FAILED files → PENDING
+│   └── reclaim stale PROCESSING locks → PENDING
+├── Connector: ensure destination table exists
+│   ├── validate destination identifiers
+│   └── create or compare schema from pipeline.yaml
+├── Watched Directory: hash files and discover new Content Hashes
+└── For each claimable File:
+    ├── Audit DB: claim_pending_file → PROCESSING
+    ├── load_stream: parse + transform rows with Strict Mode
+    ├── Connector: write_rows idempotently with provenance
+    └── Audit DB: finish_file → COMMITTED or FAILED
+```
+
+Files already known to the Audit DB are not re-enqueued. Terminal `FAILED` files remain skipped until an operator resets them.
+
 ## Atomicity within each system
 
 **Audit DB** — state transitions are SQL transactions. Marking a file `COMMITTED` or `FAILED` is an atomic operation.
@@ -65,11 +111,15 @@ Files are identified by SHA-256 of their bytes, not by filename. Two files with 
 
 ## Streaming load
 
-Files are processed in row batches (default: 1,000 rows) rather than loaded entirely into memory. The wrapping database transaction stays open across all batches and commits only when the full file is processed — preserving atomicity at constant memory cost regardless of file size.
+Files are processed as a stream rather than loaded entirely into memory. `load_stream` opens the File with the configured Parser, transforms each row according to Pipeline Config, counts rows, and attaches row numbers to parse or transform failures. Connectors flush rows in batches (default: 1,000 rows) while keeping their Destination write idempotent for the Content Hash.
+
+If any row fails parsing or transformation, Strict Mode marks the File `FAILED`; no partial File is considered committed.
 
 ## Schema guard
 
-On first run against a new destination table, the connector creates the table from the `pipeline.yaml` schema. On subsequent runs, if the live table schema doesn't match the config, the run fails loudly with a diff — no silent auto-migration. Schema changes require explicit operator action.
+On first run against a new destination table, the connector creates the table from the `pipeline.yaml` schema. On subsequent runs, if the live table schema doesn't match the config, the run fails loudly with a diff — including missing columns, unexpected live columns, and type mismatches. No silent auto-migration is performed; schema changes require explicit operator action.
+
+Destination table and column identifiers are validated before table setup. SQL Connectors quote accepted identifiers consistently, so ordinary names and reserved-word-like names are handled predictably, while unsupported names fail early with operator-facing errors.
 
 ## Design decisions
 

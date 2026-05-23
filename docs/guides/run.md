@@ -22,16 +22,18 @@ filedge run --dir ./incoming --config pipeline.yaml
 
 ```
 Run N
-├── Reset FAILED files below retry_cap → PENDING
-├── Reclaim stale PROCESSING locks → PENDING
-├── Connector: ensure destination table exists (create or validate schema)
-├── Hash all files in watched directory
-├── Enqueue new content hashes as PENDING
-└── For each PENDING file:
-    ├── Audit DB: mark PROCESSING (distributed lock)
-    ├── Connector: write_rows — stream rows through parser + transform
-    │   └── Connector commits its own transaction (idempotent per file_hash)
-    └── Audit DB: mark COMMITTED  (or mark FAILED on error)
+├── Audit DB: prepare_run
+│   ├── reset FAILED files below retry_cap → PENDING
+│   └── reclaim stale PROCESSING locks → PENDING
+├── Connector: ensure destination table exists
+│   ├── validate destination identifiers
+│   └── create or validate schema from pipeline.yaml
+├── Hash files in the Watched Directory and discover new Content Hashes
+└── For each claimable File:
+    ├── Audit DB: claim_pending_file → PROCESSING
+    ├── load_stream: parse + transform rows with Strict Mode
+    ├── Connector: write_rows idempotently with provenance columns
+    └── Audit DB: finish_file → COMMITTED or FAILED
 ```
 
 Files already `COMMITTED` are silently skipped — their content hash is already in the audit DB.
@@ -97,9 +99,11 @@ stale_timeout_minutes: 60
 
 ## Schema guard
 
-On first run against a new destination table, the connector creates the table from the `pipeline.yaml` schema. On subsequent runs, if the config and the live table don't match, the run fails with a clear diff — no silent auto-migration.
+On first run against a new destination table, the connector creates the table from the `pipeline.yaml` schema. On subsequent runs, if the config and the live table don't match, the run fails with a clear diff — no silent auto-migration. The schema guard catches missing columns, unexpected live columns, and type mismatches before any rows are loaded.
 
 To change the schema, you must alter the destination table manually and then update `pipeline.yaml` to match.
+
+Destination table and column names are validated before table setup. SQL connectors quote accepted identifiers consistently; unsupported names fail early with a clear config error.
 
 ## Scheduling
 
