@@ -1,8 +1,8 @@
 import datetime
 from typing import Dict, Iterator, List, Optional
 
-from etl.config import PipelineConfig
-from etl.connectors import Connector, SchemaError
+from filedge.config import PipelineConfig
+from filedge.connectors import Connector, SchemaError
 
 _TYPE_TO_SQL = {
     "string": "VARCHAR",

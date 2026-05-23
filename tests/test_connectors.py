@@ -1,7 +1,7 @@
 import pytest
 
-from etl.config import ConnectorConfig, PipelineConfig, ColumnMapping
-from etl.connectors import get_connector
+from filedge.config import ConnectorConfig, PipelineConfig, ColumnMapping
+from filedge.connectors import get_connector
 
 
 @pytest.fixture

@@ -4,8 +4,8 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from etl.cli import cli
-from etl.compactor import compact
+from filedge.cli import cli
+from filedge.compactor import compact
 
 
 def _write_ndjson(path, rows):

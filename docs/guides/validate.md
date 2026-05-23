@@ -1,13 +1,13 @@
 # Validate a file
 
-`etl validate` dry-runs a file against a `pipeline.yaml` config and reports every row that would fail type coercion or violate a `required: true` constraint. **No data is written.** No destination connection is opened.
+`filedge validate` dry-runs a file against a `pipeline.yaml` config and reports every row that would fail type coercion or violate a `required: true` constraint. **No data is written.** No destination connection is opened.
 
 Use it to catch data quality issues before running the full pipeline — especially useful in CI or before loading a large file.
 
 ## Basic usage
 
 ```bash
-etl validate data.csv --config pipeline.yaml
+filedge validate data.csv --config pipeline.yaml
 ```
 
 ## Exit codes
@@ -21,7 +21,7 @@ etl validate data.csv --config pipeline.yaml
 This makes it composable in shell scripts:
 
 ```bash
-etl validate data.csv --config pipeline.yaml && etl run ...
+filedge validate data.csv --config pipeline.yaml && filedge run ...
 ```
 
 ## Output
@@ -56,7 +56,7 @@ These columns are silently skipped at load time — the warning is just a heads-
 Add `--json` to get machine-readable output suitable for CI reporting or dashboards:
 
 ```bash
-etl validate data.csv --config pipeline.yaml --json
+filedge validate data.csv --config pipeline.yaml --json
 ```
 
 ```json
@@ -77,7 +77,7 @@ The text summary is still printed to stderr; the JSON goes to stdout.
 Validate only the first N rows with `--sample-rows`:
 
 ```bash
-etl validate data.csv --config pipeline.yaml --sample-rows 100
+filedge validate data.csv --config pipeline.yaml --sample-rows 100
 ```
 
 Useful for quick checks on large files. For full pre-load validation, omit `--sample-rows`.
@@ -87,8 +87,8 @@ Useful for quick checks on large files. For full pre-load validation, omit `--sa
 Works with any [fsspec](https://filesystem-spec.readthedocs.io/en/latest/)-supported URI:
 
 ```bash
-etl validate s3://my-bucket/landing/data.csv --config pipeline.yaml
-etl validate gs://my-bucket/events.ndjson --config pipeline.yaml
+filedge validate s3://my-bucket/landing/data.csv --config pipeline.yaml
+filedge validate gs://my-bucket/events.ndjson --config pipeline.yaml
 ```
 
 ## Options

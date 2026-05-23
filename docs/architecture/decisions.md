@@ -60,7 +60,7 @@ Two reasons: SFTP protocol diversity and auth complexity are better handled by p
 
 ## ADR-0006: API sources materialized as files before ingestion {#adr-0006}
 
-API data (Stripe, Salesforce, HubSpot, etc.) is materialized as NDJSON files by a Fetcher (dlt) before `etl run` ingests them — not loaded directly by dlt.
+API data (Stripe, Salesforce, HubSpot, etc.) is materialized as NDJSON files by a Fetcher (dlt) before `filedge run` ingests them — not loaded directly by dlt.
 
 This preserves a single audit model for all data sources. An operator asking "what Stripe data landed on a given date and which destination rows did it produce?" gets the same answer format as for CSV file drops. For fintech operators, audit uniformity across all sources is non-negotiable.
 
@@ -72,7 +72,7 @@ This preserves a single audit model for all data sources. An operator asking "wh
 
 Queue sources (Kafka, SQS) use **Drain** as the default trigger mode — snapshot the high-water mark at startup, consume all available micro-batches, then exit. Continuous (long-lived consumer) is supported as an opt-in.
 
-Drain preserves the existing operational model: `etl consume` is scheduled by the same external scheduler as `etl run`, requires no process manager, and crash recovery falls to the existing stale-lock reclaim. The latency trade-off is accepted for batch-oriented fintech ingestion.
+Drain preserves the existing operational model: `filedge consume` is scheduled by the same external scheduler as `filedge run`, requires no process manager, and crash recovery falls to the existing stale-lock reclaim. The latency trade-off is accepted for batch-oriented fintech ingestion.
 
 [Full ADR](../adr/0007-queue-source-ingestion-model.md)
 
@@ -80,7 +80,7 @@ Drain preserves the existing operational model: `etl consume` is scheduled by th
 
 ## ADR-0008: Schema inference confidence tiers {#adr-0008}
 
-`etl inspect` annotates each inferred column with a confidence tier (high / low / ambiguous) rather than silently picking the most specific type or defaulting everything to `string`.
+`filedge inspect` annotates each inferred column with a confidence tier (high / low / ambiguous) rather than silently picking the most specific type or defaulting everything to `string`.
 
 Aggressive inference misleads operators when sparse nulls or format exceptions appear beyond the sample window. Conservative inference produces configs full of `string` columns that defeat the tool's purpose. Annotated tiers give operators exactly the signal they need: "this column is fine, that one needs your eyes."
 

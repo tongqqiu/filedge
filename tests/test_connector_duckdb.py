@@ -1,8 +1,8 @@
 import pytest
 
-from etl.config import ColumnMapping, PipelineConfig
-from etl.connectors.duckdb import DuckDBConnector
-from etl.connectors import SchemaError
+from filedge.config import ColumnMapping, PipelineConfig
+from filedge.connectors.duckdb import DuckDBConnector
+from filedge.connectors import SchemaError
 
 
 @pytest.fixture

@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Iterator, List
 
-from etl.config import ColumnMapping
-from etl.transform import TransformError, transform_row
+from filedge.config import ColumnMapping
+from filedge.transform import TransformError, transform_row
 
 
 @dataclass

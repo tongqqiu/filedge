@@ -1,4 +1,4 @@
-# etl-big-idea
+# Filedge
 
 A batch ETL system built around the reliability patterns that standard Airflow + Spark stacks often miss: atomic commits, content-based idempotency, automatic retry, and a full audit trail — with pluggable destination support for PostgreSQL, BigQuery, Databricks, and SQLite.
 
@@ -74,23 +74,23 @@ columns:
 **2. Run the pipeline**
 
 ```bash
-etl run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///etl.db
+filedge run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///filedge.db
 # Committed: 3  Failed: 0  Skipped: 0  New: 3  Reclaimed: 0  Retried: 0
 ```
 
 **3. Check status**
 
 ```bash
-etl status --audit-db-url sqlite:///etl.db
+filedge status --audit-db-url sqlite:///filedge.db
 # PENDING:    0
 # PROCESSING: 0
 # COMMITTED:  3
 # FAILED:     0
 
-etl status --audit-db-url sqlite:///etl.db --json
+filedge status --audit-db-url sqlite:///filedge.db --json
 ```
 
-`--audit-db-url` can also be set via `ETL_AUDIT_DB_URL`.
+`--audit-db-url` can also be set via `FILEDGE_AUDIT_DB_URL`.
 
 ## Connectors
 
@@ -121,7 +121,7 @@ connector:
   dataset: my_dataset
 ```
 
-Credentials from `GOOGLE_APPLICATION_CREDENTIALS` (Application Default Credentials). Requires `pip install etl-big-idea[bigquery]`.
+Credentials from `GOOGLE_APPLICATION_CREDENTIALS` (Application Default Credentials). Requires `pip install filedge[bigquery]`.
 
 ### Databricks
 
@@ -134,7 +134,7 @@ connector:
   schema: default
 ```
 
-Auth token from `DATABRICKS_TOKEN`. Requires `pip install etl-big-idea[databricks]`.
+Auth token from `DATABRICKS_TOKEN`. Requires `pip install filedge[databricks]`.
 
 ## Write Modes
 

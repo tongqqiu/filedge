@@ -18,24 +18,24 @@ uv sync
 The `etl` command is now available in the project's virtual environment:
 
 ```bash
-uv run etl --help
+uv run filedge --help
 ```
 
 To use it without `uv run`, activate the environment:
 
 ```bash
 source .venv/bin/activate
-etl --help
+filedge --help
 ```
 
 ---
 
 ## Step 1: Inspect your file
 
-Start by pointing `etl inspect` at your data file. It samples the first 1,000 rows and produces a ready-to-paste `columns:` block for `pipeline.yaml`.
+Start by pointing `filedge inspect` at your data file. It samples the first 1,000 rows and produces a ready-to-paste `columns:` block for `pipeline.yaml`.
 
 ```bash
-etl inspect data.csv
+filedge inspect data.csv
 ```
 
 Output goes to stdout; a human-readable summary goes to stderr:
@@ -68,14 +68,14 @@ Review columns marked **low confidence** or **ambiguous** before using them in p
 To write the output directly to a file:
 
 ```bash
-etl inspect data.csv --output pipeline.yaml
+filedge inspect data.csv --output pipeline.yaml
 ```
 
 ---
 
 ## Step 2: Complete the config
 
-`etl inspect` produces a `columns:` block. Wrap it in a full `pipeline.yaml`:
+`filedge inspect` produces a `columns:` block. Wrap it in a full `pipeline.yaml`:
 
 ```yaml
 format: csv
@@ -114,7 +114,7 @@ See the [pipeline.yaml reference](reference/pipeline-yaml.md) for every availabl
 Before writing any data, dry-run the file against your config:
 
 ```bash
-etl validate data.csv --config pipeline.yaml
+filedge validate data.csv --config pipeline.yaml
 ```
 
 Exit code `0` means clean; exit code `1` means failures were found:
@@ -140,16 +140,16 @@ Fix the source data (or adjust `required: false` in the config) until validation
 Place your files in an incoming directory and run:
 
 ```bash
-etl run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///etl.db
+filedge run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///filedge.db
 # Committed: 1  Failed: 0  Skipped: 0  New: 1  Reclaimed: 0  Retried: 0
 ```
 
-`--audit-db-url` can also be set via the `ETL_AUDIT_DB_URL` environment variable.
+`--audit-db-url` can also be set via the `FILEDGE_AUDIT_DB_URL` environment variable.
 
 Check status any time:
 
 ```bash
-etl status --audit-db-url sqlite:///etl.db
+filedge status --audit-db-url sqlite:///filedge.db
 # PENDING:    0
 # PROCESSING: 0
 # COMMITTED:  1

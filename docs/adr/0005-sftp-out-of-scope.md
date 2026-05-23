@@ -10,7 +10,7 @@ Two reasons drove this decision:
 
 The alternative — supporting `sftp://` as a File Source via fsspec/sshfs — is technically straightforward but ignores both problems above. A separate sync process handles them cleanly without touching pipeline code.
 
-**Recommended pattern:** run rclone as a dedicated Cloud Run job or Lambda function on its own schedule. It syncs from the SFTP server to a cloud bucket (S3 or GCS), handling partial-transfer detection via `--min-age` and optional acknowledgment via `--sftp-ask-password` / move-on-success. A second Cloud Run job / Lambda runs `etl run` with `--watched-dir` pointed at that bucket. The two jobs are scheduled, scaled, and monitored independently — a slow SFTP partner only affects the sync step.
+**Recommended pattern:** run rclone as a dedicated Cloud Run job or Lambda function on its own schedule. It syncs from the SFTP server to a cloud bucket (S3 or GCS), handling partial-transfer detection via `--min-age` and optional acknowledgment via `--sftp-ask-password` / move-on-success. A second Cloud Run job / Lambda runs `filedge run` with `--watched-dir` pointed at that bucket. The two jobs are scheduled, scaled, and monitored independently — a slow SFTP partner only affects the sync step.
 
 ```
 Cloud Scheduler

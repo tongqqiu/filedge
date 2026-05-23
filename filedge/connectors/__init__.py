@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterator
 
-from etl.config import PipelineConfig
+from filedge.config import PipelineConfig
 
 
 class SchemaError(Exception):
@@ -38,11 +38,11 @@ class Connector(ABC):
 
 
 _REGISTRY = {
-    "sqlite": "etl.connectors.sqlite.SQLiteConnector",
-    "postgres": "etl.connectors.postgres.PostgresConnector",
-    "bigquery": "etl.connectors.bigquery.BigQueryConnector",
-    "databricks": "etl.connectors.databricks.DatabricksConnector",
-    "duckdb": "etl.connectors.duckdb.DuckDBConnector",
+    "sqlite": "filedge.connectors.sqlite.SQLiteConnector",
+    "postgres": "filedge.connectors.postgres.PostgresConnector",
+    "bigquery": "filedge.connectors.bigquery.BigQueryConnector",
+    "databricks": "filedge.connectors.databricks.DatabricksConnector",
+    "duckdb": "filedge.connectors.duckdb.DuckDBConnector",
 }
 
 _INSTALL_HINTS = {

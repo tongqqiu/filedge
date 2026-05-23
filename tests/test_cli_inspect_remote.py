@@ -11,7 +11,7 @@ pytest.importorskip("fsspec")
 import fsspec
 from click.testing import CliRunner
 
-from etl.cli import cli
+from filedge.cli import cli
 
 
 def _make_memory_csv(path: str, content: str):

@@ -3,7 +3,7 @@ import os
 import yaml
 from click.testing import CliRunner
 
-from etl.cli import cli
+from filedge.cli import cli
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
 

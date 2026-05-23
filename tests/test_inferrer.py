@@ -1,4 +1,4 @@
-from etl.inferrer import infer_schema
+from filedge.inferrer import infer_schema
 
 
 def rows(*dicts):

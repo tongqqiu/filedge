@@ -1,7 +1,7 @@
 import datetime
 from typing import Any, Dict, List
 
-from etl.config import ColumnMapping
+from filedge.config import ColumnMapping
 
 
 class TransformError(Exception):

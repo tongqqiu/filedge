@@ -1,6 +1,6 @@
 import pytest
 
-from etl.db import Database, create_audit_tables
+from filedge.db import Database, create_audit_tables
 
 
 @pytest.fixture

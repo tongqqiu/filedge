@@ -4,7 +4,7 @@ import json
 import os
 from typing import List
 
-from etl.filesystem import get_filesystem, list_files
+from filedge.filesystem import get_filesystem, list_files
 
 
 def compact(

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from etl.inferrer import InferredColumn
+from filedge.inferrer import InferredColumn
 
 _MARKER = "! "
 _NO_MARKER = "  "

@@ -1,7 +1,7 @@
 import yaml
 
-from etl.inferrer import InferredColumn
-from etl.inspect_formatter import format_summary, format_yaml
+from filedge.inferrer import InferredColumn
+from filedge.inspect_formatter import format_summary, format_yaml
 
 
 def col(name, inferred_type="string", confidence="high", null_count=0, total_seen=3, notes=None):

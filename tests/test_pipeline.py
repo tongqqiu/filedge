@@ -1,5 +1,5 @@
 
-from etl.db import (
+from filedge.db import (
     claim_processing,
     find_file_by_hash,
     insert_pending,
@@ -75,7 +75,7 @@ def test_committed_files_not_touched_by_reset(db):
 
 def test_pipeline_retries_failed_file(tmp_path):
     """A file that fails on run 1 is retried on run 2 if below retry_cap."""
-    from etl.pipeline import run_pipeline
+    from filedge.pipeline import run_pipeline
 
     # Write a bad CSV (missing required column) then replace with a good one
     watched = tmp_path / "watch"

@@ -32,7 +32,7 @@ Single-context repo:
 
 When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
 
-Key terms to use precisely: **File** (not "file"), **Content Hash** (not "checksum" or "fingerprint"), **Commit** (the ETL operation, not git), **Run** (one execution of `etl run`), **Strict Mode**, **Partial Load Corruption**, **Watched Directory**, **Pipeline Config**.
+Key terms to use precisely: **File** (not "file"), **Content Hash** (not "checksum" or "fingerprint"), **Commit** (the ETL operation, not git), **Run** (one execution of `filedge run`), **Strict Mode**, **Partial Load Corruption**, **Watched Directory**, **Pipeline Config**.
 
 If the concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/grill-with-docs`).
 

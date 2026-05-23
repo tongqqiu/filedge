@@ -1,4 +1,4 @@
-from etl.validator import ValidationResult
+from filedge.validator import ValidationResult
 
 _MAX_WIDTH = 80
 

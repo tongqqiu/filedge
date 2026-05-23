@@ -1,21 +1,21 @@
 # Run a pipeline
 
-`etl run` is the main ingestion command. It scans a watched directory, enqueues new files, and processes them with atomic commits, automatic retry, and a full audit trail.
+`filedge run` is the main ingestion command. It scans a watched directory, enqueues new files, and processes them with atomic commits, automatic retry, and a full audit trail.
 
 ## Basic usage
 
 ```bash
-etl run \
+filedge run \
   --dir ./incoming \
   --config pipeline.yaml \
-  --audit-db-url sqlite:///etl.db
+  --audit-db-url sqlite:///filedge.db
 ```
 
 Or set the audit DB via environment variable:
 
 ```bash
-export ETL_AUDIT_DB_URL=sqlite:///etl.db
-etl run --dir ./incoming --config pipeline.yaml
+export FILEDGE_AUDIT_DB_URL=sqlite:///filedge.db
+filedge run --dir ./incoming --config pipeline.yaml
 ```
 
 ## What happens on each run
@@ -54,7 +54,7 @@ Committed: 3  Failed: 0  Skipped: 0  New: 3  Reclaimed: 0  Retried: 0
 ## Checking status
 
 ```bash
-etl status --audit-db-url sqlite:///etl.db
+filedge status --audit-db-url sqlite:///filedge.db
 ```
 
 ```
@@ -103,13 +103,13 @@ To change the schema, you must alter the destination table manually and then upd
 
 ## Scheduling
 
-`etl run` is designed to be invoked by an external scheduler and then exit. It does not run as a daemon.
+`filedge run` is designed to be invoked by an external scheduler and then exit. It does not run as a daemon.
 
 === "cron"
 
     ```cron
     # Run every 15 minutes
-    */15 * * * * cd /app && ETL_AUDIT_DB_URL=sqlite:///etl.db etl run --dir ./incoming --config pipeline.yaml
+    */15 * * * * cd /app && FILEDGE_AUDIT_DB_URL=sqlite:///filedge.db filedge run --dir ./incoming --config pipeline.yaml
     ```
 
 === "Kubernetes CronJob"
@@ -128,9 +128,9 @@ To change the schema, you must alter the destination table manually and then upd
               containers:
               - name: etl
                 image: your-etl-image
-                command: ["etl", "run", "--dir", "/data/incoming", "--config", "/config/pipeline.yaml"]
+                command: ["filedge", "run", "--dir", "/data/incoming", "--config", "/config/pipeline.yaml"]
                 env:
-                - name: ETL_AUDIT_DB_URL
+                - name: FILEDGE_AUDIT_DB_URL
                   valueFrom:
                     secretKeyRef:
                       name: etl-secrets
@@ -144,4 +144,4 @@ To change the schema, you must alter the destination table manually and then upd
 |--------|---------|-------------|
 | `--dir` | required | Watched directory path (local or cloud URI) |
 | `--config` | required | Path to `pipeline.yaml` |
-| `--audit-db-url` | `$ETL_AUDIT_DB_URL` | Audit database URL |
+| `--audit-db-url` | `$FILEDGE_AUDIT_DB_URL` | Audit database URL |

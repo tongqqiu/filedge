@@ -24,15 +24,15 @@ Four CLI commands, each useful on its own:
 |---------|-------------|
 | `etl inspect <file>` | Sample a file and generate a `pipeline.yaml` columns block |
 | `etl validate <file>` | Dry-run a file against a config — no data written |
-| `etl compact` | Merge many small files into fewer large ones before ingestion |
-| `etl run` | Ingest files with atomic commits, retry, and full audit trail |
+| `filedge compact` | Merge many small files into fewer large ones before ingestion |
+| `filedge run` | Ingest files with atomic commits, retry, and full audit trail |
 
 The typical workflow for a new pipeline:
 
 ```
-etl inspect data.csv > pipeline.yaml   # 1. generate config
-etl validate data.csv --config pipeline.yaml  # 2. check it
-etl run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///etl.db  # 3. run it
+filedge inspect data.csv > pipeline.yaml   # 1. generate config
+filedge validate data.csv --config pipeline.yaml  # 2. check it
+filedge run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///filedge.db  # 3. run it
 ```
 
 ---

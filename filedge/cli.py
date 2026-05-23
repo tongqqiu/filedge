@@ -4,17 +4,17 @@ import sys
 
 import click
 
-from etl.compactor import compact as run_compact
-from etl.connectors import SchemaError
-from etl.db import Database, create_audit_tables, get_status_summary
-from etl.filesystem import get_filesystem, open_file
-from etl.config import load_config
-from etl.inferrer import infer_schema
-from etl.inspect_formatter import format_summary, format_yaml
-from etl.parser import get_parser
-from etl.validate_formatter import format_json, format_text
-from etl.validator import validate_file
-from etl.pipeline import run_pipeline
+from filedge.compactor import compact as run_compact
+from filedge.connectors import SchemaError
+from filedge.db import Database, create_audit_tables, get_status_summary
+from filedge.filesystem import get_filesystem, open_file
+from filedge.config import load_config
+from filedge.inferrer import infer_schema
+from filedge.inspect_formatter import format_summary, format_yaml
+from filedge.parser import get_parser
+from filedge.validate_formatter import format_json, format_text
+from filedge.validator import validate_file
+from filedge.pipeline import run_pipeline
 
 _EXT_TO_FORMAT = {
     ".csv": "csv",
@@ -31,7 +31,7 @@ def cli():
 @cli.command()
 @click.option("--dir", "watched_dir", required=True, help="Watched directory path")
 @click.option("--config", "config_path", required=True, help="Path to pipeline.yaml")
-@click.option("--audit-db-url", required=True, envvar="ETL_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
 def run(watched_dir, config_path, audit_db_url):
     """Run the ETL pipeline for a Watched Directory."""
     try:
@@ -71,7 +71,7 @@ def compact(watched_dir, output, max_files, compress):
 
 
 @cli.command()
-@click.option("--audit-db-url", required=True, envvar="ETL_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 def status(audit_db_url, output_json):
     """Show pipeline status summary."""

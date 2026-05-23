@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from etl.parser import CSVParser, NDJSONParser, get_parser
+from filedge.parser import CSVParser, NDJSONParser, get_parser
 
 
 def test_csv_parser_yields_dicts():

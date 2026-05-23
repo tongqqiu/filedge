@@ -3,9 +3,9 @@ import uuid
 
 import pytest
 
-from etl.config import ColumnMapping, PipelineConfig
-from etl.connectors.postgres import PostgresConnector
-from etl.connectors import SchemaError
+from filedge.config import ColumnMapping, PipelineConfig
+from filedge.connectors.postgres import PostgresConnector
+from filedge.connectors import SchemaError
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 pytestmark = pytest.mark.skipif(

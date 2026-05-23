@@ -6,7 +6,7 @@ Engineers who ingest raw files into data warehouses using standard tooling (Airf
 
 ## Solution
 
-A lightweight Python batch ETL system that treats **Partial Load Corruption** as the primary enemy and eliminates it by design. Every file ingestion is atomic: the destination records and the audit marker are written in a single database transaction, so either both land or neither does. Files are identified by **Content Hash** (SHA-256), making retries unconditionally safe — the system will never load the same data twice, regardless of filename. Every destination row carries provenance columns (`_source_file_hash`, `_ingested_at`) that make the audit trail self-contained and queryable. The system is operated via a short-lived CLI process (`etl run`) triggered by any external scheduler, with `etl status` for observability.
+A lightweight Python batch ETL system that treats **Partial Load Corruption** as the primary enemy and eliminates it by design. Every file ingestion is atomic: the destination records and the audit marker are written in a single database transaction, so either both land or neither does. Files are identified by **Content Hash** (SHA-256), making retries unconditionally safe — the system will never load the same data twice, regardless of filename. Every destination row carries provenance columns (`_source_file_hash`, `_ingested_at`) that make the audit trail self-contained and queryable. The system is operated via a short-lived CLI process (`filedge run`) triggered by any external scheduler, with `filedge status` for observability.
 
 ## User Stories
 
@@ -60,7 +60,7 @@ The system is divided into six deep modules with well-defined interfaces, plus t
 
 - **`etl.pipeline`** — Orchestration layer. `run_pipeline(watched_dir, config_path, db_url) → dict`. Calls all other modules in sequence: reclaim stale locks → ensure table → scan directory → enqueue PENDING → claim PROCESSING → load → commit or rollback+fail.
 
-- **`etl.cli`** — Click-based CLI. Thin wrapper over `run_pipeline` and `get_status_summary`. Commands: `etl run`, `etl status`.
+- **`etl.cli`** — Click-based CLI. Thin wrapper over `run_pipeline` and `get_status_summary`. Commands: `filedge run`, `filedge status`.
 
 ### Single-transaction commit
 
@@ -89,8 +89,8 @@ Auto-created from `pipeline.yaml` on first Run. Includes declared columns plus p
 ### CLI interface
 
 ```
-etl run   --dir <watched-dir> --config <pipeline.yaml> --db-url <url>
-etl status --db-url <url> [--json]
+filedge run   --dir <watched-dir> --config <pipeline.yaml> --db-url <url>
+filedge status --db-url <url> [--json]
 ```
 
 `ETL_DB_URL` environment variable accepted as alternative to `--db-url`.
@@ -122,7 +122,7 @@ Tests use SQLite (via `tmp_path` pytest fixtures) for all database-touching modu
 - Multi-worker concurrency (single ingestion worker process only for now).
 - Lenient mode / dead-letter quarantine for bad rows (strict mode only).
 - Auto-migration of destination table schema after initial creation.
-- Web UI for operator observability (`etl status` CLI only).
+- Web UI for operator observability (`filedge status` CLI only).
 - Non-CSV/NDJSON file formats (Parquet, Avro, etc.) — parser interface is pluggable but not implemented.
 - Upsert / replace semantics (append-only load only).
 - S3, GCS, or other remote storage as source (local filesystem only).

@@ -1,20 +1,20 @@
 # CLI reference
 
-All commands are accessed via the `etl` entry point.
+All commands are accessed via the `filedge` entry point.
 
 ```bash
-etl --help
-etl <command> --help
+filedge --help
+filedge <command> --help
 ```
 
 ---
 
-## `etl inspect`
+## `filedge inspect`
 
 Sample a file and generate a `columns:` block for `pipeline.yaml`.
 
 ```bash
-etl inspect <file> [options]
+filedge inspect <file> [options]
 ```
 
 | Option | Default | Description |
@@ -30,12 +30,12 @@ See the [Inspect guide](../guides/inspect.md) for full details.
 
 ---
 
-## `etl validate`
+## `filedge validate`
 
 Dry-run a file against a `pipeline.yaml` config. No data is written.
 
 ```bash
-etl validate <file> --config <path> [options]
+filedge validate <file> --config <path> [options]
 ```
 
 | Option | Default | Description |
@@ -52,12 +52,12 @@ See the [Validate guide](../guides/validate.md) for full details.
 
 ---
 
-## `etl compact`
+## `filedge compact`
 
 Merge small NDJSON files into fewer, larger files before ingestion.
 
 ```bash
-etl compact --watched-dir <path> --output <path> [options]
+filedge compact --watched-dir <path> --output <path> [options]
 ```
 
 | Option | Default | Description |
@@ -73,19 +73,19 @@ See the [Compact guide](../guides/compact.md) for full details.
 
 ---
 
-## `etl run`
+## `filedge run`
 
 Ingest files from a watched directory with atomic commits, retry, and full audit trail.
 
 ```bash
-etl run --dir <path> --config <path> --audit-db-url <url>
+filedge run --dir <path> --config <path> --audit-db-url <url>
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
 | `--dir` | — | required | Watched directory path (local or cloud URI) |
 | `--config` | — | required | Path to `pipeline.yaml` |
-| `--audit-db-url` | `ETL_AUDIT_DB_URL` | required | Audit database URL |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
 
 **Exit codes:** `0` on success, `1` on error.
 
@@ -93,17 +93,17 @@ See the [Run guide](../guides/run.md) for full details.
 
 ---
 
-## `etl status`
+## `filedge status`
 
 Show a summary of file states in the audit database.
 
 ```bash
-etl status --audit-db-url <url> [--json]
+filedge status --audit-db-url <url> [--json]
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
-| `--audit-db-url` | `ETL_AUDIT_DB_URL` | required | Audit database URL |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
 | `--json` | — | off | Output as JSON |
 
 Example output:

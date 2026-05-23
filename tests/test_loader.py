@@ -1,8 +1,8 @@
 import pytest
 
-from etl.config import ColumnMapping, PipelineConfig
-from etl.connectors.sqlite import SQLiteConnector
-from etl.loader import load_file
+from filedge.config import ColumnMapping, PipelineConfig
+from filedge.connectors.sqlite import SQLiteConnector
+from filedge.loader import load_file
 
 
 @pytest.fixture
