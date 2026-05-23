@@ -6,25 +6,23 @@ from typing import Any, Dict, Iterator
 
 class Parser(ABC):
     @abstractmethod
-    def parse(self, file_path: str) -> Iterator[Dict[str, Any]]:
+    def parse(self, fileobj) -> Iterator[Dict[str, Any]]:
         ...
 
 
 class CSVParser(Parser):
-    def parse(self, file_path: str) -> Iterator[Dict[str, Any]]:
-        with open(file_path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                yield dict(row)
+    def parse(self, fileobj) -> Iterator[Dict[str, Any]]:
+        reader = csv.DictReader(fileobj)
+        for row in reader:
+            yield dict(row)
 
 
 class NDJSONParser(Parser):
-    def parse(self, file_path: str) -> Iterator[Dict[str, Any]]:
-        with open(file_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    yield json.loads(line)
+    def parse(self, fileobj) -> Iterator[Dict[str, Any]]:
+        for line in fileobj:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
 
 
 _PARSERS = {
