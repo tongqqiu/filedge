@@ -43,6 +43,10 @@ uv sync --extra dev --extra bigquery
 uv sync --extra dev --extra databricks
 ```
 
+## License
+
+Filedge is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+
 ## Quick Start
 
 **1. Write a pipeline config**
