@@ -31,7 +31,7 @@ class BigQueryConnector(Connector):
         except ImportError as e:
             raise ImportError(
                 "BigQuery connector requires an optional dependency"
-                " — run: pip install etl-big-idea[bigquery]"
+                " — run: pip install filedge[bigquery]"
             ) from e
 
         if not project or not dataset:

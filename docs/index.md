@@ -1,4 +1,4 @@
-# ETL Big Idea
+# Filedge
 
 A batch ETL toolbox for data engineers who need reliable file ingestion — with atomic commits, content-based idempotency, and a full audit trail built in.
 
@@ -8,7 +8,7 @@ A batch ETL toolbox for data engineers who need reliable file ingestion — with
 
 Most ETL pipelines fail in the worst possible way: they write half the rows before crashing, leaving the destination in a corrupt state with no record of what happened. Re-running the job then double-writes the rows that did succeed.
 
-ETL Big Idea addresses three root causes:
+Filedge addresses three root causes:
 
 - **Partial load corruption** — rows and the audit marker are written atomically. Either both land or neither does.
 - **Filename-based idempotency** — files are identified by SHA-256 content hash, not filename. Renaming a file doesn't re-ingest it; replacing it with new content does.
