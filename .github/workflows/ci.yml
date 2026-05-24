@@ -7,6 +7,19 @@ on:
     branches: [main]
 
 jobs:
+  dependency-resolution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.13"
+          enable-caching: true
+
+      - run: uv lock --check
+      - run: uv sync --extra s3 --extra gcs
+
   lint:
     runs-on: ubuntu-latest
     steps:
