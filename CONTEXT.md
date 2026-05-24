@@ -54,7 +54,7 @@ _Avoid_: confidence score, inference quality, certainty level.
 A `pipeline.yaml` file that declares how a single ingestion pipeline behaves. Contains the file format, column mappings (source name → destination name + type), destination table name, connector settings, write mode, and retry cap. The operator interface for configuring ingestion — no code changes required for schema mapping updates.
 
 ### Audit Record
-Two-level audit: (1) file-level — captures filename, content hash, state, attempt count, timestamps, and worker identity; (2) row-level provenance — every destination row carries `_source_file_hash` and `_ingested_at` columns linking it back to its source File. Row-level provenance is non-negotiable: it is the basis for data lineage, debugging, and compliance.
+Two-level audit: (1) file-level — captures filename, content hash, state, attempt count, timestamps, and worker identity; (2) row-level provenance — every destination row carries `_source_file_hash` and `_ingested_at` columns linking it back to the File that produced or last changed the current row. Row-level provenance is non-negotiable: it is the basis for data lineage, debugging, and compliance.
 
 ### Audit DB
 The relational database (SQLite for development, PostgreSQL for production) that holds the file-level audit records and drives the state machine (PENDING → PROCESSING → COMMITTED/FAILED). This is the control plane — it is always a SQL database with full transaction support, separate from the Destination.
@@ -72,7 +72,19 @@ A Connector that writes rows to a `.duckdb` file on disk. Targeted at local anal
 The system where ingested rows land. Decoupled from the Audit DB — each has its own connection and transaction scope. Because rows and the audit COMMITTED marker can no longer be written in a single transaction, the Connector is responsible for making `write_rows` idempotent per `file_hash`, so retries produce the same destination state as a first write.
 
 ### Write Mode
-The strategy a Connector uses when writing a file's rows to the destination table. Declared as `write_mode` in `pipeline.yaml`. Two modes are supported: `append` (default) — rows are added alongside prior records, idempotent via delete-where-hash then insert; `truncate` — the table is wiped then replaced with this file's rows, naturally idempotent. A third mode, `merge` (upsert by business key), is deferred.
+The strategy a Connector uses when writing a File's rows to the Destination table. Declared as `write_mode` in `pipeline.yaml`. Supported modes: `append` (default) — rows are added alongside prior records; `truncate` — the table is wiped then replaced with this File's rows; `cdc` — a CDC File is applied as SCD Type 1 changes by business key. Write Modes must preserve retry safety for a File identified by Content Hash.
+
+### CDC File
+A File containing change data capture records that describe inserts, updates, and deletes from an upstream system. A CDC File is still a File: it is complete before it reaches the Watched Directory, identified by Content Hash, processed under Strict Mode, and visible in the Audit DB. Filedge applies CDC Files as SCD Type 1 current-state changes; when multiple changes for the same business key appear in one File, the configured sequence column identifies the final change. Ties for the same key and sequence are invalid because row order is not a portable contract. SCD Type 2 history is not part of this term.
+_Avoid_: CDC source, replication stream.
+
+### CDC File Order
+The order in which CDC Files are applied when more than one File changes the same business key. Filedge processes Files in sorted path order during a Run, so upstream materializers must name or partition CDC Files so that sorted path order matches the intended change order. Filedge does not infer cross-File ordering from row-level sequence values in the current SCD Type 1 model.
+_Avoid_: CDC checkpoint, global sequence.
+
+### Applied File Marker
+A Destination-side record that a Connector writes after successfully applying a File whose retry safety cannot rely on row-level `_source_file_hash` alone. Used for CDC Files in warehouse Destinations where replaying the same File would otherwise re-apply business-key mutations. Complements the Audit DB; it does not replace the Audit Record.
+_Avoid_: checkpoint, CDC ledger.
 
 ### Connector Registry
 The internal mapping from a `connector.type` string (e.g. `bigquery`) to a Connector implementation class. Resolved lazily at instantiation time so that missing optional SDK dependencies surface as a clear error only when the Connector is actually used. Declared in `pipeline.yaml` under a `connector:` block; secrets (API tokens, service account credentials) come from environment variables, never from YAML.

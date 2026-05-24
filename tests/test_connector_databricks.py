@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from filedge.config import ColumnMapping, PipelineConfig
+from filedge.config import CdcConfig, ColumnMapping, PipelineConfig
 from filedge.connectors import SchemaError
 
 
@@ -28,6 +28,9 @@ class FakeCursor:
 
     def fetchall(self):
         return self._result
+
+    def fetchone(self):
+        return self._result[0] if self._result else None
 
 
 class FakeConnection:
@@ -242,6 +245,75 @@ def test_write_rows_requires_staging_location(fake_databricks, monkeypatch):
 
     with pytest.raises(ValueError, match="staging_location"):
         connector.write_rows("orders", iter([{"name": "Alice"}]), "hash1")
+
+
+def test_write_cdc_rows_uses_marker_and_merge(tmp_path, fake_databricks):
+    fake_databricks.existing_columns = [
+        ("_id", "BIGINT"),
+        ("customer_id", "STRING"),
+        ("email", "STRING"),
+        ("updated_at", "TIMESTAMP"),
+        ("_source_file_hash", "STRING"),
+        ("_ingested_at", "TIMESTAMP"),
+    ]
+    config = PipelineConfig(
+        format="ndjson",
+        dest_table="customers",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("customer_id", "customer_id", "string", True),
+            ColumnMapping("email", "email", "string", False),
+            ColumnMapping("updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["customer_id"],
+            operation_column="op",
+            sequence_by="updated_at",
+            operations={"insert": ["c"], "update": ["u"], "delete": ["d"]},
+        ),
+    )
+    connector = _connector(tmp_path, fake_databricks, write_mode="cdc")
+
+    connector.write_cdc_rows(
+        "customers",
+        iter(
+            [
+                {
+                    "customer_id": "c1",
+                    "email": "old@example.com",
+                    "updated_at": "2026-05-01T00:00:00",
+                    "op": "c",
+                },
+                {
+                    "customer_id": "c1",
+                    "email": "new@example.com",
+                    "updated_at": "2026-05-02T00:00:00",
+                    "op": "u",
+                },
+                {
+                    "customer_id": "c2",
+                    "email": "gone@example.com",
+                    "updated_at": "2026-05-03T00:00:00",
+                    "op": "d",
+                },
+            ]
+        ),
+        "hash1",
+        config.cdc,
+    )
+
+    statements = "\n".join(fake_databricks.statements)
+    assert "CREATE TABLE IF NOT EXISTS `main`.`default`.`_filedge_applied_files`" in statements
+    assert "SELECT 1 FROM `main`.`default`.`_filedge_applied_files`" in statements
+    assert "CREATE TABLE `main`.`default`.`_filedge_staging_" in statements
+    assert "`_filedge_cdc_operation` STRING" in statements
+    assert "COPY INTO `main`.`default`.`_filedge_staging_" in statements
+    assert "MERGE INTO `main`.`default`.`customers` AS dest" in statements
+    assert "ON dest.`customer_id` = staging.`customer_id`" in statements
+    assert "WHEN MATCHED AND staging.`_filedge_cdc_operation` = 'delete' THEN DELETE" in statements
+    assert "WHEN MATCHED THEN UPDATE SET" in statements
+    assert "WHEN NOT MATCHED AND staging.`_filedge_cdc_operation` <> 'delete' THEN INSERT" in statements
+    assert "INSERT INTO `main`.`default`.`_filedge_applied_files`" in statements
 
 
 def test_missing_sdk_raises_import_error_with_hint(monkeypatch):

@@ -9,7 +9,8 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
-from filedge.config import PipelineConfig
+from filedge.cdc import plan_cdc_changes
+from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
 
@@ -161,6 +162,62 @@ class DatabricksConnector(Connector):
             os.unlink(local_path)
             self._remove_staging_file(staging_uri)
 
+    def write_cdc_rows(
+        self,
+        table: str,
+        rows: Iterator[dict],
+        file_hash: str,
+        cdc: CdcConfig,
+    ) -> None:
+        changes = plan_cdc_changes(rows, cdc)
+        self._ensure_applied_files_table()
+        if self._cdc_file_already_applied(table, file_hash):
+            return
+
+        ingested_at = (
+            datetime.datetime.now(datetime.UTC)
+            .replace(tzinfo=None)
+            .strftime("%Y-%m-%d %H:%M:%S.%f")
+        )
+        records = []
+        for change in changes:
+            record = {
+                key: value
+                for key, value in change.row.items()
+                if key != cdc.operation_column
+            }
+            record["_filedge_cdc_operation"] = change.operation
+            records.append(record)
+
+        if not records:
+            self._insert_applied_file_marker(table, file_hash, ingested_at)
+            return
+        if not self._staging_location:
+            raise ValueError(
+                "DatabricksConnector requires 'staging_location' in the connector block "
+                "or DATABRICKS_STAGING_LOCATION for CDC staging"
+            )
+
+        row_columns = list(records[0].keys())
+        staging_table = f"_filedge_staging_{uuid.uuid4().hex}"
+        staging_uri = self._staging_uri(file_hash)
+        local_path = self._write_records_staging_file(records)
+
+        try:
+            self._upload_staging_file(local_path, staging_uri)
+            self._load_and_apply_cdc(
+                table,
+                staging_table,
+                staging_uri,
+                row_columns,
+                cdc,
+                file_hash,
+                ingested_at,
+            )
+        finally:
+            os.unlink(local_path)
+            self._remove_staging_file(staging_uri)
+
     def _write_local_staging_file(
         self,
         first: dict,
@@ -168,6 +225,12 @@ class DatabricksConnector(Connector):
     ) -> str:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
             for row in _chain_first(first, rows):
+                tmp.write(json.dumps(dict(row)) + "\n")
+            return tmp.name
+
+    def _write_records_staging_file(self, rows: List[dict]) -> str:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as tmp:
+            for row in rows:
                 tmp.write(json.dumps(dict(row)) + "\n")
             return tmp.name
 
@@ -223,9 +286,73 @@ class DatabricksConnector(Connector):
             with self._conn.cursor() as cur:
                 cur.execute(f"DROP TABLE IF EXISTS {staging}")
 
+    def _load_and_apply_cdc(
+        self,
+        table: str,
+        staging_table: str,
+        staging_uri: str,
+        row_columns: List[str],
+        cdc: CdcConfig,
+        file_hash: str,
+        ingested_at: str,
+    ) -> None:
+        dest = self._table_ref(table)
+        staging = self._table_ref(staging_table)
+        dest_column_types = self._get_existing_columns(table) or {}
+        column_defs = ", ".join(
+            f"{self._quote(col)} {self._staging_column_type(col, dest_column_types)}"
+            for col in row_columns
+        )
+        data_columns = [col for col in row_columns if col != "_filedge_cdc_operation"]
+        key_match = " AND ".join(
+            f"dest.{self._quote(key)} = staging.{self._quote(key)}" for key in cdc.keys
+        )
+        update_assignments = ", ".join(
+            [f"dest.{self._quote(col)} = staging.{self._quote(col)}" for col in data_columns]
+            + [
+                f"dest.{self._quote('_source_file_hash')} = '{self._string_literal(file_hash)}'",
+                f"dest.{self._quote('_ingested_at')} = TIMESTAMP '{self._string_literal(ingested_at)}'",
+            ]
+        )
+        insert_columns = data_columns + ["_source_file_hash", "_ingested_at"]
+        insert_cols = ", ".join(self._quote(col) for col in insert_columns)
+        insert_values = ", ".join(
+            [f"staging.{self._quote(col)}" for col in data_columns]
+            + [
+                f"'{self._string_literal(file_hash)}'",
+                f"TIMESTAMP '{self._string_literal(ingested_at)}'",
+            ]
+        )
+
+        try:
+            with self._conn.cursor() as cur:
+                cur.execute(f"CREATE TABLE {staging} ({column_defs})")
+                cur.execute(
+                    f"COPY INTO {staging}"
+                    f" FROM '{self._string_literal(staging_uri)}'"
+                    " FILEFORMAT = JSON"
+                )
+                cur.execute(
+                    f"MERGE INTO {dest} AS dest"
+                    f" USING {staging} AS staging"
+                    f" ON {key_match}"
+                    " WHEN MATCHED AND "
+                    "staging.`_filedge_cdc_operation` = 'delete' THEN DELETE"
+                    f" WHEN MATCHED THEN UPDATE SET {update_assignments}"
+                    " WHEN NOT MATCHED AND "
+                    "staging.`_filedge_cdc_operation` <> 'delete'"
+                    f" THEN INSERT ({insert_cols}) VALUES ({insert_values})"
+                )
+                self._insert_applied_file_marker(table, file_hash, ingested_at, cur=cur)
+        finally:
+            with self._conn.cursor() as cur:
+                cur.execute(f"DROP TABLE IF EXISTS {staging}")
+
     def _staging_column_type(
         self, column: str, dest_column_types: Dict[str, str]
     ) -> str:
+        if column == "_filedge_cdc_operation":
+            return "STRING"
         if column == "_source_file_hash":
             return "STRING"
         if column == "_ingested_at":
@@ -333,6 +460,48 @@ class DatabricksConnector(Connector):
         return ".".join(
             [self._quote(self._catalog), self._quote(self._schema), self._quote(table)]
         )
+
+    def _applied_files_ref(self) -> str:
+        return self._table_ref("_filedge_applied_files")
+
+    def _ensure_applied_files_table(self) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"CREATE TABLE IF NOT EXISTS {self._applied_files_ref()} ("
+                "destination_table STRING NOT NULL, "
+                "content_hash STRING NOT NULL, "
+                "applied_at TIMESTAMP NOT NULL)"
+            )
+
+    def _cdc_file_already_applied(self, table: str, file_hash: str) -> bool:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                f"SELECT 1 FROM {self._applied_files_ref()}"
+                f" WHERE destination_table = '{self._string_literal(table)}'"
+                f" AND content_hash = '{self._string_literal(file_hash)}'"
+                " LIMIT 1"
+            )
+            return cur.fetchone() is not None
+
+    def _insert_applied_file_marker(
+        self,
+        table: str,
+        file_hash: str,
+        ingested_at: str,
+        cur=None,
+    ) -> None:
+        sql = (
+            f"INSERT INTO {self._applied_files_ref()}"
+            " (destination_table, content_hash, applied_at)"
+            f" VALUES ('{self._string_literal(table)}',"
+            f" '{self._string_literal(file_hash)}',"
+            f" TIMESTAMP '{self._string_literal(ingested_at)}')"
+        )
+        if cur is not None:
+            cur.execute(sql)
+            return
+        with self._conn.cursor() as marker_cur:
+            marker_cur.execute(sql)
 
     def _quote(self, identifier: str) -> str:
         return "`" + identifier.replace("`", "``") + "`"
