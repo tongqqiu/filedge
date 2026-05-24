@@ -27,7 +27,7 @@ bigquery = ["google-cloud-bigquery>=3.0"]
 databricks = ["databricks-sql-connector>=3.0", "fsspec>=2023.0"]
 duckdb = ["duckdb>=1.0", "pyarrow>=14.0"]
 parquet = ["pyarrow>=14.0"]
-s3 = ["fsspec>=2023.0", "s3fs>=2023.0"]
+s3 = ["fsspec>=2023.0", "s3fs>=2026.4.0"]
 gcs = ["fsspec>=2023.0", "gcsfs>=2023.0"]
 otel = [
     "opentelemetry-api>=1.27",
