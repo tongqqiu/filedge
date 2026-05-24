@@ -65,7 +65,7 @@ The exact materializer command or deployment is outside Filedge's contract. File
 
 ```bash
 filedge run \
-  --watched-dir s3://my-bucket/landing/orders/ \
+  --dir s3://my-bucket/landing/orders/ \
   --config      pipeline.yaml \
   --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```
@@ -115,7 +115,7 @@ Always-running materializer:
   ├── queue-materializer writes complete files to s3://.../landing/orders/
 
 Every 10 min:
-  └── filedge run --watched-dir s3://.../landing/orders/ --config pipeline.yaml ...
+  └── filedge run --dir s3://.../landing/orders/ --config pipeline.yaml ...
 ```
 
 For lower latency, run `filedge run` more frequently or partition the Watched Directory by time so each run scans a bounded prefix.

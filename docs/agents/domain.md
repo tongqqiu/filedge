@@ -6,7 +6,8 @@ How the engineering skills should consume this repo's domain documentation when 
 
 - **`CONTEXT.md`** at the repo root — the canonical domain glossary (File, Content Hash, Commit, Run, Strict Mode, Partial Load Corruption, etc.)
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in:
-  - `0001-single-transaction-commit.md` — why records and audit marker live in the same DB
+  - `0001-single-transaction-commit.md` — original MVP single-DB commit model
+  - `0004-audit-connector-split.md` — why the Audit DB and Destination are now separate
   - `0002-content-hash-as-idempotency-key.md` — why SHA-256 hash, not filename, is the identity
   - `0003-strict-mode-validation.md` — why whole-file failure, not partial commit
 
@@ -25,7 +26,7 @@ Single-context repo:
 │   │   ├── 0002-content-hash-as-idempotency-key.md
 │   │   └── 0003-strict-mode-validation.md
 │   └── PRD.md
-└── etl/          ← Python package (to be created)
+└── filedge/     ← Python package
 ```
 
 ## Use the glossary's vocabulary
@@ -40,4 +41,4 @@ If the concept you need isn't in the glossary yet, that's a signal — either yo
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0001 (single-transaction commit) — but worth reopening because…_
+> _Contradicts ADR-0004 (audit connector split) — but worth reopening because…_

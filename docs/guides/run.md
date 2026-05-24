@@ -1,6 +1,6 @@
 # Run a pipeline
 
-`filedge run` is the main ingestion command. It scans a watched directory, enqueues new files, and processes them with atomic commits, automatic retry, and a full audit trail.
+`filedge run` is the main ingestion command. It scans a watched directory, enqueues new files, and processes them with retry-safe destination commits, automatic retry, and a full audit trail.
 
 ## Basic usage
 
@@ -172,7 +172,7 @@ To change the schema, you must alter the destination table manually and then upd
     apiVersion: batch/v1
     kind: CronJob
     metadata:
-      name: etl-pipeline
+      name: filedge-pipeline
     spec:
       schedule: "*/15 * * * *"
       jobTemplate:
@@ -180,14 +180,14 @@ To change the schema, you must alter the destination table manually and then upd
           template:
             spec:
               containers:
-              - name: etl
-                image: your-etl-image
+              - name: filedge
+                image: your-filedge-image
                 command: ["filedge", "run", "--dir", "/data/incoming", "--config", "/config/pipeline.yaml"]
                 env:
                 - name: FILEDGE_AUDIT_DB_URL
                   valueFrom:
                     secretKeyRef:
-                      name: etl-secrets
+                      name: filedge-secrets
                       key: audit-db-url
               restartPolicy: OnFailure
     ```
@@ -213,6 +213,8 @@ Filedge is designed for watched directories of up to **~50,000 files**. Within t
 - Each file is processed and committed individually, so memory per file is bounded by `batch_size` rows (default 1,000).
 
 For SQLite as the **destination** (not the audit DB), the connector holds an exclusive write lock for the duration of each file's insert. Run filedge as a single process against a SQLite destination; concurrent writers will contend on the lock.
+
+For parallel workers, large files, and backfills, see [Scale ingestion](scale.md).
 
 ## Options
 

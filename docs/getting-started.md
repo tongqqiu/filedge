@@ -15,7 +15,7 @@ cd filedge
 uv sync
 ```
 
-The `etl` command is now available in the project's virtual environment:
+The `filedge` command is now available in the project's virtual environment:
 
 ```bash
 uv run filedge --help
@@ -155,8 +155,6 @@ filedge status --audit-db-url sqlite:///filedge.db
 # COMMITTED:  1
 # FAILED:     0
 ```
-
----
 
 ---
 

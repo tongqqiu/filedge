@@ -1,5 +1,8 @@
 # ETL Reliability Pipeline — Product Requirements Document
 
+!!! note "Historical planning document"
+    This PRD records the original MVP shape. The current implementation uses the `filedge` package and CLI, requires a `connector:` block in `pipeline.yaml`, and follows ADR-0004's Audit DB / Destination connector split.
+
 ## Problem Statement
 
 Engineers who ingest raw files into data warehouses using standard tooling (Airflow + Spark + cloud data warehouses) are missing fundamental reliability primitives. When a pipeline job fails mid-run, it leaves the destination in a half-written state — causing the next retry to produce duplicate records, skip records, or both. There is no reliable audit trail linking destination rows back to their source files, making data quality investigations slow and often impossible. Re-running a failed job is unsafe without manual intervention, which defeats the purpose of automation.

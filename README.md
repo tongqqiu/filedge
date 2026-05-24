@@ -13,7 +13,7 @@
 
 Streams are continuous; files are discrete. That discreteness is what makes ingestion *auditable*: a file has a SHA-256, a row count, a state in the audit DB, and a row-level provenance trail in the destination. Every downstream question — *did we load this?*, *replay this*, *where did this row come from?* — has a deterministic anchor.
 
-Filedge starts where the file lands and ends when its rows are committed. Upstream is your choice: [dlt](https://dlthub.com) or vendor exporters for APIs, [Kafka Connect](https://docs.confluent.io/platform/current/connect/index.html) or Vector for queues, rclone for SFTP. Downstream is your warehouse. The hard part in between — atomic commits, dedupe, retries, lineage — is all Filedge does.
+Filedge starts where the file lands and ends when its rows are committed. Upstream is your choice: [dlt](https://dlthub.com) or vendor exporters for APIs, [Kafka Connect](https://docs.confluent.io/platform/current/connect/index.html) or Vector for queues, rclone for SFTP. Downstream is your warehouse. The hard part in between — retry-safe commits, dedupe, retries, lineage — is all Filedge does.
 
 ## What it gives you that a hand-rolled DAG doesn't
 
@@ -55,6 +55,10 @@ write_mode: append          # append | truncate | cdc
 retry_cap: 3
 batch_size: 1000
 
+connector:
+  type: sqlite
+  url: sqlite:///orders.db
+
 columns:
   - { source: order_id,   dest: order_id,   type: string,  required: true }
   - { source: amount,     dest: amount,     type: float,   required: true }
@@ -79,7 +83,7 @@ The destination is configured via a `connector:` block in `pipeline.yaml`. Built
 
 | Destination  | Extra        | Notes |
 |---|---|---|
-| SQLite       | (core)       | Default for local dev; inferred from `--audit-db-url` |
+| SQLite       | (core)       | Default for local dev; configure with `type: sqlite` and a `url` |
 | PostgreSQL   | `postgres`   | `COPY` bulk load; idempotent via per-hash DELETE |
 | BigQuery     | `bigquery`   | NDJSON staging + load job; job-ID-keyed idempotency (7-day window) |
 | Databricks   | `databricks` | Unity Catalog volume staging |
@@ -105,7 +109,7 @@ The audit DB and the destination are separate systems. A crash between connector
 
 ## More
 
-- Guides: [run](docs/guides/run.md) · [inspect](docs/guides/inspect.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [requeue](docs/guides/requeue.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md)
+- Guides: [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md)
 - Domain model: [CONTEXT.md](CONTEXT.md)
 - Architecture decisions:
   - [ADR-0001: Single-transaction commit](docs/adr/0001-single-transaction-commit.md)
