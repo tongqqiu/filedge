@@ -16,13 +16,13 @@ The primary idempotency key for a File. Computed as SHA-256 of the file's bytes.
 The #1 failure mode this system is designed to prevent. Occurs when a pipeline job fails mid-run and leaves the destination in a half-written state, causing subsequent retries to produce duplicates or skip records.
 
 ### Commit
-The act of writing a File's records and its audit marker together in a single database transaction. Either both land or neither does. This is what makes a File ingestion atomic.
+The act of successfully applying one File to the Destination and then marking that File `COMMITTED` in the Audit DB. Because the Audit DB and Destination may be separate systems, retry safety comes from Connector-level idempotency keyed by Content Hash rather than one shared transaction.
 
 ### Run
 A single execution of `filedge run` — a short-lived process that scans the Watched Directory, enqueues new Files as PENDING, processes them through the pipeline, and exits. Triggered by an external scheduler (cron, Airflow, Kubernetes CronJob). Stale PROCESSING locks older than a configured timeout are reclaimed at the start of each Run.
 
 ### Streaming Load
-Files are processed in row batches (configurable size, default 1,000) rather than loaded entirely into memory. The wrapping database transaction stays open across all batches and commits only when the full file is processed — preserving atomicity at constant memory cost regardless of file size.
+Files are processed in row batches (configurable size, default 1,000) rather than loaded entirely into memory. The Connector writes the File as one idempotent unit and commits only when the full File is processed, keeping memory bounded by `batch_size`.
 
 ### Append-Only Load
 The default Write Mode (`write_mode: append`): records from each File are inserted into the destination table without replacing prior records. The ETL layer does not resolve whether a re-dropped file is a correction or a supplement — that is downstream responsibility, resolvable via provenance columns. Two Files with the same filename but different content hashes produce two distinct sets of rows in the destination. See also: Write Mode.
@@ -40,10 +40,10 @@ On first Run against a new destination table, the system creates the table from 
 Python. The implementation language for the ingestion system, CLI, and all pipeline components.
 
 ### Operator CLI
-A command-line interface for system observation and control. `filedge status` prints file counts by state, recent failures, and retry counts. Supports `--json` for machine-readable output. `etl inspect <file>` runs Schema Inference on a file and prints a suggested `columns:` block. The stable interface over audit DB queries — future web UI would use the same backing queries.
+A command-line interface for system observation and control. `filedge status` prints file counts by state, recent failures, and retry counts. Supports `--json` for machine-readable output. `filedge inspect <file>` runs Schema Inference on a file and prints a suggested `columns:` block. The stable interface over audit DB queries — future web UI would use the same backing queries.
 
 ### Schema Inference
-The process of sampling the first N rows of a File (default 1,000, configurable via `--sample-rows`) and producing a suggested `columns:` block ready to paste into a Pipeline Config, alongside a human-readable summary. Each inferred column carries a Confidence Tier. Invoked via `etl inspect <file>`. Format is auto-detected from file extension with a `--format` override. The YAML block goes to stdout; the summary goes to stderr, keeping them composable with shell redirection. NDJSON nested objects are surfaced as top-level `string` columns with a warning listing the nested keys — the pipeline has no flattening Transform, so suggesting dot-notation paths would produce a config that cannot be executed.
+The process of sampling the first N rows of a File (default 1,000, configurable via `--sample-rows`) and producing a suggested `columns:` block ready to paste into a Pipeline Config, alongside a human-readable summary. Each inferred column carries a Confidence Tier. Invoked via `filedge inspect <file>`. Format is auto-detected from file extension with a `--format` override. The YAML block goes to stdout; the summary goes to stderr, keeping them composable with shell redirection. NDJSON nested objects are surfaced as top-level `string` columns with a warning listing the nested keys — the pipeline has no flattening Transform, so suggesting dot-notation paths would produce a config that cannot be executed.
 _Avoid_: schema detection, type inference, column discovery.
 
 ### Confidence Tier
@@ -107,7 +107,7 @@ A pluggable component that takes a File path and yields rows. Implementations ex
 ### Watched Directory
 The landing zone polled on a schedule to discover new Files. Accepts a local path or a cloud URI (`gs://`, `s3://`). The system scans the location on every Run, computes content hashes, filters out already-COMMITTED files, and enqueues new ones as PENDING. The Watched Directory is assumed to contain only complete, transfer-ready files — partial transfers and in-flight writes are the responsibility of whatever process deposits files there. SFTP is not a supported source; see ADR-0005.
 
-For large-scale deployments where object-store listing cost or latency becomes a concern, operators should use time-partitioned prefixes — e.g. `s3://bucket/landing/2026-05-23/` — and update the `--watched-dir` argument daily. This keeps each Run's listing bounded to that day's files without requiring the pipeline to move or delete objects after ingestion.
+For large-scale deployments where object-store listing cost or latency becomes a concern, operators should use time-partitioned prefixes — e.g. `s3://bucket/landing/2026-05-23/` — and update the `filedge run --dir` argument daily. This keeps each Run's listing bounded to that day's files without requiring the pipeline to move or delete objects after ingestion.
 
 ### File States
 The four states a File passes through: `PENDING` (discovered, not yet claimed), `PROCESSING` (claimed by a worker — acts as a distributed lock via content hash), `COMMITTED` (fully loaded, transaction complete), `FAILED` (load attempt failed, eligible for retry or human review). A file whose content hash is already `COMMITTED` is never admitted to the pipeline — it is silently deduplicated at the entry point.

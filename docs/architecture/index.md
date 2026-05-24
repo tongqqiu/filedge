@@ -11,7 +11,7 @@ PENDING → PROCESSING → COMMITTED
 
 - **PENDING** — discovered but not yet claimed
 - **PROCESSING** — claimed by a worker (distributed lock via content hash)
-- **COMMITTED** — fully loaded; rows and audit marker landed atomically
+- **COMMITTED** — fully loaded; the destination write succeeded and the audit state was marked complete
 - **FAILED** — load attempt failed; eligible for retry up to `retry_cap`
 
 A file whose content hash is already `COMMITTED` is silently deduplicated at the entry point — it is never re-processed.
@@ -27,7 +27,7 @@ The system separates concerns into two independent stores:
                     │                 │
                     │ file states     │
                     │ attempt counts  │
-  etl run ─────────│ worker identity │
+filedge run ───────│ worker identity │
                     └────────┬────────┘
                              │
                              │ separate connection, separate transaction
@@ -65,7 +65,7 @@ Files are identified by SHA-256 of their bytes, not by filename. Two files with 
 
 ## Streaming load
 
-Files are processed in row batches (default: 1,000 rows) rather than loaded entirely into memory. The wrapping database transaction stays open across all batches and commits only when the full file is processed — preserving atomicity at constant memory cost regardless of file size.
+Files are processed in row batches (default: 1,000 rows) rather than loaded entirely into memory. The connector writes the file as one idempotent unit, committing only when the full file is processed, so memory stays bounded by `batch_size`.
 
 ## Schema guard
 

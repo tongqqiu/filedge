@@ -62,7 +62,7 @@ Run it like any other pipeline:
 
 ```bash
 filedge run \
-  --watched-dir ./landing/customers \
+  --dir ./landing/customers \
   --config pipeline.yaml \
   --audit-db-url sqlite:///audit.db
 ```
