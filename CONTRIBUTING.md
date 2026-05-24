@@ -76,6 +76,10 @@ what.
 - No new top-level dependencies without discussion in an issue. Optional
   features go behind an extra in `pyproject.toml`.
 
+## Releasing
+
+See [docs/release-checklist.md](docs/release-checklist.md) for the step-by-step process — build verification, docs build, CLI smoke test, PyPI publish, and post-publish install-doc update.
+
 ## Reporting bugs
 
 Use the bug issue template. Include:

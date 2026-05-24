@@ -49,6 +49,7 @@ nav:
     - Compact small files: guides/compact.md
     - Run a pipeline: guides/run.md
     - Healthcheck: guides/healthcheck.md
+    - Crash-retry demo: guides/crash-retry.md
     - Requeue failed files: guides/requeue.md
     - CDC files: guides/cdc-files.md
     - API sources: guides/api-sources.md
@@ -61,3 +62,4 @@ nav:
   - Architecture:
     - How it works: architecture/index.md
     - Design decisions: architecture/decisions.md
+  - Release checklist: release-checklist.md
