@@ -109,7 +109,7 @@ The audit DB and the destination are separate systems. A crash between connector
 
 ## More
 
-- Guides: [run](docs/guides/run.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md)
+- Guides: [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md)
 - Domain model: [CONTEXT.md](CONTEXT.md)
 - Architecture decisions:
   - [ADR-0001: Single-transaction commit](docs/adr/0001-single-transaction-commit.md)
