@@ -64,9 +64,12 @@ def cli():
               help="Log level (DEBUG, INFO, WARNING, ERROR).")
 @click.option("--otel-traces/--no-otel-traces", "otel_traces", default=None,
               help="Enable OpenTelemetry tracing. Off by default. Also enabled by FILEDGE_OTEL_TRACES=true.")
-def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_format, log_level, otel_traces):
+@click.option("--otel-metrics/--no-otel-metrics", "otel_metrics", default=None,
+              help="Enable OpenTelemetry metrics. Off by default. Also enabled by FILEDGE_OTEL_METRICS=true.")
+def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_format, log_level, otel_traces, otel_metrics):
     """Run the ETL pipeline for a Watched Directory."""
     from filedge.log import configure_logging, get_logger
+    from filedge.metrics import configure_metrics, should_enable_metrics
     from filedge.progress import LoggingProgressReporter
     from filedge.tracing import configure_tracing, should_enable_tracing
 
@@ -85,6 +88,12 @@ def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_
         )
         configure_tracing(enabled=tracing_on)
 
+        metrics_on = should_enable_metrics(
+            cli_flag=otel_metrics,
+            env_value=os.environ.get("FILEDGE_OTEL_METRICS"),
+        )
+        configure_metrics(enabled=metrics_on, audit_db_url=audit_db_url)
+
         run_id = _new_run_id()
         log_reporter = LoggingProgressReporter(get_logger("filedge.pipeline"), run_id=run_id)
 
@@ -97,6 +106,11 @@ def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_
                 from filedge.progress import TracingProgressReporter
                 tracing_reporter = stack.enter_context(TracingProgressReporter(run_id=run_id))
                 handlers.append(tracing_reporter.handle)
+
+            if metrics_on:
+                from filedge.progress import MetricsProgressReporter
+                metrics_reporter = MetricsProgressReporter(run_id=run_id)
+                handlers.append(metrics_reporter.handle)
 
             if show_progress:
                 from rich.console import Console

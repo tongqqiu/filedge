@@ -121,6 +121,66 @@ def _basename(path):
     return path.split("/")[-1]
 
 
+class MetricsProgressReporter:
+    """ProgressReporter that emits OpenTelemetry metrics for files processed in a Run.
+
+    Imports of `opentelemetry.*` are deferred so the base install (without the
+    `filedge[otel]` extra) never imports OTel.
+    """
+
+    def __init__(self, run_id: str, meter=None):
+        if meter is None:
+            from opentelemetry import metrics as _metrics
+            meter = _metrics.get_meter("filedge")
+        self._run_id = run_id
+        self._committed = meter.create_counter(
+            name="filedge.files.committed",
+            unit="files",
+            description="Files successfully committed during a Run.",
+        )
+        self._failed = meter.create_counter(
+            name="filedge.files.failed",
+            unit="files",
+            description="Files that failed to load during a Run.",
+        )
+        self._bytes_ingested = meter.create_counter(
+            name="filedge.bytes.ingested",
+            unit="By",
+            description="Bytes from committed Files (failed Files excluded).",
+        )
+        self._duration = meter.create_histogram(
+            name="filedge.file.processing.duration_seconds",
+            unit="s",
+            description="Per-File load duration.",
+        )
+        self._inflight_bytes: dict = {}
+        self._inflight_started: dict = {}
+
+    def handle(self, event: PipelineProgressEvent) -> None:
+        if event.phase != "loading":
+            return
+        if event.action == "file_start":
+            if event.bytes is not None:
+                self._inflight_bytes[event.path] = event.bytes
+            import time
+            self._inflight_started[event.path] = time.perf_counter()
+            return
+        if event.action != "file_finish":
+            return
+        attrs = {"filedge.run_id": self._run_id}
+        bytes_for_file = self._inflight_bytes.pop(event.path, 0)
+        started = self._inflight_started.pop(event.path, None)
+        if started is not None:
+            import time
+            self._duration.record(time.perf_counter() - started, attributes=attrs)
+        if event.error is None:
+            self._committed.add(1, attributes=attrs)
+            if bytes_for_file:
+                self._bytes_ingested.add(bytes_for_file, attributes=attrs)
+        else:
+            self._failed.add(1, attributes=attrs)
+
+
 class LoggingProgressReporter:
     """ProgressReporter that emits one structured log line per PipelineProgressEvent.
 
