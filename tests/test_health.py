@@ -164,3 +164,147 @@ def test_run_preflight_failure_exits_before_tables_or_rows(tmp_path):
     assert "Healthcheck failed: destination unreachable:" in result.stderr
     assert not _table_exists(audit_db, "etl_file_audit")
     assert not _table_exists(tmp_path / "missing-dest" / "dest.db", "items")
+
+
+def test_healthcheck_text_reports_healthy_checks(tmp_path):
+    config_path = tmp_path / "pipeline.yaml"
+    _write_pipeline_config(config_path, f"sqlite:///{tmp_path}/dest.db")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "healthcheck",
+            "--config",
+            str(config_path),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "audit_db: ok" in result.stdout
+    assert "destination: ok" in result.stdout
+
+
+def test_healthcheck_text_reports_unhealthy_checks_to_stderr(tmp_path):
+    config_path = tmp_path / "pipeline.yaml"
+    _write_pipeline_config(config_path, f"sqlite:///{tmp_path}/missing/dest.db")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "healthcheck",
+            "--config",
+            str(config_path),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "audit_db: ok" in result.stdout
+    assert "destination: unreachable:" in result.stderr
+
+
+def test_healthcheck_invalid_config_reports_configuration_error(tmp_path):
+    config_path = tmp_path / "pipeline.yaml"
+    config_path.write_text("format: [")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "healthcheck",
+            "--config",
+            str(config_path),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Healthcheck failed: configuration unreachable:" in result.stderr
+
+
+def test_run_defaults_progress_from_stderr_tty(tmp_path):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "data.csv").write_text("name\nAlice\n")
+    config_path = tmp_path / "pipeline.yaml"
+    _write_pipeline_config(config_path, f"sqlite:///{tmp_path}/dest.db")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "run",
+            "--dir",
+            str(watched),
+            "--config",
+            str(config_path),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+            "--json",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout)["committed"] == 1
+
+
+def test_run_schema_error_is_reported_without_generic_prefix(tmp_path):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "data.csv").write_text("name\nAlice\n")
+    dest_db = tmp_path / "dest.db"
+    conn = sqlite3.connect(dest_db)
+    conn.execute("CREATE TABLE items (name INTEGER)")
+    conn.commit()
+    conn.close()
+    config_path = tmp_path / "pipeline.yaml"
+    _write_pipeline_config(config_path, f"sqlite:///{dest_db}")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "run",
+            "--dir",
+            str(watched),
+            "--config",
+            str(config_path),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Schema error:" in result.stderr
+    assert "Error: Schema error:" not in result.stderr
+
+
+def test_run_unexpected_error_uses_generic_error_prefix(tmp_path, monkeypatch):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    config_path = tmp_path / "pipeline.yaml"
+    _write_pipeline_config(config_path, f"sqlite:///{tmp_path}/dest.db")
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("filedge.cli.run_pipeline", boom)
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "run",
+            "--dir",
+            str(watched),
+            "--config",
+            str(config_path),
+            "--audit-db-url",
+            f"sqlite:///{tmp_path}/audit.db",
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "Error: boom" in result.stderr

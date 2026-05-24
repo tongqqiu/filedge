@@ -70,6 +70,53 @@ def test_otel_log_bridge_adds_trace_and_span_ids_inside_span():
     assert otel_record.span_id == context.span_id
 
 
+def test_otel_log_bridge_default_exporter_uses_batch_processor(monkeypatch):
+    import logging
+    from opentelemetry.sdk._logs.export import InMemoryLogExporter
+    from filedge.log import configure_logging
+    import filedge.tracing as tracing
+
+    exporter = InMemoryLogExporter()
+    monkeypatch.setattr(tracing, "_make_otlp_log_exporter", lambda: exporter)
+    configure_logging(level="INFO", fmt="json", stream=io.StringIO())
+
+    tracing.configure_otel_logs(enabled=True)
+
+    otel_handlers = [
+        handler for handler in logging.getLogger("filedge").handlers
+        if getattr(handler, "_filedge_otel_handler", False)
+    ]
+    assert len(otel_handlers) == 1
+
+
+def test_otlp_exporters_honor_http_protocol(monkeypatch):
+    import filedge.tracing as tracing
+
+    monkeypatch.setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf")
+
+    span_exporter = tracing._make_otlp_exporter()
+    log_exporter = tracing._make_otlp_log_exporter()
+
+    assert span_exporter.__class__.__module__.startswith(
+        "opentelemetry.exporter.otlp.proto.http"
+    )
+    assert log_exporter.__class__.__module__.startswith(
+        "opentelemetry.exporter.otlp.proto.http"
+    )
+
+
+def test_otlp_log_exporter_defaults_to_grpc(monkeypatch):
+    import filedge.tracing as tracing
+
+    monkeypatch.delenv("OTEL_EXPORTER_OTLP_PROTOCOL", raising=False)
+
+    log_exporter = tracing._make_otlp_log_exporter()
+
+    assert log_exporter.__class__.__module__.startswith(
+        "opentelemetry.exporter.otlp.proto.grpc"
+    )
+
+
 def test_otel_log_bridge_disabled_does_not_import_opentelemetry():
     import subprocess
     import sys
