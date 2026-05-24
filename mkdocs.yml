@@ -48,6 +48,7 @@ nav:
     - Validate a file: guides/validate.md
     - Compact small files: guides/compact.md
     - Run a pipeline: guides/run.md
+    - Requeue failed files: guides/requeue.md
     - CDC files: guides/cdc-files.md
     - API sources: guides/api-sources.md
     - Queue sources: guides/queue-sources.md

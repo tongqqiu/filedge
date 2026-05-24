@@ -222,10 +222,66 @@ def get_status_summary(db: Database) -> dict:
         counts[row[0]] = row[1]
 
     cursor = db.execute(
-        "SELECT filename, error_message FROM etl_file_audit"
+        "SELECT filename, content_hash, error_message FROM etl_file_audit"
         " WHERE state='FAILED' ORDER BY updated_at DESC LIMIT 10"
     )
-    recent_failures = [{"filename": row[0], "error_message": row[1]} for row in cursor.fetchall()]
+    recent_failures = [
+        {"filename": row[0], "content_hash": row[1], "error_message": row[2]}
+        for row in cursor.fetchall()
+    ]
 
     return {**counts, "recent_failures": recent_failures}
 
+
+def find_terminal_failed_by_filename(
+    db: Database, filename: str, retry_cap: int
+) -> list["FileRecord"]:
+    """Return all terminal-FAILED records matching filename (attempt_count >= retry_cap)."""
+    cursor = db.execute(
+        "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at"
+        " FROM etl_file_audit WHERE filename=? AND state='FAILED' AND attempt_count >= ?",
+        [filename, retry_cap],
+    )
+    return [
+        FileRecord(
+            id=r[0], filename=r[1], source_dir=r[2], content_hash=r[3], state=r[4],
+            attempt_count=r[5], error_message=r[6], worker_id=r[7], claimed_at=r[8],
+        )
+        for r in cursor.fetchall()
+    ]
+
+
+def list_terminal_failed(db: Database, retry_cap: int) -> list["FileRecord"]:
+    """Return all terminal-FAILED records ordered by most recently updated."""
+    cursor = db.execute(
+        "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at"
+        " FROM etl_file_audit WHERE state='FAILED' AND attempt_count >= ?"
+        " ORDER BY updated_at DESC",
+        [retry_cap],
+    )
+    return [
+        FileRecord(
+            id=r[0], filename=r[1], source_dir=r[2], content_hash=r[3], state=r[4],
+            attempt_count=r[5], error_message=r[6], worker_id=r[7], claimed_at=r[8],
+        )
+        for r in cursor.fetchall()
+    ]
+
+
+def requeue_by_hash(db: Database, content_hash: str) -> None:
+    """Reset a single file to PENDING with a fresh retry budget."""
+    db.execute(
+        "UPDATE etl_file_audit SET state='PENDING', attempt_count=0, error_message=NULL,"
+        " worker_id=NULL, updated_at=? WHERE content_hash=?",
+        [_now(), content_hash],
+    )
+
+
+def requeue_all_terminal_failed(db: Database, retry_cap: int) -> int:
+    """Reset all terminal-FAILED files to PENDING. Returns count reset."""
+    cursor = db.execute(
+        "UPDATE etl_file_audit SET state='PENDING', attempt_count=0, error_message=NULL,"
+        " worker_id=NULL, updated_at=? WHERE state='FAILED' AND attempt_count >= ?",
+        [_now(), retry_cap],
+    )
+    return cursor.rowcount
