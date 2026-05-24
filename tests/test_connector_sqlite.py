@@ -208,6 +208,41 @@ def test_write_cdc_rows_applies_insert_update_delete(tmp_path):
     connector.close()
 
 
+def test_reserved_keyword_column_name(tmp_path):
+    """SQLite reserved words like 'Index' must be quoted in DDL and DML."""
+    config = PipelineConfig(
+        format="csv",
+        dest_table="items",
+        columns=[ColumnMapping(source="Index", dest="Index", type="integer", required=True)],
+    )
+    connector = SQLiteConnector(url=f"sqlite:///{tmp_path}/kw.db", write_mode="append", batch_size=100)
+    connector.ensure_table(config)
+    connector.write_rows("items", iter([{"Index": 1}]), "h1")
+    row = connector._get_conn().execute("SELECT \"Index\" FROM items").fetchone()
+    assert row == (1,)
+    connector.close()
+
+
+def test_column_names_with_spaces(tmp_path):
+    """Column names containing spaces must be quoted in DDL and DML."""
+    config = PipelineConfig(
+        format="csv",
+        dest_table="customers",
+        columns=[
+            ColumnMapping(source="Customer Id", dest="Customer Id", type="string", required=True),
+            ColumnMapping(source="First Name", dest="First Name", type="string", required=True),
+        ],
+    )
+    connector = SQLiteConnector(url=f"sqlite:///{tmp_path}/spaces.db", write_mode="append", batch_size=100)
+    connector.ensure_table(config)
+    connector.write_rows("customers", iter([{"Customer Id": "C1", "First Name": "Alice"}]), "h1")
+    row = connector._get_conn().execute(
+        "SELECT \"Customer Id\", \"First Name\" FROM customers"
+    ).fetchone()
+    assert row == ("C1", "Alice")
+    connector.close()
+
+
 def test_write_cdc_rows_is_idempotent_for_same_hash(tmp_path):
     config = PipelineConfig(
         format="ndjson",
