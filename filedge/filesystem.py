@@ -34,21 +34,31 @@ def open_file(path: str, fs=None, mode: str = "r", encoding: str = "utf-8"):
 
 
 def list_files(fs, path: str, file_pattern: str | None = None) -> List[str]:
-    """List files directly under path, sorted. Optionally filter by glob pattern."""
+    """List files directly under path, sorted. Optionally filter by glob pattern.
+
+    Files ending in .tmp are always excluded — they are in-progress writes from
+    compact and must never be picked up by a concurrent or immediately-following run.
+    """
     if file_pattern is not None:
         pattern = path.rstrip("/") + "/" + file_pattern
         if fs is None:
             import glob as glob_mod
-            return sorted(p for p in glob_mod.glob(pattern) if os.path.isfile(p))
-        return sorted(fs.glob(pattern))
+            return sorted(
+                p for p in glob_mod.glob(pattern)
+                if os.path.isfile(p) and not p.endswith(".tmp")
+            )
+        return sorted(p for p in fs.glob(pattern) if not p.endswith(".tmp"))
     if fs is None:
         return sorted(
             os.path.join(path, name)
             for name in os.listdir(path)
-            if os.path.isfile(os.path.join(path, name))
+            if os.path.isfile(os.path.join(path, name)) and not name.endswith(".tmp")
         )
     entries = fs.ls(path, detail=True)
-    return sorted(e["name"] for e in entries if e["type"] == "file")
+    return sorted(
+        e["name"] for e in entries
+        if e["type"] == "file" and not e["name"].endswith(".tmp")
+    )
 
 
 def file_basename(path: str) -> str:

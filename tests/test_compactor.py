@@ -1,11 +1,17 @@
 import gzip
 import json
+import os
 
 import pytest
 from click.testing import CliRunner
 
 from filedge.cli import cli
 from filedge.compactor import compact
+
+
+def _data_files(output_path):
+    """Return batch files in output dir, excluding the .filedge metadata directory."""
+    return [f for f in output_path.iterdir() if f.name != ".filedge" and not f.name.endswith(".tmp")]
 
 
 def _write_ndjson(path, rows):
@@ -44,7 +50,7 @@ def test_compact_merges_files(source, output):
     assert result["batches"] == 1
     assert result["files_compacted"] == 2
 
-    out_files = list(output.iterdir())
+    out_files = _data_files(output)
     assert len(out_files) == 1
     rows = _read_ndjson(out_files[0])
     assert len(rows) == 3
@@ -59,7 +65,7 @@ def test_compact_respects_max_files(source, output):
 
     assert result["batches"] == 3  # 2 + 2 + 1
     assert result["files_compacted"] == 5
-    out_files = sorted(output.iterdir())
+    out_files = sorted(_data_files(output))
     assert len(out_files) == 3
 
 
@@ -68,7 +74,7 @@ def test_compact_compress_produces_gz(source, output):
 
     compact(str(source), str(output), compress=True)
 
-    out_files = list(output.iterdir())
+    out_files = _data_files(output)
     assert len(out_files) == 1
     assert out_files[0].name.endswith(".ndjson.gz")
     rows = _read_ndjson_gz(out_files[0])
@@ -86,9 +92,9 @@ def test_compact_output_naming_includes_timestamp_and_index(source, output):
 
     compact(str(source), str(output), max_files=2)
 
-    names = sorted(f.name for f in output.iterdir())
-    assert names[0].endswith("_0001.ndjson")
-    assert names[1].endswith("_0002.ndjson")
+    names = sorted(f.name for f in _data_files(output))
+    assert "_0001.ndjson" in names[0]
+    assert "_0002.ndjson" in names[1]
 
 
 def test_compact_skips_blank_lines(source, output):
@@ -96,7 +102,7 @@ def test_compact_skips_blank_lines(source, output):
 
     compact(str(source), str(output))
 
-    rows = _read_ndjson(list(output.iterdir())[0])
+    rows = _read_ndjson(_data_files(output)[0])
     assert len(rows) == 2
 
 
@@ -105,7 +111,7 @@ def test_compact_normalises_json_whitespace(source, output):
 
     compact(str(source), str(output))
 
-    rows = _read_ndjson(list(output.iterdir())[0])
+    rows = _read_ndjson(_data_files(output)[0])
     assert rows[0] == {"a": 1, "b": 2}
 
 
@@ -136,6 +142,77 @@ def test_compact_cleans_up_partial_output_on_error(source, output):
         compact(str(source), str(output))
 
     assert list(output.iterdir()) == []
+
+
+def test_compact_manifest_mode_skips_already_processed(source, output):
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    _write_ndjson(source / "b.ndjson", [{"id": 2}])
+
+    result1 = compact(str(source), str(output))
+    assert result1["files_compacted"] == 2
+
+    # New file arrives
+    _write_ndjson(source / "c.ndjson", [{"id": 3}])
+
+    result2 = compact(str(source), str(output))
+    assert result2["files_compacted"] == 1  # only c.ndjson
+    assert result2["batches"] == 1
+
+    # Two batch files total; all three rows present across them
+    batch_files = sorted(_data_files(output))
+    assert len(batch_files) == 2
+    all_rows = []
+    for bf in batch_files:
+        all_rows.extend(_read_ndjson(bf))
+    assert {r["id"] for r in all_rows} == {1, 2, 3}
+
+
+def test_compact_manifest_mode_rerun_with_no_new_files(source, output):
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    compact(str(source), str(output))
+
+    result = compact(str(source), str(output))
+    assert result == {"batches": 0, "files_compacted": 0}
+
+
+def test_compact_manifest_not_visible_to_list_files(source, output):
+    from filedge.filesystem import list_files
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    compact(str(source), str(output))
+
+    # list_files on the output dir must not see the manifest (check filenames only)
+    listed = list_files(None, str(output))
+    basenames = [os.path.basename(p) for p in listed]
+    assert all(not b.startswith(".filedge") for b in basenames)
+    assert all("compact_manifest" not in b for b in basenames)
+
+
+def test_compact_delete_source_removes_source_files(source, output):
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    _write_ndjson(source / "b.ndjson", [{"id": 2}])
+
+    result = compact(str(source), str(output), delete_source=True)
+
+    assert result["files_compacted"] == 2
+    assert list(source.iterdir()) == []  # source files deleted
+
+
+def test_compact_delete_source_rerun_is_noop(source, output):
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    compact(str(source), str(output), delete_source=True)
+
+    result = compact(str(source), str(output), delete_source=True)
+    assert result == {"batches": 0, "files_compacted": 0}
+
+
+def test_list_files_excludes_tmp(source):
+    from filedge.filesystem import list_files
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    (source / "partial.ndjson.tmp").write_text("incomplete")
+
+    files = list_files(None, str(source))
+    assert all(not f.endswith(".tmp") for f in files)
+    assert len(files) == 1
 
 
 def test_compact_cli_compress_flag(tmp_path):
