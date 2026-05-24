@@ -25,7 +25,7 @@ def test_create_audit_tables_adds_run_id_column(db):
 def test_create_audit_tables_migrates_existing_table_without_run_id(tmp_path):
     """An audit DB written by an older filedge (no run_id column) must be upgraded
     by create_audit_tables() without losing rows."""
-    from filedge.db import Database, create_audit_tables, find_file_by_hash, insert_pending
+    from filedge.db import Database, create_audit_tables, find_file_by_hash
 
     db_path = tmp_path / "legacy.db"
     legacy = Database(f"sqlite:///{db_path}")
