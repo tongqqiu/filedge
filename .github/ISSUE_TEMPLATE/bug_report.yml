@@ -1,0 +1,66 @@
+name: Bug report
+description: A reproducible bug in filedge
+title: "[bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. The more reproducible the
+        report, the faster it can be fixed.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what actually occurred?
+      placeholder: |
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal `pipeline.yaml`, sample input file, and CLI invocation.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Filedge version / commit SHA
+      placeholder: "0.1.0 or abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: connector
+    attributes:
+      label: Connector
+      options:
+        - sqlite
+        - postgres
+        - bigquery
+        - databricks
+        - other / not applicable
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.13"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / traceback
+      description: Full traceback if there was one. Audit DB state (`filedge status --json`) helps too.
+      render: shell
