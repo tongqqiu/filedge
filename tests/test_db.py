@@ -18,6 +18,43 @@ def _audit_columns(db) -> set[str]:
     return {row[1] for row in cursor.fetchall()}
 
 
+def test_count_stale_processing_returns_zero_when_no_processing_rows(db):
+    from filedge.db import count_stale_processing
+    assert count_stale_processing(db, stale_minutes=30) == 0
+
+
+def test_count_stale_processing_is_read_only_and_counts_old_locks(db, tmp_path):
+    """count_stale_processing must not mutate state — repeated calls return the same."""
+    import datetime
+    from filedge.db import (
+        Database, claim_processing, count_stale_processing,
+        create_audit_tables, find_file_by_hash, insert_pending,
+    )
+
+    db2 = Database(f"sqlite:///{tmp_path}/count_stale.db")
+    create_audit_tables(db2)
+    insert_pending(db2, "fresh.csv", "h-fresh")
+    insert_pending(db2, "stale.csv", "h-stale")
+    claim_processing(db2, "h-fresh")
+    claim_processing(db2, "h-stale")
+    # Backdate the stale row's claimed_at by 2 hours.
+    long_ago = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=2)).isoformat()
+    db2.execute(
+        "UPDATE etl_file_audit SET claimed_at=? WHERE content_hash=?",
+        [long_ago, "h-stale"],
+    )
+    db2.commit()
+
+    # First call: 1 stale row at 30-min threshold.
+    assert count_stale_processing(db2, stale_minutes=30) == 1
+    # Second call same answer — read-only.
+    assert count_stale_processing(db2, stale_minutes=30) == 1
+    # PROCESSING rows unchanged.
+    assert find_file_by_hash(db2, "h-stale").state == "PROCESSING"
+    assert find_file_by_hash(db2, "h-fresh").state == "PROCESSING"
+    db2.close()
+
+
 def test_create_audit_tables_adds_run_id_column(db):
     assert "run_id" in _audit_columns(db)
 

@@ -82,6 +82,56 @@ Open Jaeger at http://localhost:16686, select service `filedge`, and you should 
 
 When neither `--otel-traces` nor `FILEDGE_OTEL_TRACES=true` is set, `opentelemetry.*` is never imported. The base `pip install filedge` (no `[otel]` extra) works exactly the same — there are no dangling import errors, no startup overhead, and no runtime cost on the hot path.
 
+## Metrics
+
+Filedge also emits OpenTelemetry **metrics** — counters, histograms, and observable gauges that drive dashboards and SLO alerts. Metrics are independent of tracing: enable either, both, or neither.
+
+### Enable
+
+```bash
+filedge run --otel-metrics …
+```
+
+or env:
+
+```bash
+export FILEDGE_OTEL_METRICS=true
+```
+
+Same precedence as tracing — CLI flag wins. Honors the standard `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_PROTOCOL`, and `OTEL_METRIC_EXPORT_INTERVAL` env vars.
+
+### Metrics surface
+
+| Name | Type | Unit | Source |
+|---|---|---|---|
+| `filedge.files.committed` | counter | files | +1 per COMMITTED file |
+| `filedge.files.failed` | counter | files | +1 per FAILED file |
+| `filedge.bytes.ingested` | counter | bytes (`By`) | sum of bytes for COMMITTED files |
+| `filedge.file.processing.duration_seconds` | histogram | s | per-File load duration |
+| `filedge.audit.pending_count` | observable gauge | files | sampled from Audit DB at collection time |
+| `filedge.audit.stale_processing_count` | observable gauge | files | sampled from Audit DB at collection time |
+
+Every counter/histogram point carries the `filedge.run_id` attribute — group by it in PromQL or your OTel backend to see per-Run throughput, failure rate, or latency.
+
+Observable gauges sample the Audit DB on demand (at OTel collection time), not at Run start. For a short-lived `filedge run` process the final sample is taken on meter shutdown, capturing end-of-Run state. For a long-running collector scraping a sidecar Audit DB, the gauges track backlog continuously.
+
+### Sample dashboards
+
+```promql
+# Throughput (committed files/sec, last 5 min)
+rate(filedge_files_committed_total[5m])
+
+# Failure rate (per-Run)
+sum by (filedge_run_id) (filedge_files_failed_total)
+  / sum by (filedge_run_id) (filedge_files_committed_total + filedge_files_failed_total)
+
+# p95 per-File latency (last 1 hour)
+histogram_quantile(0.95, sum by (le) (rate(filedge_file_processing_duration_seconds_bucket[1h])))
+
+# Pending backlog SLO ("page if pending > 1000 for 10 min")
+filedge_audit_pending_count > 1000
+```
+
 ## Roadmap
 
-Tier 2 also tracks OTel metrics (#79) and an OTel log bridge (#80). Tier 3 will add a `filedge healthcheck` subcommand (#81) for K8s liveness/readiness probes.
+An OTel log bridge (#80) — forward existing JSON logs via OTLP for unified traces/metrics/logs correlation — and a `filedge healthcheck` subcommand (#81) for K8s liveness/readiness probes are tracked as separate issues.

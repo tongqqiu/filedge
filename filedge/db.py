@@ -214,6 +214,21 @@ def reset_eligible_failed(db: Database, retry_cap: int) -> int:
     return cursor.rowcount
 
 
+def count_stale_processing(db: Database, stale_minutes: int) -> int:
+    """Return the number of PROCESSING rows whose lock is older than the threshold.
+
+    Read-only — does not mutate the audit table. Used by the OTel
+    `filedge.audit.stale_processing_count` observable gauge.
+    """
+    cutoff = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=stale_minutes)).isoformat()
+    cursor = db.execute(
+        "SELECT COUNT(*) FROM etl_file_audit"
+        " WHERE state='PROCESSING' AND claimed_at < ?",
+        [cutoff],
+    )
+    return cursor.fetchone()[0]
+
+
 def reclaim_stale_processing(db: Database, stale_minutes: int) -> int:
     cutoff = (datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=stale_minutes)).isoformat()
     cursor = db.execute(
