@@ -4,7 +4,7 @@ from filedge.db import (
     Database,
     claim_processing,
     create_audit_tables,
-    find_file_by_hash,
+    get_hash_states,
     insert_pending,
     mark_committed,
     mark_failed,
@@ -37,7 +37,7 @@ def run_pipeline(
 
         connector.ensure_table(config)
 
-        files = list_files(fs, root)
+        files = list_files(fs, root, file_pattern=config.file_pattern)
         emit_progress(progress, "hashing", "start", total=len(files))
         file_hashes = {}
         for path in files:
@@ -46,11 +46,13 @@ def run_pipeline(
         emit_progress(progress, "hashing", "finish", total=len(files))
 
         emit_progress(progress, "registering", "start", total=len(files))
+        hash_states = get_hash_states(db, list(file_hashes.values()))
         new_files = 0
         for path in files:
             content_hash = file_hashes[path]
-            if find_file_by_hash(db, content_hash) is None:
-                insert_pending(db, file_basename(path), content_hash)
+            if content_hash not in hash_states:
+                insert_pending(db, file_basename(path), content_hash, source_dir=watched_dir)
+                hash_states[content_hash] = "PENDING"
                 new_files += 1
             emit_progress(progress, "registering", "advance", path=path)
         db.commit()
@@ -60,9 +62,9 @@ def run_pipeline(
         pending_files = []
         for path in files:
             content_hash = file_hashes[path]
-            record = find_file_by_hash(db, content_hash)
-            if record is None or record.state != "PENDING":
-                if record is not None and record.state == "FAILED":
+            state = hash_states.get(content_hash)
+            if state != "PENDING":
+                if state == "FAILED":
                     skipped += 1
                 continue
             pending_files.append((path, content_hash))

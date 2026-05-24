@@ -33,8 +33,14 @@ def open_file(path: str, fs=None, mode: str = "r", encoding: str = "utf-8"):
     return open(path, mode, encoding=encoding, newline="")
 
 
-def list_files(fs, path: str) -> List[str]:
-    """List files directly under path, sorted."""
+def list_files(fs, path: str, file_pattern: str | None = None) -> List[str]:
+    """List files directly under path, sorted. Optionally filter by glob pattern."""
+    if file_pattern is not None:
+        pattern = path.rstrip("/") + "/" + file_pattern
+        if fs is None:
+            import glob as glob_mod
+            return sorted(p for p in glob_mod.glob(pattern) if os.path.isfile(p))
+        return sorted(fs.glob(pattern))
     if fs is None:
         return sorted(
             os.path.join(path, name)

@@ -83,6 +83,20 @@ def test_reclaim_stale_processing_clears_worker_id(db):
     assert record.worker_id is None
 
 
+def test_insert_pending_stores_source_dir(db):
+    insert_pending(db, "orders.csv", "h_sd", source_dir="/data/incoming")
+    db.commit()
+    record = find_file_by_hash(db, "h_sd")
+    assert record.source_dir == "/data/incoming"
+
+
+def test_insert_pending_source_dir_defaults_to_none(db):
+    insert_pending(db, "orders.csv", "h_sd2")
+    db.commit()
+    record = find_file_by_hash(db, "h_sd2")
+    assert record.source_dir is None
+
+
 def test_duplicate_hash_insert_is_noop(db):
     insert_pending(db, "first.csv", "samehash")
     db.commit()

@@ -144,6 +144,28 @@ To change the schema, you must alter the destination table manually and then upd
               restartPolicy: OnFailure
     ```
 
+## Filtering files
+
+By default, `filedge run` processes every file directly under `--dir`. Use `file_pattern` in `pipeline.yaml` to restrict which files are picked up:
+
+```yaml
+file_pattern: "*.csv"
+```
+
+Any glob syntax supported by your filesystem works: `orders_*.csv`, `*.ndjson`, etc. On S3 and GCS, patterns with a fixed prefix (e.g. `report_*.csv`) use the storage API's native prefix filter — more efficient than a bare `*.csv` which lists all objects first and then filters client-side.
+
+Subdirectories are never scanned regardless of the pattern. Filedge is a flat drop-zone: place files directly in the watched directory.
+
+## Scale limits
+
+Filedge is designed for watched directories of up to **~50,000 files**. Within that range:
+
+- All file paths and their SHA-256 hashes are held in memory during a run (~2 MB at 50K files).
+- Registration uses a batched `SELECT … IN (…)` query — a single round-trip regardless of file count.
+- Each file is processed and committed individually, so memory per file is bounded by `batch_size` rows (default 1,000).
+
+For SQLite as the **destination** (not the audit DB), the connector holds an exclusive write lock for the duration of each file's insert. Run filedge as a single process against a SQLite destination; concurrent writers will contend on the lock.
+
 ## Options
 
 | Option | Default | Description |
