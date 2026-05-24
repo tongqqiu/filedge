@@ -82,6 +82,20 @@ If any row is invalid, the whole File fails under Strict Mode.
 
 ---
 
+## File Order
+
+CDC File order matters when multiple Files contain changes for the same key. Filedge processes Files in sorted path order during a Run. Your CDC producer or materializer must name or partition Files so that sorted path order matches the intended apply order:
+
+```
+customers_20260524T100000.ndjson
+customers_20260524T101000.ndjson
+customers_20260524T102000.ndjson
+```
+
+Within one File, `sequence_by` chooses the final change for a key. Across Files, Filedge does not infer a global order from row-level sequence values in the current SCD Type 1 model.
+
+---
+
 ## Supported Connectors
 
 CDC Files are currently supported by:

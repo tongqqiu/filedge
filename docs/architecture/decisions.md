@@ -85,3 +85,13 @@ This keeps Filedge's boundary consistent with SFTP and API sources: external too
 Aggressive inference misleads operators when sparse nulls or format exceptions appear beyond the sample window. Conservative inference produces configs full of `string` columns that defeat the tool's purpose. Annotated tiers give operators exactly the signal they need: "this column is fine, that one needs your eyes."
 
 [Full ADR](../adr/0008-schema-inference-confidence-tiers.md)
+
+---
+
+## ADR-0009: Warehouse CDC uses Destination-side Applied File Markers {#adr-0009}
+
+Warehouse CDC Connectors use a Destination-side Applied File Marker keyed by destination table and Content Hash to make retries safe across the Audit DB / Destination failure window.
+
+This is needed because replaying a CDC File re-applies business-key mutations, which cannot be made safe by row-level `_source_file_hash` alone. The Applied File Marker complements the Audit DB; it does not replace the Audit Record.
+
+[Full ADR](../adr/0009-warehouse-cdc-applied-file-markers.md)
