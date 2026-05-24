@@ -96,14 +96,15 @@ Within one File, `sequence_by` chooses the final change for a key. Across Files,
 
 ---
 
+
 ## Supported Connectors
 
 CDC Files are currently supported by:
 
 - SQLite
 - PostgreSQL
-
-Other connectors fail clearly for `write_mode: cdc` until their destination-specific CDC apply path is implemented.
+- BigQuery
+- Databricks
 
 ---
 
