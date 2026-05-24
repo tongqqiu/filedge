@@ -1,5 +1,12 @@
 # Filedge
 
+[![CI](https://github.com/tongqqiu/filedge/actions/workflows/ci.yml/badge.svg)](https://github.com/tongqqiu/filedge/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/tongqqiu/filedge/branch/main/graph/badge.svg)](https://codecov.io/gh/tongqqiu/filedge)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
 A batch ETL system built around the reliability patterns that standard Airflow + Spark stacks often miss: atomic commits, content-based idempotency, automatic retry, and a full audit trail — with pluggable destination support for PostgreSQL, BigQuery, Databricks, and SQLite.
 
 ## The Problem

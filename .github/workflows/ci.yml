@@ -53,4 +53,12 @@ jobs:
       - name: Test
         env:
           DATABASE_URL: postgresql://postgres:etl@localhost/etldb
-        run: uv run pytest --cov=filedge --cov-report=term-missing
+        run: uv run pytest --cov=filedge --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.13'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
