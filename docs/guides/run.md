@@ -85,11 +85,13 @@ The default `retry_cap` is 3. Configure it in `pipeline.yaml`:
 retry_cap: 5
 ```
 
-To manually re-queue a terminal failure (after fixing the source data):
+To manually re-queue a terminal failure (after fixing the source data), use `filedge requeue`:
 
-```sql
-UPDATE etl_file_audit SET state='PENDING', attempt_count=0 WHERE content_hash='<hash>';
+```bash
+filedge requeue bad_data.csv
 ```
+
+See the [Requeue failed files](requeue.md) guide for the full workflow, bulk recovery, and disambiguation options.
 
 ## Stale lock recovery
 

@@ -1,11 +1,15 @@
 from filedge.db import (
     claim_processing,
     find_file_by_hash,
+    find_terminal_failed_by_filename,
     get_status_summary,
     insert_pending,
+    list_terminal_failed,
     mark_committed,
     mark_failed,
     reclaim_stale_processing,
+    requeue_all_terminal_failed,
+    requeue_by_hash,
 )
 
 
@@ -132,5 +136,83 @@ def test_get_status_summary(db):
     assert summary["FAILED"] == 1
     assert len(summary["recent_failures"]) == 1
     assert summary["recent_failures"][0]["filename"] == "d.csv"
+    assert summary["recent_failures"][0]["content_hash"] == "h4"
     assert summary["recent_failures"][0]["error_message"] == "parse error"
+
+
+def _make_terminal_failed(db, filename, content_hash, retry_cap=3):
+    insert_pending(db, filename, content_hash)
+    for _ in range(retry_cap):
+        claim_processing(db, content_hash)
+        mark_failed(db, content_hash, "persistent error")
+    db.commit()
+
+
+def test_find_terminal_failed_by_filename_returns_match(db):
+    _make_terminal_failed(db, "orders.csv", "term1")
+    records = find_terminal_failed_by_filename(db, "orders.csv", retry_cap=3)
+    assert len(records) == 1
+    assert records[0].content_hash == "term1"
+    assert records[0].state == "FAILED"
+    assert records[0].attempt_count == 3
+
+
+def test_find_terminal_failed_by_filename_returns_multiple(db):
+    _make_terminal_failed(db, "orders.csv", "hashA")
+    _make_terminal_failed(db, "orders.csv", "hashB")
+    records = find_terminal_failed_by_filename(db, "orders.csv", retry_cap=3)
+    hashes = {r.content_hash for r in records}
+    assert hashes == {"hashA", "hashB"}
+
+
+def test_find_terminal_failed_by_filename_ignores_non_terminal(db):
+    insert_pending(db, "orders.csv", "non_term")
+    claim_processing(db, "non_term")
+    mark_failed(db, "non_term", "err")  # attempt_count=1 < retry_cap=3
+    db.commit()
+    records = find_terminal_failed_by_filename(db, "orders.csv", retry_cap=3)
+    assert records == []
+
+
+def test_find_terminal_failed_by_filename_no_match(db):
+    records = find_terminal_failed_by_filename(db, "missing.csv", retry_cap=3)
+    assert records == []
+
+
+def test_list_terminal_failed_returns_all(db):
+    _make_terminal_failed(db, "a.csv", "ta")
+    _make_terminal_failed(db, "b.csv", "tb")
+    insert_pending(db, "c.csv", "tc")  # PENDING — excluded
+    records = list_terminal_failed(db, retry_cap=3)
+    hashes = {r.content_hash for r in records}
+    assert hashes == {"ta", "tb"}
+
+
+def test_requeue_by_hash_resets_state_and_budget(db):
+    _make_terminal_failed(db, "orders.csv", "rq1")
+    requeue_by_hash(db, "rq1")
+    db.commit()
+    record = find_file_by_hash(db, "rq1")
+    assert record.state == "PENDING"
+    assert record.attempt_count == 0
+    assert record.error_message is None
+    assert record.worker_id is None
+
+
+def test_requeue_all_terminal_failed_resets_count(db):
+    _make_terminal_failed(db, "a.csv", "ra")
+    _make_terminal_failed(db, "b.csv", "rb")
+    insert_pending(db, "c.csv", "rc")  # PENDING — untouched
+    n = requeue_all_terminal_failed(db, retry_cap=3)
+    db.commit()
+    assert n == 2
+    assert find_file_by_hash(db, "ra").state == "PENDING"
+    assert find_file_by_hash(db, "rb").state == "PENDING"
+    assert find_file_by_hash(db, "rc").state == "PENDING"  # already PENDING
+
+
+def test_requeue_all_terminal_failed_returns_zero_when_none(db):
+    n = requeue_all_terminal_failed(db, retry_cap=3)
+    db.commit()
+    assert n == 0
 

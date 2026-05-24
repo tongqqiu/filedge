@@ -6,7 +6,16 @@ import click
 
 from filedge.compactor import compact as run_compact
 from filedge.connectors import SchemaError
-from filedge.db import Database, create_audit_tables, get_status_summary
+from filedge.db import (
+    Database,
+    create_audit_tables,
+    find_file_by_hash,
+    find_terminal_failed_by_filename,
+    get_status_summary,
+    list_terminal_failed,
+    requeue_all_terminal_failed,
+    requeue_by_hash,
+)
 from filedge.filesystem import get_filesystem, open_file
 from filedge.config import load_config
 from filedge.inferrer import infer_schema, infer_schema_from_parquet
@@ -285,3 +294,123 @@ def completion(shell):
 
     cls = ZshComplete if shell == "zsh" else BashComplete
     click.echo(cls(cli, {}, "filedge", "_FILEDGE_COMPLETE").source(), nl=False)
+
+
+@cli.command()
+@click.argument("filename", required=False)
+@click.option("--hash", "content_hash", default=None,
+              help="Content hash to disambiguate when multiple records share the same filename")
+@click.option("--all-terminal-failed", "all_terminal_failed", is_flag=True,
+              help="Requeue all terminal-FAILED files")
+@click.option("--dry-run", is_flag=True,
+              help="List files that would be requeued without making changes (requires --all-terminal-failed)")
+@click.option("--yes", is_flag=True,
+              help="Confirm bulk requeue (required with --all-terminal-failed)")
+@click.option("--retry-cap", default=3, show_default=True,
+              help="Retry cap used to identify terminal-FAILED files; must match pipeline.yaml")
+@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL",
+              help="Audit database URL")
+def requeue(filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap, audit_db_url):
+    """Requeue terminal-FAILED files so they are retried on the next run.
+
+    \b
+    Single file:
+      filedge requeue orders.csv
+      filedge requeue orders.csv --hash a1b2c3...  # disambiguate duplicate filenames
+
+    \b
+    Bulk:
+      filedge requeue --all-terminal-failed           # preview count
+      filedge requeue --all-terminal-failed --dry-run # list affected files
+      filedge requeue --all-terminal-failed --yes     # execute
+    """
+    if filename and all_terminal_failed:
+        click.echo("Error: provide either a filename or --all-terminal-failed, not both.", err=True)
+        sys.exit(1)
+    if not filename and not all_terminal_failed:
+        click.echo("Error: provide a filename or --all-terminal-failed.", err=True)
+        sys.exit(1)
+    if filename and dry_run:
+        click.echo("Error: --dry-run is only valid with --all-terminal-failed.", err=True)
+        sys.exit(1)
+    if filename and yes:
+        click.echo("Error: --yes is only valid with --all-terminal-failed.", err=True)
+        sys.exit(1)
+    if dry_run and yes:
+        click.echo("Error: --dry-run and --yes are mutually exclusive.", err=True)
+        sys.exit(1)
+
+    db = Database(audit_db_url)
+    create_audit_tables(db)
+
+    try:
+        if all_terminal_failed:
+            records = list_terminal_failed(db, retry_cap)
+
+            if dry_run:
+                if not records:
+                    click.echo("No terminal-FAILED files found.")
+                    return
+                for r in records:
+                    click.echo(f"  {r.filename}  {r.content_hash}  {r.error_message or ''}")
+                click.echo(
+                    f"\nWould requeue {len(records)} file(s). Re-run with --yes to proceed."
+                )
+                return
+
+            if not yes:
+                count = len(records)
+                if count == 0:
+                    click.echo("No terminal-FAILED files found.")
+                    return
+                click.echo(
+                    f"Found {count} terminal-FAILED file(s). Re-run with --yes to requeue."
+                )
+                sys.exit(1)
+
+            n = requeue_all_terminal_failed(db, retry_cap)
+            db.commit()
+            click.echo(f"Requeued: {n}")
+
+        else:
+            if content_hash:
+                record = find_file_by_hash(db, content_hash)
+                if record is None:
+                    click.echo(f"Error: no record found for hash {content_hash!r}.", err=True)
+                    sys.exit(1)
+                if record.state != "FAILED" or record.attempt_count < retry_cap:
+                    click.echo(
+                        f"Error: {record.filename!r} is in state {record.state!r} with"
+                        f" attempt_count={record.attempt_count} — not eligible for requeue"
+                        f" (retry_cap={retry_cap}).",
+                        err=True,
+                    )
+                    sys.exit(1)
+                requeue_by_hash(db, content_hash)
+                db.commit()
+                click.echo(f"Requeued: {record.filename} ({content_hash[:12]}…)")
+            else:
+                records = find_terminal_failed_by_filename(db, filename, retry_cap)
+                if not records:
+                    click.echo(
+                        f"Error: no terminal-FAILED record found for {filename!r}.", err=True
+                    )
+                    sys.exit(1)
+                if len(records) > 1:
+                    click.echo(
+                        f"Error: {len(records)} terminal-FAILED records found for {filename!r}."
+                        f" Use --hash to disambiguate:",
+                        err=True,
+                    )
+                    for r in records:
+                        click.echo(
+                            f"  --hash {r.content_hash}  (error: {r.error_message or 'unknown'})",
+                            err=True,
+                        )
+                    sys.exit(1)
+                record = records[0]
+                requeue_by_hash(db, record.content_hash)
+                db.commit()
+                click.echo(f"Requeued: {record.filename} ({record.content_hash[:12]}…)")
+    finally:
+        db.close()
