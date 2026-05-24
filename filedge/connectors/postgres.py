@@ -6,6 +6,11 @@ from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
 
+def _q(name: str) -> str:
+    """Double-quote a PostgreSQL identifier, escaping embedded quotes."""
+    return '"' + name.replace('"', '""') + '"'
+
+
 _TYPE_TO_SQL = {
     "string": "TEXT",
     "integer": "INTEGER",
@@ -60,9 +65,9 @@ class PostgresConnector(Connector):
     def _create_table(self, config: PipelineConfig) -> None:
         col_defs = ["_id BIGSERIAL PRIMARY KEY"]
         for col in configured_columns(config, _TYPE_TO_SQL):
-            col_defs.append(f"{col.name} {col.type}")
+            col_defs.append(f"{_q(col.name)} {col.type}")
         for col in provenance_columns(_TYPE_TO_SQL, "TIMESTAMP WITH TIME ZONE"):
-            col_defs.append(f"{col.name} {col.type} NOT NULL")
+            col_defs.append(f"{_q(col.name)} {col.type} NOT NULL")
         ddl = f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})"
         with self._conn.cursor() as cur:
             cur.execute(ddl)
@@ -89,8 +94,9 @@ class PostgresConnector(Connector):
                     if dest_cols is None:
                         dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
                         placeholders = ", ".join(["%s"] * len(dest_cols))
+                        quoted = ", ".join(_q(c) for c in dest_cols)
                         insert_sql = (
-                            f"INSERT INTO {table} ({', '.join(dest_cols)})"
+                            f"INSERT INTO {table} ({quoted})"
                             f" VALUES ({placeholders})"
                         )
                     values = list(row.values()) + [file_hash, ingested_at]
@@ -116,7 +122,7 @@ class PostgresConnector(Connector):
     ) -> None:
         ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
         changes = plan_cdc_changes(rows, cdc)
-        key_predicate = " AND ".join([f"{column} = %s" for column in cdc.keys])
+        key_predicate = " AND ".join([f"{_q(column)} = %s" for column in cdc.keys])
 
         try:
             with self._conn.cursor() as cur:
@@ -136,8 +142,9 @@ class PostgresConnector(Connector):
                     dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
                     placeholders = ", ".join(["%s"] * len(dest_cols))
                     values = list(row.values()) + [file_hash, ingested_at]
+                    quoted = ", ".join(_q(c) for c in dest_cols)
                     cur.execute(
-                        f"INSERT INTO {table} ({', '.join(dest_cols)})"
+                        f"INSERT INTO {table} ({quoted})"
                         f" VALUES ({placeholders})",
                         values,
                     )
