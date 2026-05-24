@@ -7,6 +7,11 @@ from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
 
+def _q(name: str) -> str:
+    """Double-quote a SQLite identifier, escaping embedded quotes."""
+    return '"' + name.replace('"', '""') + '"'
+
+
 _TYPE_TO_SQL = {
     "string": "TEXT",
     "integer": "INTEGER",
@@ -50,9 +55,9 @@ class SQLiteConnector(Connector):
     def _create_table(self, conn: sqlite3.Connection, config: PipelineConfig) -> None:
         col_defs = ["_id INTEGER PRIMARY KEY"]
         for col in configured_columns(config, _TYPE_TO_SQL):
-            col_defs.append(f"{col.name} {col.type}")
+            col_defs.append(f"{_q(col.name)} {col.type}")
         for col in provenance_columns(_TYPE_TO_SQL, "TEXT"):
-            col_defs.append(f"{col.name} {col.type} NOT NULL")
+            col_defs.append(f"{_q(col.name)} {col.type} NOT NULL")
         conn.execute(f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})")
         conn.execute(
             f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
@@ -77,8 +82,9 @@ class SQLiteConnector(Connector):
                 if dest_cols is None:
                     dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
                     placeholders = ", ".join(["?"] * len(dest_cols))
+                    quoted = ", ".join(_q(c) for c in dest_cols)
                     insert_sql = (
-                        f"INSERT INTO {table} ({', '.join(dest_cols)}) VALUES ({placeholders})"
+                        f"INSERT INTO {table} ({quoted}) VALUES ({placeholders})"
                     )
                 values = list(row.values()) + [file_hash, ingested_at]
                 batch.append(values)
@@ -104,7 +110,7 @@ class SQLiteConnector(Connector):
         conn = self._get_conn()
         ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
         changes = plan_cdc_changes(rows, cdc)
-        key_predicate = " AND ".join([f"{column} = ?" for column in cdc.keys])
+        key_predicate = " AND ".join([f"{_q(column)} = ?" for column in cdc.keys])
 
         try:
             for change in changes:
@@ -123,8 +129,9 @@ class SQLiteConnector(Connector):
                 dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
                 placeholders = ", ".join(["?"] * len(dest_cols))
                 values = list(row.values()) + [file_hash, ingested_at]
+                quoted = ", ".join(_q(c) for c in dest_cols)
                 conn.execute(
-                    f"INSERT INTO {table} ({', '.join(dest_cols)}) VALUES ({placeholders})",
+                    f"INSERT INTO {table} ({quoted}) VALUES ({placeholders})",
                     values,
                 )
 
