@@ -90,10 +90,13 @@ def run(watched_dir, config_path, audit_db_url, show_progress):
 @click.option("--output", required=True, help="Output prefix for compacted files")
 @click.option("--max-files", default=1000, show_default=True, help="Max input files per output file")
 @click.option("--compress", is_flag=True, help="Gzip-compress output (.ndjson.gz)")
-def compact(watched_dir, output, max_files, compress):
+@click.option("--delete-source", is_flag=True,
+              help="Delete source files after each batch commits (requires delete permission).")
+def compact(watched_dir, output, max_files, compress, delete_source):
     """Merge small NDJSON files into fewer larger files before ingestion."""
     try:
-        result = run_compact(watched_dir, output, max_files=max_files, compress=compress)
+        result = run_compact(watched_dir, output, max_files=max_files, compress=compress,
+                             delete_source=delete_source)
         click.echo(
             f"Batches written: {result['batches']}  "
             f"Files compacted: {result['files_compacted']}"
