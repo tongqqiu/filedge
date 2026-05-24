@@ -106,8 +106,23 @@ CDC Files are currently supported by:
 
 - SQLite
 - PostgreSQL
+- DuckDB
 - BigQuery
 - Databricks
+
+### Retry safety
+
+Each connector keeps CDC applies idempotent per Content Hash, but the mechanism
+differs by destination class:
+
+| Connector             | Mechanism                                                                  |
+| --------------------- | -------------------------------------------------------------------------- |
+| SQLite, PostgreSQL, DuckDB | In-transaction `DELETE` by business key followed by `INSERT` for non-deletes. Re-running the same File converges to the same destination state because `plan_cdc_changes` collapses each File to one final change per key. |
+| BigQuery, Databricks  | An `_filedge_applied_files` marker table records each `(destination_table, content_hash)` that has been applied. The Connector skips the apply if the marker is already present. Required because staged-MERGE flows cannot be wrapped in a single audit transaction. |
+
+DuckDB falls in the first group: the destination is a single local file with
+full transactional DDL/DML, so a `BEGIN ... COMMIT` around the per-key DELETE
+and INSERT statements is enough — no applied-files marker table is needed.
 
 ---
 
