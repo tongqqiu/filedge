@@ -8,6 +8,9 @@ CDC support is a write mode, not a source connector.
 CDC producer -> CDC Files -> Watched Directory -> filedge run -> Destination
 ```
 
+!!! warning "File size limit"
+    Filedge loads all rows from a CDC file into memory to resolve per-key ordering before writing. Keep individual CDC files under **~500,000 rows**. If your CDC producer emits larger files, split them before placing them in the watched directory.
+
 ---
 
 ## Example

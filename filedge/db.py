@@ -114,6 +114,26 @@ def _now() -> str:
     return datetime.datetime.now(datetime.UTC).isoformat()
 
 
+def get_hash_states(db: Database, hashes: list) -> Dict[str, str]:
+    """Return {content_hash: state} for all hashes that exist in the audit table.
+
+    Chunked to stay within SQLite's variable limit (999). Safe for any list size.
+    """
+    if not hashes:
+        return {}
+    result: Dict[str, str] = {}
+    chunk_size = 500
+    for i in range(0, len(hashes), chunk_size):
+        chunk = hashes[i : i + chunk_size]
+        placeholders = ", ".join(["?"] * len(chunk))
+        cursor = db.execute(
+            f"SELECT content_hash, state FROM etl_file_audit WHERE content_hash IN ({placeholders})",
+            chunk,
+        )
+        result.update({row[0]: row[1] for row in cursor.fetchall()})
+    return result
+
+
 def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     cursor = db.execute(
         "SELECT id, filename, content_hash, state, attempt_count, error_message, worker_id, claimed_at"

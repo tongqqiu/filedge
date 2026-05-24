@@ -40,6 +40,7 @@ class PipelineConfig:
     connector: Optional[ConnectorConfig] = None
     encoding: str = "utf-8"
     cdc: Optional[CdcConfig] = None
+    file_pattern: Optional[str] = None
 
 
 def load_config(path: str) -> PipelineConfig:
@@ -97,4 +98,5 @@ def load_config(path: str) -> PipelineConfig:
         connector=connector,
         encoding=data.get("encoding", "utf-8"),
         cdc=cdc,
+        file_pattern=data.get("file_pattern"),
     )
