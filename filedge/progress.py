@@ -12,6 +12,8 @@ class PipelineProgressEvent:
     total: Optional[int] = None
     rows: Optional[int] = None
     error: Optional[str] = None
+    file_hash: Optional[str] = None
+    bytes: Optional[int] = None
 
 
 ProgressReporter = Callable[[PipelineProgressEvent], None]
@@ -27,6 +29,8 @@ def emit_progress(
     total: Optional[int] = None,
     rows: Optional[int] = None,
     error: Optional[str] = None,
+    file_hash: Optional[str] = None,
+    bytes: Optional[int] = None,
 ) -> None:
     if reporter is None:
         return
@@ -39,8 +43,82 @@ def emit_progress(
             total=total,
             rows=rows,
             error=error,
+            file_hash=file_hash,
+            bytes=bytes,
         )
     )
+
+
+class TracingProgressReporter:
+    """ProgressReporter that emits OpenTelemetry spans for a Run and each File.
+
+    Use as a context manager: `__enter__` starts the `filedge.run` parent span,
+    `__exit__` closes it. Imports of `opentelemetry.*` are deferred to the
+    constructor so the base install (without the `filedge[otel]` extra) never
+    imports OTel and pays zero cost.
+    """
+
+    def __init__(self, run_id: str, tracer=None):
+        if tracer is None:
+            from opentelemetry import trace as _trace
+            tracer = _trace.get_tracer("filedge")
+        self._tracer = tracer
+        self._run_id = run_id
+        self._run_span_cm = None
+        self._run_span = None
+        self._file_span_cms: dict = {}
+
+    def __enter__(self):
+        self._run_span_cm = self._tracer.start_as_current_span("filedge.run")
+        self._run_span = self._run_span_cm.__enter__()
+        self._run_span.set_attribute("filedge.run_id", self._run_id)
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return self._run_span_cm.__exit__(exc_type, exc, tb)
+
+    def set_run_attributes(self, summary: dict) -> None:
+        """Copy selected summary fields onto the open Run span before context exit."""
+        if self._run_span is None:
+            return
+        for key in (
+            "files_scanned", "bytes_processed", "rows_committed",
+            "committed", "failed", "skipped", "new_files",
+            "reclaimed", "retried", "duration_s",
+        ):
+            if key in summary and summary[key] is not None:
+                self._run_span.set_attribute(f"filedge.{key}", summary[key])
+
+    def handle(self, event: PipelineProgressEvent) -> None:
+        if event.phase != "loading":
+            return
+        if event.action == "file_start":
+            span_cm = self._tracer.start_as_current_span("filedge.file")
+            span = span_cm.__enter__()
+            span.set_attribute("filedge.run_id", self._run_id)
+            span.set_attribute("filedge.filename", _basename(event.path))
+            if event.file_hash is not None:
+                span.set_attribute("filedge.file_hash", event.file_hash)
+            if event.bytes is not None:
+                span.set_attribute("filedge.bytes", event.bytes)
+            self._file_span_cms[event.path] = (span_cm, span)
+        elif event.action == "file_finish":
+            entry = self._file_span_cms.pop(event.path, None)
+            if entry is None:
+                return
+            span_cm, span = entry
+            if event.rows is not None:
+                span.set_attribute("filedge.rows", event.rows)
+            if event.error:
+                from opentelemetry.trace import Status, StatusCode
+                span.set_status(Status(StatusCode.ERROR, description=event.error))
+            span_cm.__exit__(None, None, None)
+
+
+def _basename(path):
+    if path is None:
+        return None
+    return path.split("/")[-1]
 
 
 class LoggingProgressReporter:

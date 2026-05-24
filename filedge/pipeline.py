@@ -49,10 +49,12 @@ def run_pipeline(
         files = list_files(fs, root, file_pattern=config.file_pattern)
         emit_progress(progress, "hashing", "start", total=len(files))
         file_hashes = {}
+        file_sizes = {}
         bytes_processed = 0
         for path in files:
             file_hashes[path] = compute_hash(path, fs)
-            bytes_processed += file_size(path, fs)
+            file_sizes[path] = file_size(path, fs)
+            bytes_processed += file_sizes[path]
             emit_progress(progress, "hashing", "advance", path=path)
         emit_progress(progress, "hashing", "finish", total=len(files))
 
@@ -89,7 +91,10 @@ def run_pipeline(
                 emit_progress(progress, "loading", "advance", path=path)
                 continue
 
-            emit_progress(progress, "loading", "file_start", path=path)
+            emit_progress(
+                progress, "loading", "file_start",
+                path=path, file_hash=content_hash, bytes=file_sizes.get(path),
+            )
             rows, error = load_file(
                 connector,
                 config,
