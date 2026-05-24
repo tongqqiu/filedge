@@ -56,11 +56,27 @@ def cli():
     default=None,
     help="Show live progress bars. Defaults to on for interactive terminals.",
 )
-def run(watched_dir, config_path, audit_db_url, show_progress):
+@click.option("--json", "output_json", is_flag=True,
+              help="Write the Run summary as a single JSON line to stdout. Exit non-zero if any file failed.")
+@click.option("--log-format", "log_format", type=click.Choice(["json", "text"]), default=None,
+              help="Log output format. Defaults to text on a TTY, json otherwise.")
+@click.option("--log-level", "log_level", default="INFO", show_default=True,
+              help="Log level (DEBUG, INFO, WARNING, ERROR).")
+def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_format, log_level):
     """Run the ETL pipeline for a Watched Directory."""
+    from filedge.log import configure_logging, get_logger
+    from filedge.progress import LoggingProgressReporter
+
     try:
+        is_tty = sys.stderr.isatty()
         if show_progress is None:
-            show_progress = sys.stderr.isatty()
+            show_progress = is_tty
+        if log_format is None:
+            log_format = "text" if is_tty else "json"
+
+        configure_logging(level=log_level, fmt=log_format)
+        run_id = _new_run_id()
+        log_reporter = LoggingProgressReporter(get_logger("filedge.pipeline"), run_id=run_id)
 
         if show_progress:
             from rich.console import Console
@@ -68,28 +84,48 @@ def run(watched_dir, config_path, audit_db_url, show_progress):
             console = Console(stderr=True)
             with RichPipelineProgress(console) as progress:
                 result = run_pipeline(
-                    watched_dir,
-                    config_path,
-                    audit_db_url,
-                    progress=progress.handle,
+                    watched_dir, config_path, audit_db_url,
+                    progress=_tee(progress.handle, log_reporter.handle),
+                    run_id=run_id,
                 )
         else:
-            result = run_pipeline(watched_dir, config_path, audit_db_url)
+            result = run_pipeline(
+                watched_dir, config_path, audit_db_url,
+                progress=log_reporter.handle, run_id=run_id,
+            )
 
-        click.echo(
-            f"Committed: {result['committed']}  "
-            f"Failed: {result['failed']}  "
-            f"Skipped: {result['skipped']}  "
-            f"New: {result['new_files']}  "
-            f"Reclaimed: {result['reclaimed']}  "
-            f"Retried: {result['retried']}"
-        )
+        if output_json:
+            click.echo(json_lib.dumps(result))
+        else:
+            click.echo(
+                f"Committed: {result['committed']}  "
+                f"Failed: {result['failed']}  "
+                f"Skipped: {result['skipped']}  "
+                f"New: {result['new_files']}  "
+                f"Reclaimed: {result['reclaimed']}  "
+                f"Retried: {result['retried']}"
+            )
+
+        if result["failed"] > 0:
+            sys.exit(1)
     except SchemaError as e:
         click.echo(f"Schema error: {e}", err=True)
         sys.exit(1)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
+
+def _new_run_id() -> str:
+    import uuid
+    return str(uuid.uuid4())
+
+
+def _tee(*handlers):
+    def fanout(event):
+        for h in handlers:
+            h(event)
+    return fanout
 
 
 @cli.command()

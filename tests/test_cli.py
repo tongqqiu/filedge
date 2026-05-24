@@ -24,6 +24,88 @@ def db_url(tmp_path):
     return url
 
 
+def _write_minimal_pipeline_config(path, dest_db_url):
+    path.write_text(
+        f"format: csv\ndest_table: items\nretry_cap: 3\nbatch_size: 100\n"
+        f"stale_timeout_minutes: 30\n"
+        f"connector:\n  type: sqlite\n  url: {dest_db_url}\n"
+        f"columns:\n"
+        f"  - source: name\n    dest: name\n    type: string\n    required: true\n"
+    )
+
+
+def test_run_json_writes_summary_to_stdout(tmp_path, db_url):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name\nAlice\n")
+    config_path = tmp_path / "pipeline.yaml"
+    _write_minimal_pipeline_config(config_path, f"sqlite:///{tmp_path}/dest.db")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "run",
+        "--dir", str(watched),
+        "--config", str(config_path),
+        "--audit-db-url", db_url,
+        "--no-progress",
+        "--json",
+    ])
+
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.stdout)
+    assert summary["committed"] == 1
+    assert summary["failed"] == 0
+    assert "run_id" in summary
+    assert "duration_s" in summary
+
+
+def test_run_exits_nonzero_when_a_file_fails(tmp_path, db_url):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    # Missing required column 'name' — file will fail to load.
+    (watched / "bad.csv").write_text("other\nvalue\n")
+    config_path = tmp_path / "pipeline.yaml"
+    _write_minimal_pipeline_config(config_path, f"sqlite:///{tmp_path}/dest.db")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "run",
+        "--dir", str(watched),
+        "--config", str(config_path),
+        "--audit-db-url", db_url,
+        "--no-progress",
+    ])
+
+    assert result.exit_code == 1, result.output
+
+
+def test_run_log_level_warning_suppresses_info_progress_lines(tmp_path, db_url):
+    """`filedge run --log-level WARNING` must hide INFO-level progress log lines
+    while still emitting WARNING+ (e.g. file load errors)."""
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name\nAlice\n")
+    config_path = tmp_path / "pipeline.yaml"
+    _write_minimal_pipeline_config(config_path, f"sqlite:///{tmp_path}/dest.db")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, [
+        "run",
+        "--dir", str(watched),
+        "--config", str(config_path),
+        "--audit-db-url", db_url,
+        "--no-progress",
+        "--log-format", "json",
+        "--log-level", "WARNING",
+    ])
+
+    assert result.exit_code == 0, result.output
+    # No INFO-level pipeline lines should appear (Click captures stderr in result.stderr).
+    stderr_lines = [line for line in result.stderr.splitlines() if line.strip()]
+    info_lines = [line for line in stderr_lines if '"level": "INFO"' in line]
+    assert info_lines == [], f"expected zero INFO lines, got: {info_lines}"
+
+
 def test_status_default_output(db_url):
     runner = CliRunner()
     result = runner.invoke(cli, ["status", "--audit-db-url", db_url])

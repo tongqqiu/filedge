@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     attempt_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
     worker_id TEXT,
+    run_id TEXT,
     claimed_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     attempt_count INTEGER NOT NULL DEFAULT 0,
     error_message TEXT,
     worker_id TEXT,
+    run_id TEXT,
     claimed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
@@ -91,6 +93,7 @@ def _ensure_audit_columns(db: Database) -> None:
     if db.dialect() == "postgres":
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS worker_id TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS source_dir TEXT")
+        db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS run_id TEXT")
         return
 
     cursor = db.execute("PRAGMA table_info(etl_file_audit)")
@@ -99,6 +102,8 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN worker_id TEXT")
     if "source_dir" not in existing:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN source_dir TEXT")
+    if "run_id" not in existing:
+        db.execute("ALTER TABLE etl_file_audit ADD COLUMN run_id TEXT")
 
 
 # --- File record ---
@@ -168,13 +173,18 @@ def insert_pending(
     )
 
 
-def claim_processing(db: Database, content_hash: str, worker_id: Optional[str] = None) -> bool:
+def claim_processing(
+    db: Database,
+    content_hash: str,
+    worker_id: Optional[str] = None,
+    run_id: Optional[str] = None,
+) -> bool:
     now = _now()
     cursor = db.execute(
         "UPDATE etl_file_audit"
-        " SET state='PROCESSING', worker_id=?, claimed_at=?, updated_at=?"
+        " SET state='PROCESSING', worker_id=?, run_id=?, claimed_at=?, updated_at=?"
         " WHERE content_hash=? AND state='PENDING'",
-        [worker_id, now, now, content_hash],
+        [worker_id, run_id, now, now, content_hash],
     )
     return cursor.rowcount == 1
 

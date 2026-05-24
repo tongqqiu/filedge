@@ -57,6 +57,52 @@ Committed: 3  Failed: 0  Skipped: 0  New: 3  Reclaimed: 0  Retried: 0
 | Reclaimed | Stale PROCESSING locks recovered |
 | Retried | Previously-failed files retried this run |
 
+### Machine-readable summary (`--json`)
+
+For scheduler integration, pass `--json` to receive the Run summary as a single
+JSON line on stdout (suppressing the human-readable line):
+
+```bash
+filedge run --dir ./incoming --config pipeline.yaml --json
+```
+
+```json
+{"run_id": "f3c8…", "started_at": "2026-05-24T14:00:00+00:00", "finished_at": "…", "duration_s": 1.42, "files_scanned": 12, "new_files": 3, "committed": 3, "failed": 0, "skipped": 0, "reclaimed": 0, "retried": 0, "rows_committed": 4218, "bytes_processed": 184320}
+```
+
+`run_id` is a UUID4 unique to each Run. It is stamped on every audit row
+processed by the Run (column `run_id` in `etl_file_audit`) and on every log line
+emitted during the Run — so you can correlate stdout, logs, and the audit DB.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0` | Run completed; zero files failed |
+| `1` | Run completed with at least one failed file, or aborted with an error |
+
+Schedulers (cron, Airflow, K8s CronJob) should key off this exit code rather
+than parsing stdout.
+
+### Structured logs
+
+Pipeline progress is also emitted to stderr as log lines. Defaults are
+TTY-aware: human-readable text in an interactive terminal, JSON when stderr is
+redirected to a file or scheduler. Override explicitly:
+
+```bash
+filedge run … --log-format json --log-level INFO
+```
+
+| Option | Default | Values |
+|--------|---------|--------|
+| `--log-format` | `text` if TTY else `json` | `text`, `json` |
+| `--log-level` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+
+Each JSON line carries `ts`, `level`, `logger`, `event`, `run_id`, and
+event-specific fields like `phase`, `action`, `path`, `rows`, `error` — ready
+to ingest into Loki, Datadog, or any log pipeline.
+
 ## Checking status
 
 ```bash
@@ -175,3 +221,7 @@ For SQLite as the **destination** (not the audit DB), the connector holds an exc
 | `--dir` | required | Watched directory path (local or cloud URI) |
 | `--config` | required | Path to `pipeline.yaml` |
 | `--audit-db-url` | `$FILEDGE_AUDIT_DB_URL` | Audit database URL |
+| `--progress` / `--no-progress` | auto (TTY-detect) | Toggle the Rich progress UI |
+| `--json` | off | Emit the Run summary as a JSON line on stdout |
+| `--log-format` | auto (TTY-detect) | `text` or `json` for stderr logs |
+| `--log-level` | `INFO` | Threshold for stderr logs |
