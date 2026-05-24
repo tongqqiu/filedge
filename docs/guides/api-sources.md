@@ -57,7 +57,7 @@ The exact Fetcher command is intentionally outside Filedge's contract. For dlt, 
 
 ```bash
 filedge run \
-  --watched-dir s3://my-bucket/landing/stripe/ \
+  --dir s3://my-bucket/landing/stripe/ \
   --config      pipeline.yaml \
   --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```
@@ -112,7 +112,7 @@ Then Filedge ingests those files:
 
 ```bash
 filedge run \
-  --watched-dir /data/landing/salesforce/ \
+  --dir /data/landing/salesforce/ \
   --config      pipeline.yaml \
   --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```
@@ -133,8 +133,8 @@ Every hour:
   ├── run-salesforce-fetcher --output s3://.../landing/salesforce/
 
 Every hour + 10 min:
-  ├── filedge run --watched-dir s3://.../landing/stripe/    --config pipeline.yaml ...
-  └── filedge run --watched-dir s3://.../landing/salesforce/ --config pipeline.yaml ...
+  ├── filedge run --dir s3://.../landing/stripe/    --config pipeline.yaml ...
+  └── filedge run --dir s3://.../landing/salesforce/ --config pipeline.yaml ...
 ```
 
 **Airflow:**
@@ -146,7 +146,7 @@ fetch_stripe = BashOperator(
 )
 ingest_stripe = BashOperator(
     task_id="ingest_stripe",
-    bash_command="filedge run --watched-dir s3://.../landing/stripe/ --config pipeline.yaml ...",
+    bash_command="filedge run --dir s3://.../landing/stripe/ --config pipeline.yaml ...",
 )
 fetch_stripe >> ingest_stripe
 ```

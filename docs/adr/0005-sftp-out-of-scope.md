@@ -10,13 +10,13 @@ Two reasons drove this decision:
 
 The alternative — supporting `sftp://` as a File Source via fsspec/sshfs — is technically straightforward but ignores both problems above. A separate sync process handles them cleanly without touching pipeline code.
 
-**Recommended pattern:** run rclone as a dedicated Cloud Run job or Lambda function on its own schedule. It syncs from the SFTP server to a cloud bucket (S3 or GCS), handling partial-transfer detection via `--min-age` and optional acknowledgment via `--sftp-ask-password` / move-on-success. A second Cloud Run job / Lambda runs `filedge run` with `--watched-dir` pointed at that bucket. The two jobs are scheduled, scaled, and monitored independently — a slow SFTP partner only affects the sync step.
+**Recommended pattern:** run rclone as a dedicated Cloud Run job or Lambda function on its own schedule. It syncs from the SFTP server to a cloud bucket (S3 or GCS), handling partial-transfer detection via `--min-age` and optional acknowledgment via `--sftp-ask-password` / move-on-success. A second Cloud Run job / Lambda runs `filedge run` with `--dir` pointed at that bucket. The two jobs are scheduled, scaled, and monitored independently — a slow SFTP partner only affects the sync step.
 
 ```
 Cloud Scheduler
     ├── rclone job (Cloud Run / Lambda)
     │       rclone move sftp-partner:/inbox/ s3:bucket/landing/ --min-age 30s
     │
-    └── etl run job (Cloud Run / Lambda)
-            etl run --watched-dir s3://bucket/landing/ --audit-db-url $ETL_DB_URL
+    └── filedge run job (Cloud Run / Lambda)
+            filedge run --dir s3://bucket/landing/ --config pipeline.yaml --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```

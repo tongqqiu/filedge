@@ -155,4 +155,4 @@ Each connector implements a two-method interface:
 - `ensure_table(config)` — create or validate the destination table
 - `write_rows(table, rows, file_hash)` — write rows, idempotent per `file_hash`
 
-See `etl/connectors/` for the existing implementations.
+See `filedge/connectors/` for the existing implementations.

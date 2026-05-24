@@ -20,9 +20,10 @@ filedge inspect <file> [options]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `<file>` | required | File to inspect (local path or cloud URI) |
-| `--format` | auto from extension | File format: `csv` or `ndjson` |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
 | `--sample-rows` | 1000 | Number of rows to sample |
 | `--output` | stdout | Write YAML block to this file instead of stdout |
+| `--encoding` | `utf-8` | File encoding for text formats |
 
 **Exit codes:** `0` on success, `1` on error.
 
@@ -44,6 +45,7 @@ filedge preview <file> [options]
 | `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
 | `--rows` | 10 | Number of rows to display |
 | `--start-row` | 1 | First row to display (1-indexed) |
+| `--encoding` | `utf-8` | File encoding for text formats |
 
 **Exit codes:** `0` on success, `2` on error (bad file path, unrecognised format).
 
@@ -63,9 +65,10 @@ filedge validate <file> --config <path> [options]
 |--------|---------|-------------|
 | `<file>` | required | File to validate (local path or cloud URI) |
 | `--config` | required | Path to `pipeline.yaml` |
-| `--format` | auto from extension | File format: `csv` or `ndjson` |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
 | `--sample-rows` | all rows | Validate only the first N rows |
 | `--json` | off | Emit JSON to stdout in addition to text summary |
+| `--encoding` | config value | Override file encoding from `pipeline.yaml` |
 
 **Exit codes:** `0` clean, `1` failures found, `2` error (bad file path, bad config).
 
@@ -87,6 +90,7 @@ filedge compact --watched-dir <path> --output <path> [options]
 | `--output` | required | Output prefix for compacted files |
 | `--max-files` | 1000 | Max input files per output batch |
 | `--compress` | off | Gzip-compress output files (`.ndjson.gz`) |
+| `--delete-source` | off | Delete source files after each batch commits |
 
 **Exit codes:** `0` on success, `1` on error.
 
@@ -96,7 +100,7 @@ See the [Compact guide](../guides/compact.md) for full details.
 
 ## `filedge run`
 
-Ingest files from a watched directory with atomic commits, retry, and full audit trail.
+Ingest files from a watched directory with retry-safe commits and a full audit trail.
 
 ```bash
 filedge run --dir <path> --config <path> --audit-db-url <url> [--progress|--no-progress]
@@ -140,6 +144,31 @@ See the [Healthcheck guide](../guides/healthcheck.md) for full details.
 
 ---
 
+## `filedge requeue`
+
+Move terminal `FAILED` files back to `PENDING` so the next run can retry them.
+
+```bash
+filedge requeue <filename> --audit-db-url <url>
+filedge requeue --all-terminal-failed --yes --audit-db-url <url>
+```
+
+| Option | Env var | Default | Description |
+|--------|---------|---------|-------------|
+| `<filename>` | — | optional | Failed filename to requeue |
+| `--hash` | — | optional | Content hash to disambiguate duplicate filenames |
+| `--all-terminal-failed` | — | off | Select every terminal failed file |
+| `--dry-run` | — | off | List bulk requeue candidates without changing state |
+| `--yes` | — | off | Confirm bulk requeue |
+| `--retry-cap` | — | `3` | Retry cap used to identify terminal failures |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+
+**Exit codes:** `0` on success, `1` on error or missing bulk confirmation.
+
+See the [Requeue failed files guide](../guides/requeue.md) for full details.
+
+---
+
 ## `filedge status`
 
 Show a summary of file states in the audit database.
@@ -166,3 +195,13 @@ Recent failures:
 ```
 
 **Exit codes:** `0` on success, `1` on error.
+
+---
+
+## `filedge completion`
+
+Print shell completion scripts for zsh or bash.
+
+```bash
+filedge completion [--shell zsh|bash]
+```
