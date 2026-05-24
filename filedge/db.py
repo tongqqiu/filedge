@@ -51,6 +51,7 @@ _AUDIT_DDL_SQLITE = """
 CREATE TABLE IF NOT EXISTS etl_file_audit (
     id INTEGER PRIMARY KEY,
     filename TEXT NOT NULL,
+    source_dir TEXT,
     content_hash TEXT NOT NULL UNIQUE,
     state TEXT NOT NULL,
     attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -66,6 +67,7 @@ _AUDIT_DDL_POSTGRES = """
 CREATE TABLE IF NOT EXISTS etl_file_audit (
     id BIGSERIAL PRIMARY KEY,
     filename TEXT NOT NULL,
+    source_dir TEXT,
     content_hash TEXT NOT NULL UNIQUE,
     state TEXT NOT NULL,
     attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -88,12 +90,15 @@ def create_audit_tables(db: Database) -> None:
 def _ensure_audit_columns(db: Database) -> None:
     if db.dialect() == "postgres":
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS worker_id TEXT")
+        db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS source_dir TEXT")
         return
 
     cursor = db.execute("PRAGMA table_info(etl_file_audit)")
     existing = {row[1] for row in cursor.fetchall()}
     if "worker_id" not in existing:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN worker_id TEXT")
+    if "source_dir" not in existing:
+        db.execute("ALTER TABLE etl_file_audit ADD COLUMN source_dir TEXT")
 
 
 # --- File record ---
@@ -102,6 +107,7 @@ def _ensure_audit_columns(db: Database) -> None:
 class FileRecord:
     id: int
     filename: str
+    source_dir: Optional[str]
     content_hash: str
     state: str
     attempt_count: int
@@ -136,7 +142,7 @@ def get_hash_states(db: Database, hashes: list) -> Dict[str, str]:
 
 def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     cursor = db.execute(
-        "SELECT id, filename, content_hash, state, attempt_count, error_message, worker_id, claimed_at"
+        "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at"
         " FROM etl_file_audit WHERE content_hash = ?",
         [content_hash],
     )
@@ -144,19 +150,21 @@ def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     if row is None:
         return None
     return FileRecord(
-        id=row[0], filename=row[1], content_hash=row[2], state=row[3],
-        attempt_count=row[4], error_message=row[5], worker_id=row[6], claimed_at=row[7],
+        id=row[0], filename=row[1], source_dir=row[2], content_hash=row[3], state=row[4],
+        attempt_count=row[5], error_message=row[6], worker_id=row[7], claimed_at=row[8],
     )
 
 
-def insert_pending(db: Database, filename: str, content_hash: str) -> None:
+def insert_pending(
+    db: Database, filename: str, content_hash: str, source_dir: Optional[str] = None
+) -> None:
     if find_file_by_hash(db, content_hash) is not None:
         return  # Content Hash already tracked — idempotent by design (ADR-0002)
     now = _now()
     db.execute(
-        "INSERT INTO etl_file_audit (filename, content_hash, state, created_at, updated_at)"
-        " VALUES (?, ?, 'PENDING', ?, ?)",
-        [filename, content_hash, now, now],
+        "INSERT INTO etl_file_audit (filename, source_dir, content_hash, state, created_at, updated_at)"
+        " VALUES (?, ?, ?, 'PENDING', ?, ?)",
+        [filename, source_dir, content_hash, now, now],
     )
 
 

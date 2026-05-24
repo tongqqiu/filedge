@@ -51,7 +51,7 @@ def run_pipeline(
         for path in files:
             content_hash = file_hashes[path]
             if content_hash not in hash_states:
-                insert_pending(db, file_basename(path), content_hash)
+                insert_pending(db, file_basename(path), content_hash, source_dir=watched_dir)
                 hash_states[content_hash] = "PENDING"
                 new_files += 1
             emit_progress(progress, "registering", "advance", path=path)
