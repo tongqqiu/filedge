@@ -18,6 +18,7 @@ from filedge.db import (
 )
 from filedge.filesystem import get_filesystem, open_file
 from filedge.config import load_config
+from filedge.health import HealthcheckError
 from filedge.inferrer import infer_schema, infer_schema_from_parquet
 from filedge.inspect_formatter import format_summary, format_yaml
 from filedge.parser import get_parser
@@ -64,11 +65,28 @@ def cli():
               help="Log level (DEBUG, INFO, WARNING, ERROR).")
 @click.option("--otel-traces/--no-otel-traces", "otel_traces", default=None,
               help="Enable OpenTelemetry tracing. Off by default. Also enabled by FILEDGE_OTEL_TRACES=true.")
-def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_format, log_level, otel_traces):
+@click.option("--otel-logs/--no-otel-logs", "otel_logs", default=None,
+              help="Export filedge logs through OpenTelemetry. Off by default. Also enabled by FILEDGE_OTEL_LOGS=true.")
+def run(
+    watched_dir,
+    config_path,
+    audit_db_url,
+    show_progress,
+    output_json,
+    log_format,
+    log_level,
+    otel_traces,
+    otel_logs,
+):
     """Run the ETL pipeline for a Watched Directory."""
     from filedge.log import configure_logging, get_logger
     from filedge.progress import LoggingProgressReporter
-    from filedge.tracing import configure_tracing, should_enable_tracing
+    from filedge.tracing import (
+        configure_otel_logs,
+        configure_tracing,
+        should_enable_logs,
+        should_enable_tracing,
+    )
 
     try:
         is_tty = sys.stderr.isatty()
@@ -84,6 +102,11 @@ def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_
             env_value=os.environ.get("FILEDGE_OTEL_TRACES"),
         )
         configure_tracing(enabled=tracing_on)
+        logs_on = should_enable_logs(
+            cli_flag=otel_logs,
+            env_value=os.environ.get("FILEDGE_OTEL_LOGS"),
+        )
+        configure_otel_logs(enabled=logs_on)
 
         run_id = _new_run_id()
         log_reporter = LoggingProgressReporter(get_logger("filedge.pipeline"), run_id=run_id)
@@ -127,10 +150,12 @@ def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_
     except SchemaError as e:
         click.echo(f"Schema error: {e}", err=True)
         sys.exit(1)
+    except HealthcheckError as e:
+        click.echo(str(e), err=True)
+        sys.exit(1)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
-
 
 def _new_run_id() -> str:
     import uuid
@@ -142,6 +167,39 @@ def _tee(*handlers):
         for h in handlers:
             h(event)
     return fanout
+
+
+@cli.command()
+@click.option("--config", "config_path", required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Path to pipeline.yaml")
+@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--json", "output_json", is_flag=True,
+              help="Write health status as a JSON object to stdout.")
+def healthcheck(config_path, audit_db_url, output_json):
+    """Probe the Audit DB and destination connector without writing data."""
+    from filedge.health import run_healthchecks
+
+    try:
+        report = run_healthchecks(load_config(config_path), audit_db_url)
+    except Exception as e:
+        click.echo(f"Healthcheck failed: configuration unreachable: {e}", err=True)
+        sys.exit(1)
+
+    if output_json:
+        click.echo(json_lib.dumps(report))
+    else:
+        for check in report["checks"]:
+            if check["ok"]:
+                click.echo(f"{check['name']}: ok ({check['latency_ms']} ms)")
+            else:
+                click.echo(
+                    f"{check['name']}: unreachable: {check['error']}",
+                    err=True,
+                )
+
+    if not report["healthy"]:
+        sys.exit(1)
 
 
 @cli.command()

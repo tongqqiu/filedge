@@ -174,5 +174,8 @@ class DuckDBConnector(Connector):
             self._conn.rollback()
             raise
 
+    def healthcheck(self) -> None:
+        self._conn.execute("SELECT 1").fetchone()
+
     def close(self) -> None:
         self._conn.close()

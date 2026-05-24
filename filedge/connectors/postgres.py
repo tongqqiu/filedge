@@ -154,5 +154,10 @@ class PostgresConnector(Connector):
             self._conn.rollback()
             raise
 
+    def healthcheck(self) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+
     def close(self) -> None:
         self._conn.close()
