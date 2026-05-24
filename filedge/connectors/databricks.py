@@ -509,6 +509,11 @@ class DatabricksConnector(Connector):
     def _string_literal(self, value: str) -> str:
         return value.replace("'", "''")
 
+    def healthcheck(self) -> None:
+        with self._conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchall()
+
     def close(self) -> None:
         self._conn.close()
 
