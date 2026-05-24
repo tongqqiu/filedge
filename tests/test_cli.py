@@ -8,7 +8,9 @@ from filedge.db import (
     Database,
     claim_processing,
     create_audit_tables,
+    find_file_by_hash,
     insert_pending,
+    mark_committed,
     mark_failed,
 )
 
@@ -126,6 +128,187 @@ def test_run_accepts_no_progress_flag(tmp_path):
 
     assert result.exit_code == 0
     assert "Committed: 1" in result.output
+
+
+# --- requeue helpers ---
+
+def _make_terminal_failed(db, filename, content_hash, retry_cap=3):
+    insert_pending(db, filename, content_hash)
+    for _ in range(retry_cap):
+        claim_processing(db, content_hash)
+        mark_failed(db, content_hash, "persistent error")
+    db.commit()
+
+
+# --- requeue tests ---
+
+def test_requeue_single_file_by_filename(db_url):
+    db = Database(db_url)
+    _make_terminal_failed(db, "orders.csv", "hash1")
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["requeue", "orders.csv", "--audit-db-url", db_url])
+    assert result.exit_code == 0
+    assert "Requeued" in result.output
+
+    db = Database(db_url)
+    record = find_file_by_hash(db, "hash1")
+    db.close()
+    assert record.state == "PENDING"
+    assert record.attempt_count == 0
+    assert record.error_message is None
+
+
+def test_requeue_single_file_by_hash(db_url):
+    db = Database(db_url)
+    _make_terminal_failed(db, "orders.csv", "hash2")
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["requeue", "orders.csv", "--hash", "hash2", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0
+    assert "Requeued" in result.output
+
+    db = Database(db_url)
+    assert find_file_by_hash(db, "hash2").state == "PENDING"
+    db.close()
+
+
+def test_requeue_single_file_not_found_errors(db_url):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["requeue", "missing.csv", "--audit-db-url", db_url])
+    assert result.exit_code == 1
+    assert "no terminal-FAILED record" in result.output
+
+
+def test_requeue_ambiguous_filename_errors_and_lists_candidates(db_url):
+    db = Database(db_url)
+    _make_terminal_failed(db, "orders.csv", "hashA")
+    _make_terminal_failed(db, "orders.csv", "hashB")
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["requeue", "orders.csv", "--audit-db-url", db_url])
+    assert result.exit_code == 1
+    assert "disambiguate" in result.output
+    assert "hashA" in result.output
+    assert "hashB" in result.output
+
+
+def test_requeue_hash_not_terminal_failed_errors(db_url):
+    db = Database(db_url)
+    insert_pending(db, "orders.csv", "committed_hash")
+    claim_processing(db, "committed_hash")
+    mark_committed(db, "committed_hash")
+    db.commit()
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["requeue", "orders.csv", "--hash", "committed_hash", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 1
+    assert "not eligible" in result.output
+
+
+def test_requeue_all_terminal_failed_no_yes_shows_count(db_url):
+    db = Database(db_url)
+    _make_terminal_failed(db, "a.csv", "ha")
+    _make_terminal_failed(db, "b.csv", "hb")
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["requeue", "--all-terminal-failed", "--audit-db-url", db_url])
+    assert result.exit_code == 1
+    assert "2" in result.output
+    assert "--yes" in result.output
+
+    db = Database(db_url)
+    assert find_file_by_hash(db, "ha").state == "FAILED"  # unchanged
+    db.close()
+
+
+def test_requeue_all_terminal_failed_dry_run_lists_files(db_url):
+    db = Database(db_url)
+    _make_terminal_failed(db, "a.csv", "ha2")
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["requeue", "--all-terminal-failed", "--dry-run", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0
+    assert "a.csv" in result.output
+    assert "ha2" in result.output
+    assert "Would requeue" in result.output
+
+    db = Database(db_url)
+    assert find_file_by_hash(db, "ha2").state == "FAILED"  # unchanged
+    db.close()
+
+
+def test_requeue_all_terminal_failed_yes_resets_all(db_url):
+    db = Database(db_url)
+    _make_terminal_failed(db, "a.csv", "ha3")
+    _make_terminal_failed(db, "b.csv", "hb3")
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["requeue", "--all-terminal-failed", "--yes", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0
+    assert "Requeued: 2" in result.output
+
+    db = Database(db_url)
+    assert find_file_by_hash(db, "ha3").state == "PENDING"
+    assert find_file_by_hash(db, "hb3").state == "PENDING"
+    db.close()
+
+
+def test_requeue_all_terminal_failed_none_found(db_url):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["requeue", "--all-terminal-failed", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0
+    assert "No terminal-FAILED" in result.output
+
+
+def test_requeue_mutual_exclusion_filename_and_all(db_url):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["requeue", "orders.csv", "--all-terminal-failed", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 1
+    assert "not both" in result.output
+
+
+def test_requeue_dry_run_and_yes_mutually_exclusive(db_url):
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["requeue", "--all-terminal-failed", "--dry-run", "--yes", "--audit-db-url", db_url],
+    )
+    assert result.exit_code == 1
+    assert "mutually exclusive" in result.output
+
+
+def test_status_json_includes_content_hash_in_failures(db_url):
+    db = Database(db_url)
+    insert_pending(db, "broken.csv", "brokenhash3")
+    claim_processing(db, "brokenhash3")
+    mark_failed(db, "brokenhash3", "type error")
+    db.commit()
+    db.close()
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--audit-db-url", db_url, "--json"])
+    data = json.loads(result.output)
+    assert data["recent_failures"][0]["content_hash"] == "brokenhash3"
 
 
 def test_run_accepts_progress_flag(tmp_path):
