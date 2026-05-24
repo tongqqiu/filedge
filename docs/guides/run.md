@@ -214,6 +214,8 @@ Filedge is designed for watched directories of up to **~50,000 files**. Within t
 
 For SQLite as the **destination** (not the audit DB), the connector holds an exclusive write lock for the duration of each file's insert. Run filedge as a single process against a SQLite destination; concurrent writers will contend on the lock.
 
+For parallel workers, large files, and backfills, see [Scale ingestion](scale.md).
+
 ## Options
 
 | Option | Default | Description |

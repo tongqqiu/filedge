@@ -58,5 +58,6 @@ Pluggable via a `connector:` block in `pipeline.yaml`:
 
 - [Getting Started](getting-started.md) — install and run your first pipeline in 5 minutes
 - [Guides](guides/run.md) — one page per workflow
+- [Scale ingestion](guides/scale.md) — large files, many files, parallel workers, and backfills
 - [pipeline.yaml reference](reference/pipeline-yaml.md) — every config option
 - [Connectors](reference/connectors.md) — destination setup for each backend
