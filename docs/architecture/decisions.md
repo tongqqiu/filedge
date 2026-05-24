@@ -60,19 +60,19 @@ Two reasons: SFTP protocol diversity and auth complexity are better handled by p
 
 ## ADR-0006: API sources materialized as files before ingestion {#adr-0006}
 
-API data (Stripe, Salesforce, HubSpot, etc.) is materialized as NDJSON files by a Fetcher (dlt) before `filedge run` ingests them — not loaded directly by dlt.
+API data (Stripe, Salesforce, HubSpot, etc.) is materialized as complete NDJSON files by an upstream Fetcher before `filedge run` ingests it. dlt can be one such Fetcher, but it is not a Filedge dependency and does not load directly to the destination in the Filedge model.
 
-This preserves a single audit model for all data sources. An operator asking "what Stripe data landed on a given date and which destination rows did it produce?" gets the same answer format as for CSV file drops. For fintech operators, audit uniformity across all sources is non-negotiable.
+This preserves a single audit model for all data sources: Filedge starts at the File boundary, then applies Content Hash deduplication, strict validation, row-level provenance, and the same audit state machine. For fintech operators, audit uniformity across all sources is non-negotiable.
 
 [Full ADR](../adr/0006-api-sources-fetched-to-files.md)
 
 ---
 
-## ADR-0007: Queue source ingestion model {#adr-0007}
+## ADR-0007: Queue sources materialized as files before ingestion {#adr-0007}
 
-Queue sources (Kafka, SQS) use **Drain** as the default trigger mode — snapshot the high-water mark at startup, consume all available micro-batches, then exit. Continuous (long-lived consumer) is supported as an opt-in.
+Queue data (Kafka, SQS, Kinesis, etc.) is materialized as complete NDJSON or Parquet files by an upstream Queue Materializer before `filedge run` ingests it. Kafka Connect, Flink, Spark, Vector, Benthos, cloud delivery services, and custom consumers can all play this role.
 
-Drain preserves the existing operational model: `filedge consume` is scheduled by the same external scheduler as `filedge run`, requires no process manager, and crash recovery falls to the existing stale-lock reclaim. The latency trade-off is accepted for batch-oriented fintech ingestion.
+This keeps Filedge's boundary consistent with SFTP and API sources: external tools handle transport-specific complexity, then Filedge applies Content Hash deduplication, strict validation, row-level provenance, retry behavior, and the same audit state machine to complete Files.
 
 [Full ADR](../adr/0007-queue-source-ingestion-model.md)
 

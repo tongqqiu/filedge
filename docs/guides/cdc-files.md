@@ -1,0 +1,98 @@
+# Ingesting CDC Files
+
+Filedge can apply complete change data capture (CDC) Files as SCD Type 1 changes. The source boundary stays the same: external tools such as Debezium, AWS DMS, Fivetran, Kafka Connect, or database export jobs write complete Files to a Watched Directory, then `filedge run` ingests them.
+
+CDC support is a write mode, not a source connector.
+
+```
+CDC producer -> CDC Files -> Watched Directory -> filedge run -> Destination
+```
+
+---
+
+## Example
+
+Given an NDJSON File:
+
+```json
+{"customer_id":"c1","email":"old@example.com","updated_at":"2026-05-01T00:00:00","op":"c"}
+{"customer_id":"c1","email":"new@example.com","updated_at":"2026-05-02T00:00:00","op":"u"}
+{"customer_id":"c2","email":"gone@example.com","updated_at":"2026-05-03T00:00:00","op":"d"}
+```
+
+Configure the pipeline:
+
+```yaml
+format: ndjson
+dest_table: customers
+write_mode: cdc
+
+connector:
+  type: sqlite
+  url: sqlite:///customers.db
+
+cdc:
+  keys: [customer_id]
+  operation_column: op
+  sequence_by: updated_at
+  operations:
+    insert: [c, insert]
+    update: [u, update]
+    delete: [d, delete]
+
+columns:
+  - source: customer_id
+    dest: customer_id
+    type: string
+    required: true
+  - source: email
+    dest: email
+    type: string
+    required: false
+  - source: updated_at
+    dest: updated_at
+    type: timestamp
+    required: true
+```
+
+Run it like any other pipeline:
+
+```bash
+filedge run \
+  --watched-dir ./landing/customers \
+  --config pipeline.yaml \
+  --audit-db-url sqlite:///audit.db
+```
+
+---
+
+## Semantics
+
+For each CDC File, Filedge:
+
+- parses and transforms rows using the normal `columns:` mapping
+- normalizes operation values into insert, update, or delete
+- keeps only the latest change per key within the File, based on `sequence_by`
+- applies inserts and updates by replacing the current row for the key
+- applies deletes by removing the current row for the key
+- writes `_source_file_hash` and `_ingested_at` for inserted or updated rows
+- marks the File COMMITTED only after the Connector applies the changes
+
+If any row is invalid, the whole File fails under Strict Mode.
+
+---
+
+## Supported Connectors
+
+CDC Files are currently supported by:
+
+- SQLite
+- PostgreSQL
+
+Other connectors fail clearly for `write_mode: cdc` until their destination-specific CDC apply path is implemented.
+
+---
+
+## Out Of Scope
+
+Filedge does not capture database logs, run Debezium, consume Kafka topics, or manage replication slots. SCD Type 2 history tables are also out of scope for the first CDC implementation.

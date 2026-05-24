@@ -1,12 +1,16 @@
-# API Sources are materialized as files before ingestion
+# API Sources become Files before ingestion
 
-API data from SaaS tools (Stripe, Salesforce, HubSpot, etc.) is not loaded directly into the destination. Instead, a Fetcher (dlt, dlthub.com) pulls from the API, materializes the response as NDJSON files in the Watched Directory, and the standard `filedge run` pipeline ingests those files. dlt is used as a Fetcher, not a Loader.
+Filedge does not fetch directly from SaaS APIs and does not load API responses directly into the destination. Its ingestion boundary is the **File**: complete bytes in a Watched Directory, identified by Content Hash and processed through the audit state machine.
 
-The alternative — letting dlt write directly to the destination — is simpler to configure but produces a two-tier audit system: file drops get content-hash deduplication, strict atomic commits, and `filedge status` visibility; API pulls get dlt's internal state. For fintech operators, this inconsistency is unacceptable — an auditor asking "what data came in from Stripe on a given date and which destination rows did it produce?" must get the same answer format regardless of source type.
+API data from SaaS tools (Stripe, Salesforce, HubSpot, etc.) must first be materialized as complete NDJSON files by an upstream Fetcher. That Fetcher may be dlt, a vendor export job, a custom script, Airbyte, Meltano, or any other tool that can land complete files in the Watched Directory. Once the file exists, `filedge run` ingests it exactly like a file drop.
 
-By materializing API responses as files first, every data source — file drop or API pull — passes through the same PENDING → COMMITTED state machine, carries the same `_source_file_hash` row-level provenance, and appears in `filedge status`. The Fetcher is responsible for ensuring only complete files land in the Watched Directory; partial fetches must not be visible to the pipeline.
+The rejected alternative is using an API tool as the loader of record. That may be simpler to configure, but it produces a two-tier audit system: file drops get Content Hash deduplication, strict atomic commits, row-level provenance, and `filedge status` visibility; API pulls get the API tool's own state and audit semantics. For fintech operators, that inconsistency is unacceptable. An auditor asking "what Stripe data landed on a given date and which destination rows did it produce?" must get the same answer format as they would for CSV or NDJSON file drops.
+
+By requiring API responses to become Files first, every source passes through the same PENDING -> COMMITTED state machine, carries the same `_source_file_hash` row-level provenance, and appears in `filedge status`. The Fetcher is responsible for authentication, pagination, rate limits, incremental cursors, and ensuring only complete files land in the Watched Directory. Partial fetches must remain in staging or be deleted; they must not be visible to `filedge run`.
 
 ## Considered Options
 
-- **dlt direct-to-destination**: simpler dlt configuration, no file materialization step, but breaks audit uniformity across source types.
+- **External Fetcher writes files, Filedge ingests files**: keeps Filedge focused on the reliability, audit, validation, and destination Commit layer. API-specific behavior stays outside the core.
+- **dlt direct-to-destination**: simpler dlt configuration, no file materialization step, but breaks audit uniformity across source types and makes dlt the loader of record.
 - **Build native API connectors**: full control, no dlt dependency, but connector coverage (pagination, auth, schema evolution per SaaS vendor) would require more effort than building the rest of this system combined.
+- **`filedge fetch` wrapper around dlt**: possible future convenience command, but not part of the core boundary. Building it too early would blur the product message and create an unnecessary hard dependency on dlt.

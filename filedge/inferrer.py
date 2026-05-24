@@ -1,7 +1,14 @@
-import re
 from dataclasses import dataclass, field
 from itertools import islice
 from typing import Iterator
+
+from filedge.column_types import (
+    ISO_DATE_FORMAT,
+    boolean_set,
+    date_format,
+    date_like_note,
+    has_time,
+)
 
 
 @dataclass
@@ -32,42 +39,6 @@ def _try_float(v: str) -> bool:
         return True
     except (ValueError, TypeError):
         return False
-
-
-_BOOLEAN_SETS = [
-    {"true", "false"},
-    {"yes", "no"},
-]
-
-_DATE_PATTERNS = [
-    (re.compile(r"^\d{4}-\d{2}-\d{2}$"), "YYYY-MM-DD"),
-    (re.compile(r"^\d{2}/\d{2}/\d{4}$"), "MM/DD/YYYY"),
-    (re.compile(r"^\d{2}-\d{2}-\d{4}$"), "DD-MM-YYYY"),
-]
-
-_DATETIME_RE = re.compile(
-    r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}"
-)
-
-
-def _boolean_set(values: list[str]):
-    """Return the matching boolean set if all values belong to one, else None."""
-    lower = {v.lower() for v in values}
-    for bset in _BOOLEAN_SETS:
-        if lower <= bset:
-            return bset
-    return None
-
-
-def _date_format(v: str):
-    for pattern, label in _DATE_PATTERNS:
-        if pattern.match(v):
-            return label
-    return None
-
-
-def _has_time(v: str) -> bool:
-    return bool(_DATETIME_RE.match(v))
 
 
 def infer_schema_from_parquet(schema) -> list[InferredColumn]:
@@ -148,17 +119,16 @@ def infer_schema(rows: Iterator[dict], sample_rows: int = 1000) -> list[Inferred
             results.append(InferredColumn(name, "integer", confidence, null_count, total_seen))
         elif all(_try_float(v) for v in non_null):
             results.append(InferredColumn(name, "float", confidence, null_count, total_seen))
-        elif _boolean_set(non_null) is not None:
+        elif boolean_set(non_null) is not None:
             results.append(InferredColumn(name, "boolean", confidence, null_count, total_seen))
-        elif all(_has_time(v) for v in non_null):
+        elif all(has_time(v) for v in non_null):
             results.append(InferredColumn(name, "timestamp", confidence, null_count, total_seen))
         else:
-            formats = {_date_format(v) for v in non_null}
-            if None not in formats and len(formats) == 1:
+            formats = {date_format(v) for v in non_null}
+            if formats == {ISO_DATE_FORMAT}:
                 results.append(InferredColumn(name, "date", confidence, null_count, total_seen))
-            elif None not in formats and len(formats) > 1:
-                note = f"multiple date formats detected: {', '.join(sorted(formats))}"
-                results.append(InferredColumn(name, "string", "ambiguous", null_count, total_seen, [note]))
+            elif None not in formats:
+                results.append(InferredColumn(name, "string", "ambiguous", null_count, total_seen, [date_like_note(formats)]))
             else:
                 results.append(InferredColumn(name, "string", "ambiguous", null_count, total_seen))
 

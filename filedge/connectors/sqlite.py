@@ -2,9 +2,10 @@ import datetime
 import sqlite3
 from typing import Iterator, List, Optional
 
-from filedge.config import PipelineConfig
+from filedge.cdc import plan_cdc_changes
+from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
-from filedge.schema import expected_columns, schema_mismatches
+from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
     "string": "TEXT",
@@ -48,10 +49,10 @@ class SQLiteConnector(Connector):
 
     def _create_table(self, conn: sqlite3.Connection, config: PipelineConfig) -> None:
         col_defs = ["_id INTEGER PRIMARY KEY"]
-        for col in config.columns:
-            col_defs.append(f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'TEXT')}")
-        col_defs.append("_source_file_hash TEXT NOT NULL")
-        col_defs.append("_ingested_at TEXT NOT NULL")
+        for col in configured_columns(config, _TYPE_TO_SQL):
+            col_defs.append(f"{col.name} {col.type}")
+        for col in provenance_columns(_TYPE_TO_SQL, "TEXT"):
+            col_defs.append(f"{col.name} {col.type} NOT NULL")
         conn.execute(f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})")
         conn.execute(
             f"CREATE INDEX {config.dest_table}_source_file_hash_idx"
@@ -87,6 +88,45 @@ class SQLiteConnector(Connector):
 
             if batch:
                 conn.executemany(insert_sql, batch)
+
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+
+    def write_cdc_rows(
+        self,
+        table: str,
+        rows: Iterator[dict],
+        file_hash: str,
+        cdc: CdcConfig,
+    ) -> None:
+        conn = self._get_conn()
+        ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
+        changes = plan_cdc_changes(rows, cdc)
+        key_predicate = " AND ".join([f"{column} = ?" for column in cdc.keys])
+
+        try:
+            for change in changes:
+                conn.execute(
+                    f"DELETE FROM {table} WHERE {key_predicate}",
+                    list(change.key),
+                )
+                if change.operation == "delete":
+                    continue
+
+                row = {
+                    key: value
+                    for key, value in change.row.items()
+                    if key != cdc.operation_column
+                }
+                dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
+                placeholders = ", ".join(["?"] * len(dest_cols))
+                values = list(row.values()) + [file_hash, ingested_at]
+                conn.execute(
+                    f"INSERT INTO {table} ({', '.join(dest_cols)}) VALUES ({placeholders})",
+                    values,
+                )
 
             conn.commit()
         except Exception:

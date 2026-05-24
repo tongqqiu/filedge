@@ -3,7 +3,7 @@ from typing import Dict, Iterator, List, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
-from filedge.schema import expected_columns, schema_mismatches
+from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
     "string": "VARCHAR",
@@ -69,15 +69,19 @@ class DuckDBConnector(Connector):
             f"CREATE SEQUENCE IF NOT EXISTS {config.dest_table}_id_seq"
         )
         col_defs = ", ".join(
-            f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'VARCHAR')}"
-            for col in config.columns
+            f"{col.name} {col.type}"
+            for col in configured_columns(config, _TYPE_TO_SQL)
+        )
+        provenance_defs = ", ".join(
+            f"{col.name} {col.type} NOT NULL"
+            for col in provenance_columns(_TYPE_TO_SQL, "TIMESTAMP")
         )
         ddl = (
             f"CREATE TABLE {config.dest_table} ("
             f"_id INTEGER DEFAULT nextval('{config.dest_table}_id_seq') PRIMARY KEY, "
             + col_defs
-            + ", _source_file_hash VARCHAR NOT NULL"
-            + ", _ingested_at TIMESTAMP NOT NULL"
+            + ", "
+            + provenance_defs
             + ")"
         )
         self._conn.execute(ddl)

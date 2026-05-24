@@ -10,20 +10,42 @@ class ExpectedColumn:
     type: str
 
 
+SOURCE_FILE_HASH_COLUMN = "_source_file_hash"
+INGESTED_AT_COLUMN = "_ingested_at"
+PROVENANCE_COLUMN_NAMES = frozenset({SOURCE_FILE_HASH_COLUMN, INGESTED_AT_COLUMN})
+
+
+def configured_columns(
+    config: PipelineConfig,
+    type_map: Dict[str, str],
+) -> List[ExpectedColumn]:
+    return [
+        ExpectedColumn(col.dest, type_map.get(col.type, type_map["string"]))
+        for col in config.columns
+    ]
+
+
+def provenance_columns(
+    type_map: Dict[str, str],
+    ingested_at_type: str,
+) -> List[ExpectedColumn]:
+    return [
+        ExpectedColumn(SOURCE_FILE_HASH_COLUMN, type_map["string"]),
+        ExpectedColumn(INGESTED_AT_COLUMN, ingested_at_type),
+    ]
+
+
 def expected_columns(
     config: PipelineConfig,
     type_map: Dict[str, str],
     id_type: str,
     ingested_at_type: str,
 ) -> List[ExpectedColumn]:
-    columns = [ExpectedColumn("_id", id_type)]
-    columns.extend(
-        ExpectedColumn(col.dest, type_map.get(col.type, type_map["string"]))
-        for col in config.columns
-    )
-    columns.append(ExpectedColumn("_source_file_hash", type_map["string"]))
-    columns.append(ExpectedColumn("_ingested_at", ingested_at_type))
-    return columns
+    return [
+        ExpectedColumn("_id", id_type),
+        *configured_columns(config, type_map),
+        *provenance_columns(type_map, ingested_at_type),
+    ]
 
 
 def schema_mismatches(

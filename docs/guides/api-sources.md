@@ -1,84 +1,59 @@
-# Ingesting API Sources (SaaS Tools)
+# Ingesting API-Sourced Files
 
-API data from SaaS tools (Stripe, Salesforce, HubSpot, Jira, GitHub, etc.) passes through the same pipeline as file drops — PENDING → COMMITTED, content-hash deduplication, row-level provenance, `filedge status` visibility. See ADR-0006.
+Filedge does not fetch from SaaS APIs directly. It ingests **Files**.
 
-The pattern:
+For API sources such as Stripe, Salesforce, HubSpot, Jira, or GitHub, use an upstream Fetcher to land complete NDJSON files in a Watched Directory. Then run Filedge against that directory. This keeps API-sourced data on the same ingestion path as file drops: Content Hash deduplication, PENDING -> COMMITTED audit state, strict validation, row-level provenance, and `filedge status` visibility.
+
+See ADR-0006.
+
+The boundary:
 
 ```
-filedge fetch  →  staging prefix  →  Watched Directory  →  etl run  →  Destination
+API Source -> Fetcher -> staging area -> Watched Directory -> filedge run -> Destination
 ```
 
-`filedge fetch` handles the API pull, staging, and promotion to the Watched Directory. `filedge run` handles ingestion identically to any file-drop source.
+The Fetcher owns API behavior. Filedge starts when complete files appear in the Watched Directory.
 
 ---
 
-## Prerequisites
+## Fetchers
 
-```bash
-pip install dlt[s3]       # or dlt[gcs], dlt[filesystem]
-pip install dlt[stripe]   # replace with the source you need
-```
+A Fetcher can be any tool or job that writes complete files:
 
-dlt source packages: https://dlthub.com/docs/dlt-ecosystem/verified-sources
+- a dlt pipeline configured to write NDJSON files
+- a vendor export job
+- a custom script
+- Airbyte or Meltano configured to write files
+- an existing internal ingestion job
 
----
+dlt is a useful option because it already handles many SaaS APIs, but it is not a Filedge dependency and it is not the loader of record. The loader of record is still `filedge run`.
 
-## Configuration
+The Fetcher must guarantee:
 
-Each API Source has its own `sources.yaml`. Credentials are never in the file — dlt reads them from environment variables automatically.
-
-```yaml
-# stripe-sources.yaml
-source:
-  type: stripe                 # dlt source package name
-  endpoints:
-    - Event
-    - Customer
-    - Invoice
-  incremental_key: created     # field dlt uses for cursor tracking
-
-staging_prefix: s3://my-bucket/api-staging/stripe/
-```
-
-```yaml
-# salesforce-sources.yaml
-source:
-  type: salesforce
-  endpoints:
-    - Opportunity
-    - Account
-  incremental_key: LastModifiedDate
-
-staging_prefix: s3://my-bucket/api-staging/salesforce/
-```
+- only complete files are promoted into the Watched Directory
+- failed or partial fetches remain in staging or are deleted
+- filenames are unique enough for operators to understand where they came from
+- file contents are stable once visible to Filedge
 
 ---
 
-## Example: Stripe Events → S3 → BigQuery
+## Example: Stripe Events -> S3 -> BigQuery
 
-### 1. Set credentials
+### 1. Fetch to files
 
-```bash
-export STRIPE_API_KEY=sk_live_...
+Configure your Fetcher to write complete NDJSON files to a staging prefix, then promote them to the Watched Directory:
+
+```
+s3://my-bucket/api-staging/stripe/
+  stripe_events_20260522T140000_0001.ndjson.tmp
+
+s3://my-bucket/landing/stripe/
+  stripe_events_20260522T140000_0001.ndjson
 ```
 
-### 2. Fetch
+The exact Fetcher command is intentionally outside Filedge's contract. For dlt, that may be a small project-specific Python script. For another organization, it may be a scheduled vendor export or an internal platform job.
 
-```bash
-filedge fetch \
-  --config stripe-sources.yaml \
-  --output s3://my-bucket/landing/stripe/
-```
-
-`filedge fetch` behaviour:
-
-1. Checks `staging_prefix/.fetch.lock` — fails fast if a fetch is already running
-2. Writes `.fetch.lock` (timestamp + worker identity)
-3. dlt pulls from the Stripe API → NDJSON files land in `staging_prefix`
-4. On success: moves staged files to `--output` (Watched Directory), deletes lock
-5. On failure: deletes staged files, deletes lock, exits non-zero
-
-### 3. Ingest
+### 2. Ingest
 
 ```bash
 filedge run \
@@ -87,7 +62,9 @@ filedge run \
   --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```
 
-### 4. pipeline.yaml
+### 3. Configure the file schema
+
+`pipeline.yaml` describes the files that the Fetcher lands:
 
 ```yaml
 format: ndjson
@@ -101,29 +78,39 @@ destination_table: stripe_events
 write_mode: append
 
 columns:
-  - name: id
+  - source: id
+    dest: id
     type: string
-  - name: type
+    required: true
+  - source: type
+    dest: type
     type: string
-  - name: created
+    required: true
+  - source: created
+    dest: created
     type: timestamp
-  - name: data
+    required: true
+  - source: data
+    dest: data
     type: string
+    required: false
 ```
 
 ---
 
-## Example: Salesforce → local → PostgreSQL
+## Example: Salesforce -> local files -> PostgreSQL
+
+An internal job or external Fetcher lands complete files:
+
+```
+/data/landing/salesforce/
+  Account_20260522T150000.ndjson
+  Opportunity_20260522T150000.ndjson
+```
+
+Then Filedge ingests those files:
 
 ```bash
-export SALESFORCE_USERNAME=user@company.com
-export SALESFORCE_PASSWORD=...
-export SALESFORCE_SECURITY_TOKEN=...
-
-filedge fetch \
-  --config salesforce-sources.yaml \
-  --output /data/landing/salesforce/
-
 filedge run \
   --watched-dir /data/landing/salesforce/ \
   --config      pipeline.yaml \
@@ -134,20 +121,20 @@ filedge run \
 
 ## Scheduling
 
-`filedge fetch` and `filedge run` are independent jobs. Schedule fetch before run. Different sources can run on different cadences.
+Schedule the Fetcher before `filedge run`. Different API sources can run on different cadences. Filedge does not need to know which tool produced the files.
 
 **Cloud Scheduler / EventBridge:**
 
 ```
 Every 15 min:
-  ├── etl fetch --config stripe-sources.yaml --output s3://.../landing/stripe/
+  ├── run-stripe-fetcher --output s3://.../landing/stripe/
 
 Every hour:
-  ├── etl fetch --config salesforce-sources.yaml --output s3://.../landing/salesforce/
+  ├── run-salesforce-fetcher --output s3://.../landing/salesforce/
 
 Every hour + 10 min:
-  ├── etl run --watched-dir s3://.../landing/stripe/    --config pipeline.yaml ...
-  └── etl run --watched-dir s3://.../landing/salesforce/ --config pipeline.yaml ...
+  ├── filedge run --watched-dir s3://.../landing/stripe/    --config pipeline.yaml ...
+  └── filedge run --watched-dir s3://.../landing/salesforce/ --config pipeline.yaml ...
 ```
 
 **Airflow:**
@@ -155,11 +142,11 @@ Every hour + 10 min:
 ```python
 fetch_stripe = BashOperator(
     task_id="fetch_stripe",
-    bash_command="etl fetch --config stripe-sources.yaml --output s3://.../landing/stripe/",
+    bash_command="run-stripe-fetcher --output s3://.../landing/stripe/",
 )
 ingest_stripe = BashOperator(
     task_id="ingest_stripe",
-    bash_command="etl run --watched-dir s3://.../landing/stripe/ --config pipeline.yaml ...",
+    bash_command="filedge run --watched-dir s3://.../landing/stripe/ --config pipeline.yaml ...",
 )
 fetch_stripe >> ingest_stripe
 ```
@@ -182,7 +169,7 @@ Recent failures:
   stripe_20260522T140000_0001.ndjson: schema mismatch on column 'amount_decimal'
 ```
 
-Every destination row carries `_source_file_hash` linking it back to the exact dlt-produced file. An auditor asking "what Stripe data landed on 2026-05-22 and which rows did it produce?" can answer from the Audit DB alone.
+Every destination row carries `_source_file_hash` linking it back to the exact fetched file. An auditor asking "what Stripe data landed on 2026-05-22 and which rows did it produce?" can answer from Filedge's Audit DB and destination provenance columns without knowing which Fetcher produced the file.
 
 ---
 
@@ -190,12 +177,12 @@ Every destination row carries `_source_file_hash` linking it back to the exact d
 
 | Concern | Owner |
 |---|---|
-| API authentication | dlt (reads env vars) |
-| Pagination | dlt |
-| Rate limiting | dlt |
-| Incremental cursor (last fetched ID/timestamp) | dlt pipeline state |
-| Concurrent fetch prevention (Fetch Lock) | `filedge fetch` |
-| Partial-fetch atomicity (staging → Watched Dir) | `filedge fetch` |
+| API authentication | Fetcher |
+| Pagination | Fetcher |
+| Rate limiting | Fetcher |
+| Incremental cursor (last fetched ID/timestamp) | Fetcher |
+| Concurrent fetch prevention | Fetcher or scheduler |
+| Partial-fetch atomicity (staging -> Watched Directory) | Fetcher |
 | File-level deduplication (content hash) | `filedge run` |
 | PENDING → COMMITTED state machine | `filedge run` |
 | Row-level provenance (`_source_file_hash`) | `filedge run` |

@@ -30,6 +30,9 @@ The default Write Mode (`write_mode: append`): records from each File are insert
 ### Column Tolerance
 Extra columns in a source file (not declared in Pipeline Config) are silently ignored. Missing columns declared as required in Pipeline Config cause the File to fail in Strict Mode. This asymmetry makes the pipeline tolerant of upstream additions while strict about data contract violations.
 
+### Column Type
+The executable meaning of a Pipeline Config column's `type:` value. Supported values are `string`, `integer`, `float`, `date`, `timestamp`, and `boolean`. `date` means ISO `YYYY-MM-DD`; Schema Inference must not suggest `date` for non-ISO date-like values that Transform cannot load.
+
 ### Table Initialization
 On first Run against a new destination table, the system creates the table from the Pipeline Config schema (including provenance columns). After the table exists, any mismatch between the YAML and the live table causes the Run to fail loudly with a clear diff — no auto-migration. Schema changes require explicit operator action.
 
@@ -48,7 +51,7 @@ An annotation attached to each column in Schema Inference output, expressing how
 _Avoid_: confidence score, inference quality, certainty level.
 
 ### Pipeline Config
-A `pipeline.yaml` file that declares how a single ingestion pipeline behaves. Contains a `source:` block (type-specific config for a Watched Directory or Queue Source), file format, column mappings (source name → destination name + type), destination table name, and retry cap. The operator interface for configuring ingestion — no code changes required for schema mapping updates or source type changes.
+A `pipeline.yaml` file that declares how a single ingestion pipeline behaves. Contains the file format, column mappings (source name → destination name + type), destination table name, connector settings, write mode, and retry cap. The operator interface for configuring ingestion — no code changes required for schema mapping updates.
 
 ### Audit Record
 Two-level audit: (1) file-level — captures filename, content hash, state, attempt count, timestamps, and worker identity; (2) row-level provenance — every destination row carries `_source_file_hash` and `_ingested_at` columns linking it back to its source File. Row-level provenance is non-negotiable: it is the basis for data lineage, debugging, and compliance.
@@ -98,48 +101,33 @@ For large-scale deployments where object-store listing cost or latency becomes a
 The four states a File passes through: `PENDING` (discovered, not yet claimed), `PROCESSING` (claimed by a worker — acts as a distributed lock via content hash), `COMMITTED` (fully loaded, transaction complete), `FAILED` (load attempt failed, eligible for retry or human review). A file whose content hash is already `COMMITTED` is never admitted to the pipeline — it is silently deduplicated at the entry point.
 
 ### Target User
-Data engineering teams at fintech companies where file ingestion is business-critical and high-visibility auditability is a compliance requirement. Every file must be traceable from source to destination row, and the audit trail must be uniform across all data sources — whether data arrives as file drops or via API.
+Data engineering teams at fintech companies where file ingestion is business-critical and high-visibility auditability is a compliance requirement. Every file must be traceable from source to destination row, and the audit trail must be uniform across all data sources — whether data starts as file drops, API exports, or queue messages materialized as files.
 _Avoid_: General data engineering teams, analytics teams.
 
 ### API Source
-A data source that delivers records via HTTP API rather than file drops. Examples: Stripe, Salesforce, HubSpot, Jira, GitHub. API Sources are not polled directly by the pipeline — they require a Fetcher to materialize their data as NDJSON files before ingestion.
+A data source that delivers records via HTTP API rather than file drops. Examples: Stripe, Salesforce, HubSpot, Jira, GitHub. API Sources are not polled directly by Filedge. They must be materialized by an upstream Fetcher as complete Files in a Watched Directory before `filedge run` ingests them.
 _Avoid_: API connector, API pipeline.
 
 ### Fetcher
-A component that pulls data from an API Source on a schedule, handles pagination, authentication, rate limiting, and incremental cursor management, and writes complete NDJSON files to the Watched Directory. The Fetcher is the API-source equivalent of the rclone sync layer for SFTP (ADR-0005). dlt (dlthub.com) is the recommended Fetcher implementation — it provides 300+ pre-built API Source connectors. Invoked via `etl fetch --config sources.yaml --output <watched-dir>`. Only complete files reach the Watched Directory; dlt writes to a staging prefix first, files are promoted on success and deleted on failure.
+A component or external job that pulls data from an API Source on a schedule, handles pagination, authentication, rate limiting, and incremental cursor management, and writes complete NDJSON files to the Watched Directory. The Fetcher is the API-source equivalent of the rclone sync layer for SFTP (ADR-0005): useful upstream plumbing, not Filedge's core ingestion layer. dlt, Airbyte, Meltano, vendor exports, and custom scripts can all be Fetchers. Only complete files should reach the Watched Directory; partial fetches must remain in staging or be deleted.
 _Avoid_: API connector, extractor, source connector.
 
 ### Fetch Lock
-A `.fetch.lock` file written to the staging prefix at the start of `filedge fetch` and deleted on completion (success or failure). Prevents concurrent fetches of the same API Source from racing to promote partial files to the Watched Directory. A fresh lock causes `filedge fetch` to fail fast; a stale lock (older than a configurable TTL) is reclaimed and overwritten. The lock is a filesystem artifact, not an Audit DB record — `filedge fetch` has no dependency on the Audit DB.
+A Fetcher-owned concurrency guard that prevents two fetches for the same API Source from racing to promote partial files to the Watched Directory. It may be a filesystem lock, scheduler-level mutual exclusion, or a lock in the Fetcher's own state store. It is not an Audit DB record and is not part of the `filedge run` state machine.
 _Avoid_: fetch mutex, distributed lock.
 
-### Decoder
-A pluggable component that takes a single queue message payload (bytes) and returns one row (dict). The queue-source equivalent of a Parser. Declared as `format:` in the `source:` block of Pipeline Config. Current implementation: `json` (parses UTF-8 bytes as a JSON object). Avro and Protobuf are future Decoder implementations — not supported until Schema Registry integration is designed.
-_Avoid_: deserializer, message parser, codec.
-
 ### Queue Source
-A data source that delivers records continuously via a message broker (Kafka, SQS, Kinesis). Unlike a Watched Directory or API Source, a Queue Source has no natural file boundary — records arrive individually and must be grouped into Micro-batches before ingestion. Configured via a `source:` block in Pipeline Config with broker addresses, topic, consumer group, and Trigger Mode.
-_Avoid_: streaming source, event source, message queue.
+A data source that delivers records through a message broker such as Kafka, SQS, or Kinesis. Queue Sources are not consumed directly by Filedge. They must be materialized by an upstream Queue Materializer as complete Files in a Watched Directory before `filedge run` ingests them.
+_Avoid_: streaming source, event source, message queue connector.
 
-### Micro-batch
-The unit of work for Queue Source ingestion. A group of records accumulated from a Queue Source until either a record count limit or a time window elapses — whichever comes first. Plays the same role as a File in the file ingestion model: it has an Offset Range Key, passes through the same state machine (PENDING → PROCESSING → COMMITTED/FAILED), and either commits fully or not at all. The Kafka consumer offset is advanced only after the Micro-batch commits to the destination — guaranteeing at-least-once delivery with effective exactly-once via Offset Range Key deduplication.
-_Avoid_: batch, mini-batch, window.
+### Queue Materializer
+A component or external job that consumes records from a Queue Source, groups them into complete files, writes them to a staging area, and promotes them into the Watched Directory only after the file is complete. Examples include Kafka Connect S3 Sink, Kafka Connect GCS Sink, Flink, Spark Structured Streaming, Vector, Benthos, cloud-native delivery services, and custom consumers. The Queue Materializer owns consumer groups, offsets, rebalances, decoding, schema registry integration, poison-message handling, and delivery cadence. Filedge starts at the File boundary.
+_Avoid_: queue connector, streaming ingestion engine, `filedge consume`.
 
-### Offset Range Key
-The idempotency key for a Micro-batch. Structured as `{topic}:{partition}:{start_offset}:{end_offset}`. Stable across retries: re-consuming the same offset range produces the same key, enabling deduplication at the Audit DB entry point. Plays the same role as Content Hash does for Files.
-_Avoid_: batch key, offset hash, consumer checkpoint.
-
-### Trigger Mode
-The policy that governs when a queue consumer stops consuming and exits. Declared as `trigger:` in the `source:` block of Pipeline Config. Two modes: Drain and Continuous.
-
-### Drain
-A Trigger Mode. At startup, the consumer snapshots the current high-water mark offset per partition. It consumes all available Micro-batches up to that offset, then exits. Messages that arrive after the snapshot are left for the next invocation. Scheduled via an external scheduler (cron, Kubernetes CronJob) — the same operational model as `filedge run`. Analogous to Spark's `Trigger.AvailableNow()`. This is the default Trigger Mode.
-_Avoid_: trigger once, batch mode, bounded consume.
-
-### Continuous
-A Trigger Mode. The consumer runs indefinitely, cutting a new Micro-batch every N records or T seconds. Stopped by SIGTERM; the in-flight Micro-batch is allowed to finish before the process exits. Used when queue latency requirements cannot be met by a scheduled Drain. Requires a process manager (Kubernetes Deployment, systemd) rather than a cron scheduler.
-_Avoid_: streaming mode, always-on, daemon.
+### Offset Range Metadata
+Optional provenance metadata recorded by a Queue Materializer in the filename, object metadata, or sidecar manifest. For Kafka, a useful convention is `{topic}.{partition}.{start_offset}-{end_offset}.ndjson`. Offset Range Metadata helps operators trace a File back to queue positions, but it is not Filedge's idempotency key. Filedge still deduplicates by Content Hash.
+_Avoid_: offset range key, consumer checkpoint.
 
 ### Sources Config
-A `sources.yaml` file that declares an API Source for `filedge fetch`: the dlt source type, which endpoints to pull, the incremental key, and the staging prefix. One file per API Source. Credentials never appear in the file — they are read from environment variables by dlt. Analogous to `pipeline.yaml` for the ingestion side.
+A Fetcher-specific config file that declares how an API Source is pulled: which endpoints to fetch, the incremental key or cursor, credentials lookup, and the staging/landing paths. This is outside Filedge's core config surface. `pipeline.yaml` remains the Filedge config for ingesting the resulting Files.
 _Avoid_: fetch config, source pipeline.

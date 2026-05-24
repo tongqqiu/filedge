@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
-from filedge.schema import expected_columns, schema_mismatches
+from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
     "string": "STRING",
@@ -120,10 +120,10 @@ class DatabricksConnector(Connector):
 
     def _create_table(self, config: PipelineConfig) -> None:
         col_defs = ["_id BIGINT GENERATED ALWAYS AS IDENTITY"]
-        for col in config.columns:
-            col_defs.append(f"{self._quote(col.dest)} {_TYPE_TO_SQL.get(col.type, 'STRING')}")
-        col_defs.append("_source_file_hash STRING NOT NULL")
-        col_defs.append("_ingested_at TIMESTAMP NOT NULL")
+        for col in configured_columns(config, _TYPE_TO_SQL):
+            col_defs.append(f"{self._quote(col.name)} {col.type}")
+        for col in provenance_columns(_TYPE_TO_SQL, "TIMESTAMP"):
+            col_defs.append(f"{self._quote(col.name)} {col.type} NOT NULL")
         ddl = f"CREATE TABLE {self._table_ref(config.dest_table)} ({', '.join(col_defs)})"
         with self._conn.cursor() as cur:
             cur.execute(ddl)
