@@ -7,229 +7,117 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-A batch ETL system built around the reliability patterns that standard Airflow + Spark stacks often miss: atomic commits, content-based idempotency, automatic retry, and a full audit trail — with pluggable destination support for PostgreSQL, BigQuery, Databricks, and SQLite.
+**Files are the universal building block of data engineering.** Whether data starts in Kafka, Stripe's API, a partner SFTP, or a CDC stream, every reliable pipeline eventually crystallizes it into a file before it touches the warehouse. Filedge is the load boundary built around that fact: atomic per-file ingestion, content-hash idempotency, and a full audit trail — into SQLite, PostgreSQL, BigQuery, Databricks, or DuckDB.
 
-## The Problem
+## Why files?
 
-Most ETL pipelines fail silently in the worst possible way — they write half the rows before crashing, leaving the destination in a corrupt state with no record of what happened. Re-running the job then double-writes the rows that did succeed.
+Streams are continuous; files are discrete. That discreteness is what makes ingestion *auditable*: a file has a SHA-256, a row count, a state in the audit DB, and a row-level provenance trail in the destination. Every downstream question — *did we load this?*, *replay this*, *where did this row come from?* — has a deterministic anchor.
 
-This project addresses three root causes:
+Filedge starts where the file lands and ends when its rows are committed. Upstream is your choice: [dlt](https://dlthub.com) or vendor exporters for APIs, [Kafka Connect](https://docs.confluent.io/platform/current/connect/index.html) or Vector for queues, rclone for SFTP. Downstream is your warehouse. The hard part in between — atomic commits, dedupe, retries, lineage — is all Filedge does.
 
-1. **Partial load corruption** — rows and the audit marker are written atomically. Either both land or neither does.
-2. **Filename-based idempotency** — files are identified by SHA-256 content hash, not filename. Renaming a file doesn't re-ingest it; replacing it with new content does.
-3. **No audit trail** — every file passes through a `PENDING → PROCESSING → COMMITTED/FAILED` state machine, stored in a dedicated audit database alongside row-level provenance (`_source_file_hash`, `_ingested_at`).
+## What it gives you that a hand-rolled DAG doesn't
 
-## Features
+| Failure mode | Typical pipeline | Filedge |
+|---|---|---|
+| Half-written tables after a crash | Manual cleanup | Per-file atomic commit, retry-safe by content hash |
+| "Did we already load this file?" | Filename heuristics | SHA-256 dedupe at the entry point |
+| "Where did this row come from?" | Grep logs | `_source_file_hash` + `_ingested_at` on every row |
+| Stale lock from a killed worker | Page someone | Reclaimed automatically on next run |
+| One bad file blocks the pipeline | Skip and forget | Bounded retry → terminal FAILED with audit |
+| Schema drift in destination | Silent corruption | Loud failure with a clear diff |
 
-- **Pluggable destinations** — SQLite, PostgreSQL, BigQuery, Databricks via a `connector:` block in `pipeline.yaml`
-- **Connector-level idempotency** — retrying a failed file never produces duplicate rows
-- **Write modes** — `append` (default) or `truncate` per pipeline
-- **Automatic retry** — failed files are retried up to `retry_cap` times across runs
-- **Stale lock reclaim** — PROCESSING locks from crashed workers are reclaimed automatically
-- **Strict validation** — whole file fails if any row fails type coercion or misses a required column
-- **Column tolerance** — extra source columns are ignored; only declared columns are loaded
-- **Row provenance** — every destination row carries `_source_file_hash` and `_ingested_at`
-- **Schema guard** — auto-creates destination table on first run; refuses to silently alter it if columns are added later
-- **Formats** — CSV and NDJSON (newline-delimited JSON)
+## How it differs from neighbors
 
-## Installation
+- **vs Airbyte / Fivetran / dlt** — those *fetch* (paginate APIs, manage cursors). Filedge *lands* — it takes whatever they produce as files and makes the write to the warehouse audit-grade. Use them as Fetchers in front of Filedge.
+- **vs Kafka Connect / Flink / Spark Structured Streaming** — streaming systems own continuous offsets and incremental state. Filedge owns the *file* as the unit of work — simpler to reason about, replay, and audit. Materialize queues to files, then ingest.
+- **vs Airflow + custom Python loaders** — same DAG shape, but partial-load corruption, lock reclaim, retry caps, idempotent CDC apply, and row provenance are already wired in.
+- **vs Iceberg / Delta tables** — those are *table formats*. Filedge is what *writes to them* (or to plain BigQuery / Postgres / Databricks tables) with the per-file commit guarantee.
+
+## Quick start
 
 Requires [uv](https://docs.astral.sh/uv/).
 
 ```bash
-# Core only (SQLite destination, no extra SDKs needed)
-uv sync --extra dev
-
-# With PostgreSQL destination support
-uv sync --extra dev --extra postgres
-
-# With BigQuery destination support
-uv sync --extra dev --extra bigquery
-
-# With Databricks destination support
-uv sync --extra dev --extra databricks
+uv sync --extra dev                          # core (SQLite)
+uv sync --extra dev --extra postgres         # + PostgreSQL
+uv sync --extra dev --extra bigquery         # + BigQuery
+uv sync --extra dev --extra databricks       # + Databricks
+uv sync --extra dev --extra duckdb           # + DuckDB
 ```
 
-## License
-
-Filedge is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
-
-## Quick Start
-
-**1. Write a pipeline config**
+Declare a pipeline:
 
 ```yaml
 # pipeline.yaml
 format: csv
 dest_table: orders
-write_mode: append   # or: truncate
+write_mode: append          # append | truncate | cdc
 retry_cap: 3
-stale_timeout_minutes: 30
 batch_size: 1000
 
 columns:
-  - source: order_id
-    dest: order_id
-    type: string
-    required: true
-  - source: amount
-    dest: amount
-    type: float
-    required: true
-  - source: order_date
-    dest: order_date
-    type: date
-    required: false
+  - { source: order_id,   dest: order_id,   type: string,  required: true }
+  - { source: amount,     dest: amount,     type: float,   required: true }
+  - { source: order_date, dest: order_date, type: date }
 ```
 
-**2. Run the pipeline**
+Run it:
 
 ```bash
 filedge run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///filedge.db
 # Committed: 3  Failed: 0  Skipped: 0  New: 3  Reclaimed: 0  Retried: 0
-```
 
-**3. Check status**
-
-```bash
 filedge status --audit-db-url sqlite:///filedge.db
-# PENDING:    0
-# PROCESSING: 0
-# COMMITTED:  3
-# FAILED:     0
-
-filedge status --audit-db-url sqlite:///filedge.db --json
+# PENDING: 0  PROCESSING: 0  COMMITTED: 3  FAILED: 0
 ```
 
-`--audit-db-url` can also be set via `FILEDGE_AUDIT_DB_URL`.
+Don't know the schema yet? `filedge inspect data.csv` samples the file and prints a `columns:` block with confidence tiers ready to paste.
 
 ## Connectors
 
-The destination is configured via an optional `connector:` block in `pipeline.yaml`. If omitted, the connector is inferred from `--audit-db-url` (backward compatible).
+The destination is configured via a `connector:` block in `pipeline.yaml`. Built-ins:
 
-### SQLite (default for local dev)
+| Destination  | Extra        | Notes |
+|---|---|---|
+| SQLite       | (core)       | Default for local dev; inferred from `--audit-db-url` |
+| PostgreSQL   | `postgres`   | `COPY` bulk load; idempotent via per-hash DELETE |
+| BigQuery     | `bigquery`   | NDJSON staging + load job; job-ID-keyed idempotency (7-day window) |
+| Databricks   | `databricks` | Unity Catalog volume staging |
+| DuckDB       | `duckdb`     | File-based; single-writer, fails fast if locked |
 
-```yaml
-# No connector block needed — inferred from --audit-db-url sqlite:///...
-```
+See [docs/guides/run.md](docs/guides/run.md) for full connector config, credentials, and live-integration test setup.
 
-### PostgreSQL
-
-```yaml
-connector:
-  type: postgres
-  url: postgresql://user:pass@host/dbname
-```
-
-Or set `DATABASE_URL` in the environment and omit `url`.
-
-### BigQuery
-
-```yaml
-connector:
-  type: bigquery
-  project: my-gcp-project
-  dataset: my_dataset
-```
-
-Credentials from `GOOGLE_APPLICATION_CREDENTIALS` or Application Default Credentials. Requires `pip install filedge[bigquery]`.
-
-Live BigQuery integration tests are opt-in:
-
-```bash
-export FILEDGE_BIGQUERY_INTEGRATION=1
-export BIGQUERY_PROJECT=my-gcp-project
-export BIGQUERY_DATASET=filedge_ci_test
-uv sync --extra dev --extra bigquery
-uv run pytest tests/test_connector_bigquery.py
-```
-
-### Databricks
-
-```yaml
-connector:
-  type: databricks
-  server_hostname: adb-xxx.azuredatabricks.net
-  http_path: /sql/1.0/warehouses/xxx
-  catalog: main
-  schema: default
-  staging_location: /Volumes/workspace/default/test/filedge-staging
-```
-
-Auth token from `DATABRICKS_TOKEN`. Requires `pip install filedge[databricks]`. For Unity Catalog volume staging, the token must be able to write files under `staging_location`.
-
-Live Databricks integration tests are opt-in:
-
-```bash
-export FILEDGE_DATABRICKS_INTEGRATION=1
-export DATABRICKS_TOKEN=...
-export DATABRICKS_SERVER_HOSTNAME=dbc-xxx.cloud.databricks.com
-export DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/xxx
-export DATABRICKS_CATALOG=workspace
-export DATABRICKS_SCHEMA=default
-export DATABRICKS_STAGING_LOCATION=/Volumes/workspace/default/test/filedge-staging
-uv sync --extra dev --extra databricks
-uv run pytest tests/test_connector_databricks_integration.py
-```
-
-## Write Modes
-
-| Mode | Behaviour | Idempotency |
-|------|-----------|-------------|
-| `append` (default) | Rows added alongside prior records | Delete-where-hash then insert on retry |
-| `truncate` | Table wiped then replaced with this file's rows | Inherently idempotent |
-| `cdc` | Apply CDC Files as SCD Type 1 inserts, updates, and deletes | Re-applying the same File converges by business key |
-
-## Column Types
-
-| Type | PostgreSQL | BigQuery | SQLite |
-|------|-----------|---------|--------|
-| `string` | TEXT | STRING | TEXT |
-| `integer` | INTEGER | INT64 | INTEGER |
-| `float` | DOUBLE PRECISION | FLOAT64 | REAL |
-| `date` | DATE | DATE | TEXT |
-| `timestamp` | TIMESTAMP WITH TIME ZONE | TIMESTAMP | TEXT |
-| `boolean` | BOOLEAN | BOOL | INTEGER |
-
-## How a Run Works
+## How a run works
 
 ```
-Run N
-├── Reset FAILED files below retry_cap → PENDING
+filedge run
+├── Reset FAILED below retry_cap → PENDING
 ├── Reclaim stale PROCESSING locks → PENDING
-├── Connector: ensure destination table exists (create or validate schema)
-├── Hash all files in watched directory
-├── Enqueue new content hashes as PENDING
+├── Connector: ensure destination table exists
+├── Hash files in watched dir; enqueue new hashes as PENDING
 └── For each PENDING file:
-    ├── Audit DB: mark PROCESSING (distributed lock)
-    ├── Connector: write_rows — stream rows through parser + transform
-    │   └── Connector commits its own transaction (idempotent per file_hash)
-    └── Audit DB: mark COMMITTED  (or mark FAILED on error)
+    ├── Audit DB: mark PROCESSING        (distributed lock)
+    ├── Connector: stream rows → commit  (idempotent per file_hash)
+    └── Audit DB: mark COMMITTED / FAILED
 ```
 
-The audit DB and destination are separate systems. A crash between the connector write and the audit mark leaves the file in PROCESSING — the stale-lock reclaim picks it up on the next run and the connector's idempotency ensures no duplicate rows.
+The audit DB and the destination are separate systems. A crash between connector commit and audit mark leaves the file PROCESSING — the next run reclaims it, and the connector's per-hash idempotency guarantees no duplicate rows.
 
-## Retry Behaviour
+## More
 
-A file that fails validation is marked `FAILED` with `attempt_count = 1`. On the next run, if `attempt_count < retry_cap`, it is reset to `PENDING` and retried. Once `attempt_count >= retry_cap`, the file is terminal — it stays `FAILED` and is counted as `skipped` in the run summary.
+- Guides: [run](docs/guides/run.md) · [inspect](docs/guides/inspect.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [requeue](docs/guides/requeue.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md)
+- Domain model: [CONTEXT.md](CONTEXT.md)
+- Architecture decisions:
+  - [ADR-0001: Single-transaction commit](docs/adr/0001-single-transaction-commit.md)
+  - [ADR-0002: Content hash as idempotency key](docs/adr/0002-content-hash-as-idempotency-key.md)
+  - [ADR-0003: Strict-mode validation](docs/adr/0003-strict-mode-validation.md)
+  - [ADR-0004: Audit DB / Connector split](docs/adr/0004-audit-connector-split.md)
+  - [ADR-0005: SFTP out of scope](docs/adr/0005-sftp-out-of-scope.md)
+  - [ADR-0006: API sources fetched to files](docs/adr/0006-api-sources-fetched-to-files.md)
+  - [ADR-0007: Queue source ingestion model](docs/adr/0007-queue-source-ingestion-model.md)
+  - [ADR-0008: Schema inference confidence tiers](docs/adr/0008-schema-inference-confidence-tiers.md)
+  - [ADR-0009: Warehouse CDC applied-file markers](docs/adr/0009-warehouse-cdc-applied-file-markers.md)
 
-To manually re-queue a terminal failure:
+## License
 
-```sql
-UPDATE etl_file_audit SET state='PENDING', attempt_count=0 WHERE content_hash='<hash>';
-```
-
-## Running Tests
-
-```bash
-uv run pytest
-```
-
-72 tests covering hashing, config loading, audit DB state machine, parsing, type coercion, connector contracts (SQLite), registry, the full pipeline, and the CLI.
-
-## Architecture Decisions
-
-- [ADR-0001: Single-transaction commit](docs/adr/0001-single-transaction-commit.md)
-- [ADR-0002: Content hash as idempotency key](docs/adr/0002-content-hash-as-idempotency-key.md)
-- [ADR-0003: Strict-mode validation](docs/adr/0003-strict-mode-validation.md)
-- [ADR-0004: Audit DB / Connector split](docs/adr/0004-audit-connector-split.md)
+Apache 2.0 — see [LICENSE](LICENSE).
