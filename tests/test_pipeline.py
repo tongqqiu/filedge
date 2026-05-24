@@ -105,3 +105,65 @@ def test_pipeline_retries_failed_file(tmp_path):
     # Old bad hash stays FAILED (below cap → retried but still fails on retry
     # since file content changed — new hash is new PENDING file)
     assert result2["committed"] == 1  # new good file committed
+
+
+def test_pipeline_commits_cdc_file(tmp_path):
+    import sqlite3
+
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    changes = watched / "changes.ndjson"
+    changes.write_text(
+        '{"id":"1","value":"old","updated_at":"2026-05-01T00:00:00","op":"c"}\n'
+        '{"id":"1","value":"new","updated_at":"2026-05-02T00:00:00","op":"u"}\n'
+    )
+    dest_path = tmp_path / "dest.db"
+    config_file = tmp_path / "pipeline.yaml"
+    config_file.write_text(
+        f"""
+format: ndjson
+dest_table: items
+write_mode: cdc
+connector:
+  type: sqlite
+  url: sqlite:///{dest_path}
+cdc:
+  keys: [id]
+  operation_column: op
+  sequence_by: updated_at
+  operations:
+    insert: [c]
+    update: [u]
+    delete: [d]
+columns:
+  - source: id
+    dest: id
+    type: string
+    required: true
+  - source: value
+    dest: value
+    type: string
+    required: false
+  - source: updated_at
+    dest: updated_at
+    type: timestamp
+    required: true
+"""
+    )
+
+    result = run_pipeline(
+        str(watched),
+        str(config_file),
+        f"sqlite:///{tmp_path}/audit.db",
+    )
+
+    assert result["committed"] == 1
+    assert result["failed"] == 0
+    conn = sqlite3.connect(dest_path)
+    row = conn.execute("SELECT id, value, _source_file_hash FROM items").fetchone()
+    assert row[0] == "1"
+    assert row[1] == "new"
+    assert row[2] is not None
+    conn.close()

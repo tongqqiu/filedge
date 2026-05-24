@@ -3,7 +3,7 @@ import uuid
 
 import pytest
 
-from filedge.config import ColumnMapping, PipelineConfig
+from filedge.config import CdcConfig, ColumnMapping, PipelineConfig
 from filedge.connectors.postgres import PostgresConnector
 from filedge.connectors import SchemaError
 
@@ -162,6 +162,72 @@ def test_provenance_columns_set_correctly(connector, config):
         row = cur.fetchone()
     assert row[0] == "myhash"
     assert row[1] is not None
+
+
+def test_write_cdc_rows_applies_insert_update_delete(config):
+    cdc_config = PipelineConfig(
+        format="ndjson",
+        dest_table=f"cdc_{uuid.uuid4().hex[:8]}",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("customer_id", "customer_id", "string", True),
+            ColumnMapping("email", "email", "string", False),
+            ColumnMapping("updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["customer_id"],
+            operation_column="op",
+            sequence_by="updated_at",
+            operations={"insert": ["c"], "update": ["u"], "delete": ["d"]},
+        ),
+    )
+    tc = PostgresConnector(url=DATABASE_URL, write_mode="cdc", batch_size=100)
+    try:
+        tc.ensure_table(cdc_config)
+        tc.write_cdc_rows(
+            cdc_config.dest_table,
+            iter(
+                [
+                    {
+                        "customer_id": "c1",
+                        "email": "old@example.com",
+                        "updated_at": "2026-05-01T00:00:00",
+                        "op": "c",
+                    },
+                    {
+                        "customer_id": "c1",
+                        "email": "new@example.com",
+                        "updated_at": "2026-05-02T00:00:00",
+                        "op": "u",
+                    },
+                    {
+                        "customer_id": "c2",
+                        "email": "gone@example.com",
+                        "updated_at": "2026-05-03T00:00:00",
+                        "op": "c",
+                    },
+                    {
+                        "customer_id": "c2",
+                        "email": "gone@example.com",
+                        "updated_at": "2026-05-04T00:00:00",
+                        "op": "d",
+                    },
+                ]
+            ),
+            "hash1",
+            cdc_config.cdc,
+        )
+        with tc._conn.cursor() as cur:
+            cur.execute(
+                f"SELECT customer_id, email, _source_file_hash FROM {cdc_config.dest_table}"
+            )
+            rows = cur.fetchall()
+        assert rows == [("c1", "new@example.com", "hash1")]
+    finally:
+        with tc._conn.cursor() as cur:
+            cur.execute(f"DROP TABLE IF EXISTS {cdc_config.dest_table}")
+        tc._conn.commit()
+        tc.close()
 
 
 def test_native_postgres_types_on_destination_table(config):

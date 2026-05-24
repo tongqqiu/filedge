@@ -91,8 +91,8 @@ def test_ensure_table_creates_databricks_native_table(tmp_path, fake_databricks,
     assert "`name` STRING" in ddl
     assert "`amount` DOUBLE" in ddl
     assert "`created` DATE" in ddl
-    assert "_source_file_hash STRING NOT NULL" in ddl
-    assert "_ingested_at TIMESTAMP NOT NULL" in ddl
+    assert "`_source_file_hash` STRING NOT NULL" in ddl
+    assert "`_ingested_at` TIMESTAMP NOT NULL" in ddl
 
 
 def test_ensure_table_is_idempotent_when_schema_matches(

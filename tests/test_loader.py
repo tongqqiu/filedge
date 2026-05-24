@@ -1,6 +1,6 @@
 import pytest
 
-from filedge.config import ColumnMapping, PipelineConfig
+from filedge.config import CdcConfig, ColumnMapping, PipelineConfig
 from filedge.connectors.sqlite import SQLiteConnector
 from filedge.loader import load_file
 
@@ -99,3 +99,115 @@ def test_load_file_reports_rows_at_interval(connector, config, tmp_path):
     assert error is None
     assert rows == 5
     assert [event.rows for event in events] == [2, 4]
+
+
+def test_load_file_applies_cdc_rows(connector, tmp_path):
+    config = PipelineConfig(
+        format="ndjson",
+        dest_table="items",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("id", "id", "string", True),
+            ColumnMapping("value", "value", "string", False),
+            ColumnMapping("updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["id"],
+            operation_column="op",
+            sequence_by="updated_at",
+            operations={"insert": ["c"], "update": ["u"], "delete": ["d"]},
+        ),
+    )
+    c = SQLiteConnector(
+        url=f"sqlite:///{tmp_path}/loader_cdc.db", write_mode="cdc", batch_size=100
+    )
+    c.ensure_table(config)
+    f = tmp_path / "changes.ndjson"
+    f.write_text(
+        '{"id":"1","value":"old","updated_at":"2026-05-01T00:00:00","op":"c"}\n'
+        '{"id":"1","value":"new","updated_at":"2026-05-02T00:00:00","op":"u"}\n'
+    )
+
+    rows, error = load_file(c, config, str(f), "cdchash")
+
+    assert error is None
+    assert rows == 2
+    row = c._get_conn().execute(
+        "SELECT id, value, _source_file_hash FROM items"
+    ).fetchone()
+    assert row == ("1", "new", "cdchash")
+    c.close()
+
+
+def test_load_file_applies_cdc_with_renamed_key_column(tmp_path):
+    config = PipelineConfig(
+        format="ndjson",
+        dest_table="items",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("source_id", "id", "string", True),
+            ColumnMapping("source_value", "value", "string", False),
+            ColumnMapping("source_updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["source_id"],
+            operation_column="op",
+            sequence_by="source_updated_at",
+            operations={"insert": ["c"], "update": ["u"], "delete": ["d"]},
+        ),
+    )
+    c = SQLiteConnector(
+        url=f"sqlite:///{tmp_path}/loader_cdc_renamed.db",
+        write_mode="cdc",
+        batch_size=100,
+    )
+    c.ensure_table(config)
+    f = tmp_path / "changes.ndjson"
+    f.write_text(
+        '{"source_id":"1","source_value":"new","source_updated_at":"2026-05-02T00:00:00","op":"c"}\n'
+    )
+
+    rows, error = load_file(c, config, str(f), "renamedhash")
+
+    assert error is None
+    assert rows == 1
+    row = c._get_conn().execute("SELECT id, value FROM items").fetchone()
+    assert row == ("1", "new")
+    c.close()
+
+
+def test_load_file_returns_error_on_unknown_cdc_operation(tmp_path):
+    config = PipelineConfig(
+        format="ndjson",
+        dest_table="items",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("id", "id", "string", True),
+            ColumnMapping("value", "value", "string", False),
+            ColumnMapping("updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["id"],
+            operation_column="op",
+            sequence_by="updated_at",
+            operations={"insert": ["c"], "update": ["u"], "delete": ["d"]},
+        ),
+    )
+    c = SQLiteConnector(
+        url=f"sqlite:///{tmp_path}/loader_cdc_bad_op.db",
+        write_mode="cdc",
+        batch_size=100,
+    )
+    c.ensure_table(config)
+    f = tmp_path / "changes.ndjson"
+    f.write_text(
+        '{"id":"1","value":"bad","updated_at":"2026-05-02T00:00:00","op":"x"}\n'
+    )
+
+    rows, error = load_file(c, config, str(f), "badop")
+
+    assert rows == 1
+    assert error is not None
+    assert "Unknown CDC operation: 'x'" in error
+    assert c._get_conn().execute("SELECT COUNT(*) FROM items").fetchone()[0] == 0
+    c.close()

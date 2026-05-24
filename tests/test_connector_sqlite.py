@@ -1,6 +1,6 @@
 import pytest
 
-from filedge.config import ColumnMapping, PipelineConfig
+from filedge.config import CdcConfig, ColumnMapping, PipelineConfig
 from filedge.connectors.sqlite import SQLiteConnector
 from filedge.connectors import SchemaError
 
@@ -139,3 +139,111 @@ def test_provenance_columns_set_correctly(connector, config):
     ).fetchone()
     assert row[0] == "myhash"
     assert row[1] is not None
+
+
+def test_write_cdc_rows_applies_insert_update_delete(tmp_path):
+    config = PipelineConfig(
+        format="ndjson",
+        dest_table="customers",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("customer_id", "customer_id", "string", True),
+            ColumnMapping("email", "email", "string", False),
+            ColumnMapping("updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["customer_id"],
+            operation_column="op",
+            sequence_by="updated_at",
+            operations={
+                "insert": ["c"],
+                "update": ["u"],
+                "delete": ["d"],
+            },
+        ),
+    )
+    connector = SQLiteConnector(
+        url=f"sqlite:///{tmp_path}/cdc.db", write_mode="cdc", batch_size=100
+    )
+    connector.ensure_table(config)
+
+    connector.write_cdc_rows(
+        "customers",
+        iter(
+            [
+                {
+                    "customer_id": "c1",
+                    "email": "old@example.com",
+                    "updated_at": "2026-05-01T00:00:00",
+                    "op": "c",
+                },
+                {
+                    "customer_id": "c1",
+                    "email": "new@example.com",
+                    "updated_at": "2026-05-02T00:00:00",
+                    "op": "u",
+                },
+                {
+                    "customer_id": "c2",
+                    "email": "gone@example.com",
+                    "updated_at": "2026-05-03T00:00:00",
+                    "op": "c",
+                },
+                {
+                    "customer_id": "c2",
+                    "email": "gone@example.com",
+                    "updated_at": "2026-05-04T00:00:00",
+                    "op": "d",
+                },
+            ]
+        ),
+        "hash1",
+        config.cdc,
+    )
+
+    rows = connector._get_conn().execute(
+        "SELECT customer_id, email, _source_file_hash FROM customers ORDER BY customer_id"
+    ).fetchall()
+    assert rows == [("c1", "new@example.com", "hash1")]
+    connector.close()
+
+
+def test_write_cdc_rows_is_idempotent_for_same_hash(tmp_path):
+    config = PipelineConfig(
+        format="ndjson",
+        dest_table="customers",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("customer_id", "customer_id", "string", True),
+            ColumnMapping("email", "email", "string", False),
+            ColumnMapping("updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["customer_id"],
+            operation_column="op",
+            sequence_by="updated_at",
+            operations={"insert": ["c"], "update": ["u"], "delete": ["d"]},
+        ),
+    )
+    connector = SQLiteConnector(
+        url=f"sqlite:///{tmp_path}/cdc_retry.db", write_mode="cdc", batch_size=100
+    )
+    connector.ensure_table(config)
+    rows = [
+        {
+            "customer_id": "c1",
+            "email": "new@example.com",
+            "updated_at": "2026-05-02T00:00:00",
+            "op": "u",
+        }
+    ]
+
+    connector.write_cdc_rows("customers", iter(rows), "hash1", config.cdc)
+    connector.write_cdc_rows("customers", iter(rows), "hash1", config.cdc)
+
+    assert _row_count(connector, "customers") == 1
+    row = connector._get_conn().execute(
+        "SELECT customer_id, email, _source_file_hash FROM customers"
+    ).fetchone()
+    assert row == ("c1", "new@example.com", "hash1")
+    connector.close()

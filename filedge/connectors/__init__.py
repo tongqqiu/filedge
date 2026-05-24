@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterator
 
-from filedge.config import PipelineConfig
+from filedge.config import CdcConfig, PipelineConfig
 
 
 class SchemaError(Exception):
@@ -32,6 +32,17 @@ class Connector(ABC):
 
         Raises SchemaError if the destination table schema is incompatible.
         """
+
+    def write_cdc_rows(
+        self,
+        table: str,
+        rows: Iterator[dict],
+        file_hash: str,
+        cdc: CdcConfig,
+    ) -> None:
+        raise NotImplementedError(
+            f"Connector {type(self).__name__} does not support write_mode: cdc"
+        )
 
     def close(self) -> None:
         pass

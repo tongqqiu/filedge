@@ -84,3 +84,28 @@ def test_inspect_stdout_yaml_when_no_output_flag():
     result = runner.invoke(cli, ["inspect", os.path.join(FIXTURES, "sample.csv")])
     assert result.exit_code == 0
     assert "columns:" in result.output
+
+
+def test_inspect_iso_date_output_uses_executable_date_type(tmp_path):
+    source = tmp_path / "dates.csv"
+    source.write_text("created\n2024-01-15\n2024-06-30\n")
+    out = tmp_path / "cols.yaml"
+
+    result = _inspect(str(source), output_file=out)
+
+    assert result.exit_code == 0
+    parsed = yaml.safe_load(out.read_text())
+    assert parsed["columns"][0]["type"] == "date"
+
+
+def test_inspect_non_iso_date_like_output_stays_string(tmp_path):
+    source = tmp_path / "dates.csv"
+    source.write_text("created\n01/15/2024\n06/30/2024\n")
+    out = tmp_path / "cols.yaml"
+
+    result = _inspect(str(source), output_file=out)
+
+    assert result.exit_code == 0
+    parsed = yaml.safe_load(out.read_text())
+    assert parsed["columns"][0]["type"] == "string"
+    assert "filedge date requires YYYY-MM-DD" in result.output

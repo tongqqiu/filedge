@@ -171,6 +171,7 @@ uv run pytest tests/test_connector_databricks_integration.py
 |------|-----------|-------------|
 | `append` (default) | Rows added alongside prior records | Delete-where-hash then insert on retry |
 | `truncate` | Table wiped then replaced with this file's rows | Inherently idempotent |
+| `cdc` | Apply CDC Files as SCD Type 1 inserts, updates, and deletes | Re-applying the same File converges by business key |
 
 ## Column Types
 

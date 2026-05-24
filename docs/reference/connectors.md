@@ -16,6 +16,8 @@ connector:
 
 No extra dependencies required.
 
+Supports `write_mode: cdc` for SCD Type 1 CDC Files.
+
 ---
 
 ## PostgreSQL
@@ -35,6 +37,8 @@ uv sync --extra postgres
 ```
 
 The connector writes rows via `executemany` with parameterized queries. Idempotency in append mode: rows for a given `file_hash` are deleted then re-inserted on retry, so a crashed run never produces duplicates.
+
+Supports `write_mode: cdc` for SCD Type 1 CDC Files.
 
 ---
 

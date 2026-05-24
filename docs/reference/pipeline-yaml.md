@@ -81,6 +81,39 @@ columns:
 |-------|-----------|-------------|
 | `append` | Rows added alongside prior records | Delete-where-hash then insert on retry |
 | `truncate` | Table wiped then replaced with this file's rows | Inherently idempotent |
+| `cdc` | Apply CDC Files as SCD Type 1 inserts, updates, and deletes | Re-applying the same File converges by business key |
+
+When `write_mode: cdc` is used, a `cdc:` block is required. CDC support starts from complete Files in the Watched Directory; Filedge does not capture database logs or consume directly from queues.
+
+```yaml
+write_mode: cdc
+
+cdc:
+  keys: [customer_id]
+  operation_column: op
+  sequence_by: updated_at
+  operations:
+    insert: [c, insert]
+    update: [u, update]
+    delete: [d, delete]
+```
+
+### `cdc`
+
+Configures how Filedge applies a CDC File to the destination table.
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `keys` | Yes | Source column names that identify the destination row |
+| `operation_column` | Yes | Source column containing the change operation |
+| `sequence_by` | Yes | Source column used to pick the latest change for a key within one File |
+| `operations.insert` | Yes | Operation values treated as inserts |
+| `operations.update` | Yes | Operation values treated as updates |
+| `operations.delete` | Yes | Operation values treated as deletes |
+
+`keys` and `sequence_by` must be declared in `columns:`. The operation column may be CDC metadata only; it does not need to be declared unless you also want to write it to the destination.
+
+First-version CDC support is SCD Type 1 only. Inserts and updates replace the current row for the configured key. Deletes remove the current row for the key. SCD Type 2 history tables are out of scope.
 
 ### `retry_cap`
 

@@ -110,7 +110,17 @@ def test_mixed_date_formats_is_string_ambiguous_with_note():
     col = result[0]
     assert col.inferred_type == "string"
     assert col.confidence == "ambiguous"
-    assert any("date format" in n for n in col.notes)
+    assert any("date-like" in n for n in col.notes)
+    assert any("filedge date requires YYYY-MM-DD" in n for n in col.notes)
+
+
+def test_non_iso_date_format_is_string_ambiguous_with_note():
+    result = infer_schema(rows({"d": "01/15/2024"}, {"d": "06/30/2024"}))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "ambiguous"
+    assert any("MM/DD/YYYY" in n for n in col.notes)
+    assert any("filedge date requires YYYY-MM-DD" in n for n in col.notes)
 
 
 # --- nested objects / arrays (#22) ---

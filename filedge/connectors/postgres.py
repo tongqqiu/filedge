@@ -1,9 +1,10 @@
 import datetime
 from typing import Iterator, List, Optional
 
-from filedge.config import PipelineConfig
+from filedge.cdc import plan_cdc_changes
+from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
-from filedge.schema import expected_columns, schema_mismatches
+from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
 
 _TYPE_TO_SQL = {
     "string": "TEXT",
@@ -58,10 +59,10 @@ class PostgresConnector(Connector):
 
     def _create_table(self, config: PipelineConfig) -> None:
         col_defs = ["_id BIGSERIAL PRIMARY KEY"]
-        for col in config.columns:
-            col_defs.append(f"{col.dest} {_TYPE_TO_SQL.get(col.type, 'TEXT')}")
-        col_defs.append("_source_file_hash TEXT NOT NULL")
-        col_defs.append("_ingested_at TIMESTAMP WITH TIME ZONE NOT NULL")
+        for col in configured_columns(config, _TYPE_TO_SQL):
+            col_defs.append(f"{col.name} {col.type}")
+        for col in provenance_columns(_TYPE_TO_SQL, "TIMESTAMP WITH TIME ZONE"):
+            col_defs.append(f"{col.name} {col.type} NOT NULL")
         ddl = f"CREATE TABLE {config.dest_table} ({', '.join(col_defs)})"
         with self._conn.cursor() as cur:
             cur.execute(ddl)
@@ -100,6 +101,46 @@ class PostgresConnector(Connector):
 
                 if batch:
                     cur.executemany(insert_sql, batch)
+
+            self._conn.commit()
+        except Exception:
+            self._conn.rollback()
+            raise
+
+    def write_cdc_rows(
+        self,
+        table: str,
+        rows: Iterator[dict],
+        file_hash: str,
+        cdc: CdcConfig,
+    ) -> None:
+        ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
+        changes = plan_cdc_changes(rows, cdc)
+        key_predicate = " AND ".join([f"{column} = %s" for column in cdc.keys])
+
+        try:
+            with self._conn.cursor() as cur:
+                for change in changes:
+                    cur.execute(
+                        f"DELETE FROM {table} WHERE {key_predicate}",
+                        list(change.key),
+                    )
+                    if change.operation == "delete":
+                        continue
+
+                    row = {
+                        key: value
+                        for key, value in change.row.items()
+                        if key != cdc.operation_column
+                    }
+                    dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
+                    placeholders = ", ".join(["%s"] * len(dest_cols))
+                    values = list(row.values()) + [file_hash, ingested_at]
+                    cur.execute(
+                        f"INSERT INTO {table} ({', '.join(dest_cols)})"
+                        f" VALUES ({placeholders})",
+                        values,
+                    )
 
             self._conn.commit()
         except Exception:

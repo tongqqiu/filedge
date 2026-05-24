@@ -6,7 +6,7 @@ from typing import Iterator, Optional
 
 from filedge.config import PipelineConfig
 from filedge.connectors import Connector, SchemaError
-from filedge.schema import expected_columns, schema_mismatches
+from filedge.schema import PROVENANCE_COLUMN_NAMES, expected_columns, schema_mismatches
 
 _TYPE_TO_BQ = {
     "string": "STRING",
@@ -59,14 +59,14 @@ class BigQueryConnector(Connector):
 
     def _bq_schema(self, config: PipelineConfig):
         from google.cloud.bigquery import SchemaField
-        fields = [SchemaField("_id", "INT64")]
-        fields.extend(
-            SchemaField(col.dest, _TYPE_TO_BQ.get(col.type, "STRING"))
-            for col in config.columns
-        )
-        fields.append(SchemaField("_source_file_hash", "STRING", mode="REQUIRED"))
-        fields.append(SchemaField("_ingested_at", "TIMESTAMP", mode="REQUIRED"))
-        return fields
+        return [
+            SchemaField(
+                col.name,
+                col.type,
+                mode="REQUIRED" if col.name in PROVENANCE_COLUMN_NAMES else "NULLABLE",
+            )
+            for col in expected_columns(config, _TYPE_TO_BQ, "INT64", "TIMESTAMP")
+        ]
 
     def ensure_table(self, config: PipelineConfig) -> None:
         from google.cloud import bigquery
