@@ -301,5 +301,9 @@ class BigQueryConnector(Connector):
     def _sql_string(self, value: str) -> str:
         return value.replace("'", "''")
 
+    def healthcheck(self) -> None:
+        job = self._bq.query("SELECT 1")
+        list(job.result())
+
     def close(self) -> None:
         self._bq.close()

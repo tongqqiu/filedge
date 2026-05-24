@@ -108,10 +108,35 @@ filedge run --dir <path> --config <path> --audit-db-url <url> [--progress|--no-p
 | `--config` | — | required | Path to `pipeline.yaml` |
 | `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
 | `--progress / --no-progress` | — | auto | Show live progress bars; defaults to on for interactive terminals |
+| `--json` | — | off | Write the Run summary as JSON |
+| `--log-format` | — | auto | `text` on a TTY, `json` otherwise |
+| `--log-level` | — | `INFO` | Log level |
+| `--otel-traces / --no-otel-traces` | `FILEDGE_OTEL_TRACES` | off | Enable OpenTelemetry tracing |
+| `--otel-logs / --no-otel-logs` | `FILEDGE_OTEL_LOGS` | off | Enable the OpenTelemetry log bridge |
 
 **Exit codes:** `0` on success, `1` on error.
 
 See the [Run guide](../guides/run.md) for full details.
+
+---
+
+## `filedge healthcheck`
+
+Probe the Audit DB and destination connector without writing data.
+
+```bash
+filedge healthcheck --config <path> --audit-db-url <url> [--json]
+```
+
+| Option | Env var | Default | Description |
+|--------|---------|---------|-------------|
+| `--config` | — | required | Path to `pipeline.yaml` |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--json` | — | off | Write one machine-readable health object |
+
+**Exit codes:** `0` when all checks pass, `1` when any check fails.
+
+See the [Healthcheck guide](../guides/healthcheck.md) for full details.
 
 ---
 

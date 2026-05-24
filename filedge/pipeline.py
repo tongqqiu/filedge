@@ -27,12 +27,17 @@ def run_pipeline(
     audit_db_url: str,
     progress: ProgressReporter | None = None,
     run_id: str | None = None,
+    preflight: bool = True,
 ) -> dict:
     if run_id is None:
         run_id = str(uuid.uuid4())
     started_at = datetime.datetime.now(datetime.UTC).isoformat()
     started_perf = time.perf_counter()
     config = load_config(config_path)
+    if preflight:
+        from filedge.health import assert_healthy
+        assert_healthy(config, audit_db_url)
+
     db = Database(audit_db_url)
     connector = get_connector(config)
     fs, root = get_filesystem(watched_dir)

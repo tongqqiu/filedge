@@ -44,6 +44,12 @@ class Connector(ABC):
             f"Connector {type(self).__name__} does not support write_mode: cdc"
         )
 
+    def healthcheck(self) -> None:
+        """Perform a read-only round-trip against the destination."""
+        raise NotImplementedError(
+            f"Connector {type(self).__name__} does not support healthcheck"
+        )
+
     def close(self) -> None:
         pass
 

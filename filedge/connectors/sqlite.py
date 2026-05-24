@@ -140,6 +140,9 @@ class SQLiteConnector(Connector):
             conn.rollback()
             raise
 
+    def healthcheck(self) -> None:
+        self._get_conn().execute("SELECT 1").fetchone()
+
     def close(self) -> None:
         if self._conn is not None:
             self._conn.close()
