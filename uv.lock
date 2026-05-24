@@ -707,7 +707,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.14" },
-    { name = "s3fs", marker = "extra == 's3'", specifier = ">=2023.0" },
+    { name = "s3fs", marker = "extra == 's3'", specifier = ">=2026.4.0" },
 ]
 provides-extras = ["dev", "postgres", "bigquery", "databricks", "duckdb", "parquet", "s3", "gcs", "otel", "docs"]
 
