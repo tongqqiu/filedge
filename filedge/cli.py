@@ -62,10 +62,13 @@ def cli():
               help="Log output format. Defaults to text on a TTY, json otherwise.")
 @click.option("--log-level", "log_level", default="INFO", show_default=True,
               help="Log level (DEBUG, INFO, WARNING, ERROR).")
-def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_format, log_level):
+@click.option("--otel-traces/--no-otel-traces", "otel_traces", default=None,
+              help="Enable OpenTelemetry tracing. Off by default. Also enabled by FILEDGE_OTEL_TRACES=true.")
+def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_format, log_level, otel_traces):
     """Run the ETL pipeline for a Watched Directory."""
     from filedge.log import configure_logging, get_logger
     from filedge.progress import LoggingProgressReporter
+    from filedge.tracing import configure_tracing, should_enable_tracing
 
     try:
         is_tty = sys.stderr.isatty()
@@ -75,24 +78,37 @@ def run(watched_dir, config_path, audit_db_url, show_progress, output_json, log_
             log_format = "text" if is_tty else "json"
 
         configure_logging(level=log_level, fmt=log_format)
+
+        tracing_on = should_enable_tracing(
+            cli_flag=otel_traces,
+            env_value=os.environ.get("FILEDGE_OTEL_TRACES"),
+        )
+        configure_tracing(enabled=tracing_on)
+
         run_id = _new_run_id()
         log_reporter = LoggingProgressReporter(get_logger("filedge.pipeline"), run_id=run_id)
 
-        if show_progress:
-            from rich.console import Console
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            handlers = [log_reporter.handle]
 
-            console = Console(stderr=True)
-            with RichPipelineProgress(console) as progress:
-                result = run_pipeline(
-                    watched_dir, config_path, audit_db_url,
-                    progress=_tee(progress.handle, log_reporter.handle),
-                    run_id=run_id,
-                )
-        else:
+            tracing_reporter = None
+            if tracing_on:
+                from filedge.progress import TracingProgressReporter
+                tracing_reporter = stack.enter_context(TracingProgressReporter(run_id=run_id))
+                handlers.append(tracing_reporter.handle)
+
+            if show_progress:
+                from rich.console import Console
+                rich_progress = stack.enter_context(RichPipelineProgress(Console(stderr=True)))
+                handlers.insert(0, rich_progress.handle)
+
             result = run_pipeline(
                 watched_dir, config_path, audit_db_url,
-                progress=log_reporter.handle, run_id=run_id,
+                progress=_tee(*handlers), run_id=run_id,
             )
+            if tracing_reporter is not None:
+                tracing_reporter.set_run_attributes(result)
 
         if output_json:
             click.echo(json_lib.dumps(result))
