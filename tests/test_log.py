@@ -45,3 +45,45 @@ def test_json_logger_respects_level():
     lines = [line for line in buf.getvalue().splitlines() if line.strip()]
     events = [json.loads(line)["event"] for line in lines]
     assert events == ["should_appear"]
+
+
+def test_json_logger_includes_exception_text():
+    log, buf = _capture_logger("filedge.test")
+    try:
+        raise RuntimeError("boom")
+    except RuntimeError:
+        log.exception("failed_to_load")
+
+    record = json.loads(buf.getvalue().splitlines()[0])
+    assert record["event"] == "failed_to_load"
+    assert "RuntimeError: boom" in record["exc_info"]
+
+
+def test_text_formatter_renders_human_readable_line():
+    log, buf = _capture_logger("filedge.test", fmt="text")
+    log.info("file_committed", extra={"run_id": "r1", "path": "/tmp/a.csv"})
+
+    line = buf.getvalue().strip()
+    assert "INFO" in line
+    assert "filedge.test" in line
+    assert "file_committed" in line
+    assert "run_id=r1" in line
+    assert "path=/tmp/a.csv" in line
+
+
+def test_configure_logging_rejects_unknown_format():
+    import pytest
+    from filedge.log import configure_logging
+
+    with pytest.raises(ValueError, match="Unknown log format"):
+        configure_logging(fmt="xml")
+
+
+def test_get_logger_normalizes_bare_name_under_filedge_namespace():
+    from filedge.log import get_logger
+
+    log = get_logger("worker")
+    assert log.name == "filedge.worker"
+
+    log = get_logger("filedge.pipeline")
+    assert log.name == "filedge.pipeline"
