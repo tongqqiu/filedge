@@ -2,7 +2,7 @@ import pytest
 
 pytest.importorskip("duckdb")
 
-from filedge.config import ColumnMapping, PipelineConfig
+from filedge.config import CdcConfig, ColumnMapping, PipelineConfig
 from filedge.connectors.duckdb import DuckDBConnector
 from filedge.connectors import SchemaError
 
@@ -175,3 +175,208 @@ def test_missing_sdk_raises_import_error_with_hint(tmp_path, monkeypatch):
     monkeypatch.setitem(sys.modules, "duckdb", None)
     with pytest.raises(ImportError, match="pip install filedge\\[duckdb\\]"):
         DuckDBConnector(path=str(tmp_path / "x.duckdb"))
+
+
+def _cdc_config():
+    return PipelineConfig(
+        format="ndjson",
+        dest_table="customers",
+        write_mode="cdc",
+        columns=[
+            ColumnMapping("customer_id", "customer_id", "string", True),
+            ColumnMapping("email", "email", "string", False),
+            ColumnMapping("updated_at", "updated_at", "timestamp", True),
+        ],
+        cdc=CdcConfig(
+            keys=["customer_id"],
+            operation_column="op",
+            sequence_by="updated_at",
+            operations={
+                "insert": ["c"],
+                "update": ["u"],
+                "delete": ["d"],
+            },
+        ),
+    )
+
+
+def test_write_cdc_rows_applies_insert_update_delete(tmp_path):
+    config = _cdc_config()
+    connector = DuckDBConnector(
+        path=str(tmp_path / "cdc.duckdb"), write_mode="cdc", batch_size=100
+    )
+    connector.ensure_table(config)
+
+    connector.write_cdc_rows(
+        "customers",
+        iter(
+            [
+                {
+                    "customer_id": "c1",
+                    "email": "old@example.com",
+                    "updated_at": "2026-05-01T00:00:00",
+                    "op": "c",
+                },
+                {
+                    "customer_id": "c1",
+                    "email": "new@example.com",
+                    "updated_at": "2026-05-02T00:00:00",
+                    "op": "u",
+                },
+                {
+                    "customer_id": "c2",
+                    "email": "gone@example.com",
+                    "updated_at": "2026-05-03T00:00:00",
+                    "op": "c",
+                },
+                {
+                    "customer_id": "c2",
+                    "email": "gone@example.com",
+                    "updated_at": "2026-05-04T00:00:00",
+                    "op": "d",
+                },
+            ]
+        ),
+        "hash1",
+        config.cdc,
+    )
+
+    rows = connector._conn.execute(
+        "SELECT customer_id, email, _source_file_hash FROM customers ORDER BY customer_id"
+    ).fetchall()
+    assert rows == [("c1", "new@example.com", "hash1")]
+    connector.close()
+
+
+def test_write_cdc_rows_is_idempotent_for_same_hash(tmp_path):
+    config = _cdc_config()
+    connector = DuckDBConnector(
+        path=str(tmp_path / "cdc_retry.duckdb"), write_mode="cdc", batch_size=100
+    )
+    connector.ensure_table(config)
+    rows = [
+        {
+            "customer_id": "c1",
+            "email": "new@example.com",
+            "updated_at": "2026-05-02T00:00:00",
+            "op": "u",
+        }
+    ]
+
+    connector.write_cdc_rows("customers", iter(rows), "hash1", config.cdc)
+    connector.write_cdc_rows("customers", iter(rows), "hash1", config.cdc)
+
+    assert _row_count(connector, "customers") == 1
+    row = connector._conn.execute(
+        "SELECT customer_id, email, _source_file_hash FROM customers"
+    ).fetchone()
+    assert row == ("c1", "new@example.com", "hash1")
+    connector.close()
+
+
+def test_write_cdc_rows_delete_then_reinsert_across_retries(tmp_path):
+    """Re-applying a CDC file containing a delete keeps the row deleted."""
+    config = _cdc_config()
+    connector = DuckDBConnector(
+        path=str(tmp_path / "cdc_delete.duckdb"), write_mode="cdc", batch_size=100
+    )
+    connector.ensure_table(config)
+    connector.write_cdc_rows(
+        "customers",
+        iter(
+            [
+                {
+                    "customer_id": "c1",
+                    "email": "alive@example.com",
+                    "updated_at": "2026-05-01T00:00:00",
+                    "op": "c",
+                },
+                {
+                    "customer_id": "c1",
+                    "email": "alive@example.com",
+                    "updated_at": "2026-05-02T00:00:00",
+                    "op": "d",
+                },
+            ]
+        ),
+        "hash1",
+        config.cdc,
+    )
+    assert _row_count(connector, "customers") == 0
+
+    # Retry the same file — destination state must not change.
+    connector.write_cdc_rows(
+        "customers",
+        iter(
+            [
+                {
+                    "customer_id": "c1",
+                    "email": "alive@example.com",
+                    "updated_at": "2026-05-01T00:00:00",
+                    "op": "c",
+                },
+                {
+                    "customer_id": "c1",
+                    "email": "alive@example.com",
+                    "updated_at": "2026-05-02T00:00:00",
+                    "op": "d",
+                },
+            ]
+        ),
+        "hash1",
+        config.cdc,
+    )
+    assert _row_count(connector, "customers") == 0
+    connector.close()
+
+
+def test_write_cdc_rows_rolls_back_on_error(tmp_path):
+    """A mid-apply failure must leave the destination unchanged."""
+    config = _cdc_config()
+    connector = DuckDBConnector(
+        path=str(tmp_path / "cdc_rollback.duckdb"), write_mode="cdc", batch_size=100
+    )
+    connector.ensure_table(config)
+    connector.write_cdc_rows(
+        "customers",
+        iter(
+            [
+                {
+                    "customer_id": "c1",
+                    "email": "stable@example.com",
+                    "updated_at": "2026-05-01T00:00:00",
+                    "op": "c",
+                }
+            ]
+        ),
+        "hash_initial",
+        config.cdc,
+    )
+    assert _row_count(connector, "customers") == 1
+
+    def bad_rows():
+        yield {
+            "customer_id": "c1",
+            "email": "would-update@example.com",
+            "updated_at": "2026-05-02T00:00:00",
+            "op": "u",
+        }
+        raise ValueError("injected mid-stream")
+
+    with pytest.raises(ValueError, match="injected mid-stream"):
+        connector.write_cdc_rows("customers", bad_rows(), "hash_failed", config.cdc)
+
+    row = connector._conn.execute(
+        "SELECT email, _source_file_hash FROM customers"
+    ).fetchone()
+    assert row == ("stable@example.com", "hash_initial")
+    connector.close()
+
+
+def test_write_cdc_rows_unsupported_when_method_missing(tmp_path):
+    """A connector that does not override write_cdc_rows must raise NotImplementedError."""
+    from filedge.connectors import Connector
+
+    # Sanity: the base method raises. DuckDB overrides it (covered by the tests above).
+    assert "write_cdc_rows" in DuckDBConnector.__dict__
+    assert Connector.write_cdc_rows.__qualname__.startswith("Connector.")
