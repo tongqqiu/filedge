@@ -64,3 +64,10 @@ def list_files(fs, path: str, file_pattern: str | None = None) -> List[str]:
 def file_basename(path: str) -> str:
     """Filename component of a local or cloud path."""
     return path.split("/")[-1]
+
+
+def file_size(path: str, fs=None) -> int:
+    """Size in bytes of a local or remote file."""
+    if fs is not None:
+        return fs.size(path)
+    return os.path.getsize(path)

@@ -13,6 +13,47 @@ from filedge.db import (
 )
 
 
+def _audit_columns(db) -> set[str]:
+    cursor = db.execute("PRAGMA table_info(etl_file_audit)")
+    return {row[1] for row in cursor.fetchall()}
+
+
+def test_create_audit_tables_adds_run_id_column(db):
+    assert "run_id" in _audit_columns(db)
+
+
+def test_create_audit_tables_migrates_existing_table_without_run_id(tmp_path):
+    """An audit DB written by an older filedge (no run_id column) must be upgraded
+    by create_audit_tables() without losing rows."""
+    from filedge.db import Database, create_audit_tables, find_file_by_hash, insert_pending
+
+    db_path = tmp_path / "legacy.db"
+    legacy = Database(f"sqlite:///{db_path}")
+    legacy.execute(
+        "CREATE TABLE etl_file_audit ("
+        "id INTEGER PRIMARY KEY, filename TEXT NOT NULL, source_dir TEXT,"
+        " content_hash TEXT NOT NULL UNIQUE, state TEXT NOT NULL,"
+        " attempt_count INTEGER NOT NULL DEFAULT 0, error_message TEXT,"
+        " worker_id TEXT, claimed_at TEXT, created_at TEXT NOT NULL,"
+        " updated_at TEXT NOT NULL)"
+    )
+    legacy.execute(
+        "INSERT INTO etl_file_audit (filename, content_hash, state, created_at, updated_at)"
+        " VALUES ('legacy.csv', 'legacy-hash', 'COMMITTED', '2026-01-01', '2026-01-01')"
+    )
+    legacy.commit()
+    legacy.close()
+
+    upgraded = Database(f"sqlite:///{db_path}")
+    create_audit_tables(upgraded)
+
+    cursor = upgraded.execute("PRAGMA table_info(etl_file_audit)")
+    assert "run_id" in {row[1] for row in cursor.fetchall()}
+    legacy_row = find_file_by_hash(upgraded, "legacy-hash")
+    assert legacy_row is not None and legacy_row.filename == "legacy.csv"
+    upgraded.close()
+
+
 def test_insert_and_find_pending(db):
     insert_pending(db, "orders.csv", "abc123")
     db.commit()

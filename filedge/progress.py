@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from typing import Callable, Optional
 
@@ -40,6 +41,33 @@ def emit_progress(
             error=error,
         )
     )
+
+
+class LoggingProgressReporter:
+    """ProgressReporter that emits one structured log line per PipelineProgressEvent.
+
+    Composable with RichPipelineProgress — both can be attached to the same Run.
+    Each log line carries the Run's `run_id` so operators can correlate events.
+    """
+
+    def __init__(self, logger: logging.Logger, run_id: str):
+        self._logger = logger
+        self._run_id = run_id
+
+    def handle(self, event: PipelineProgressEvent) -> None:
+        extra = {"run_id": self._run_id, "phase": event.phase, "action": event.action}
+        if event.path is not None:
+            extra["path"] = event.path
+        if event.rows is not None:
+            extra["rows"] = event.rows
+        if event.total is not None:
+            extra["total"] = event.total
+        if event.current is not None:
+            extra["current"] = event.current
+        level = logging.ERROR if event.error else logging.INFO
+        if event.error:
+            extra["error"] = event.error
+        self._logger.log(level, f"pipeline.{event.phase}.{event.action}", extra=extra)
 
 
 class RichPipelineProgress:

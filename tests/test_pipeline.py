@@ -73,6 +73,85 @@ def test_committed_files_not_touched_by_reset(db):
 
 # --- End-to-end retry via pipeline ---
 
+def _minimal_watched_dir_and_config(tmp_path):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    config_file = tmp_path / "pipeline.yaml"
+    config_file.write_text(
+        f"format: csv\ndest_table: items\nretry_cap: 3\nbatch_size: 100\n"
+        f"stale_timeout_minutes: 30\n"
+        f"connector:\n  type: sqlite\n  url: sqlite:///{tmp_path}/dest.db\n"
+        f"columns:\n"
+        f"  - source: name\n    dest: name\n    type: string\n    required: true\n"
+        f"  - source: value\n    dest: value\n    type: string\n    required: true\n"
+    )
+    return str(watched), str(config_file), f"sqlite:///{tmp_path}/audit.db"
+
+
+def test_run_pipeline_returns_unique_run_id(tmp_path):
+    import uuid
+    from filedge.pipeline import run_pipeline
+
+    watched1, config1, audit1 = _minimal_watched_dir_and_config(tmp_path / "first")
+    watched2, config2, audit2 = _minimal_watched_dir_and_config(tmp_path / "second")
+
+    result1 = run_pipeline(watched1, config1, audit1)
+    result2 = run_pipeline(watched2, config2, audit2)
+
+    assert "run_id" in result1
+    assert uuid.UUID(result1["run_id"])  # valid UUID
+    assert result1["run_id"] != result2["run_id"]
+
+
+def test_run_pipeline_stamps_run_id_on_processed_rows(tmp_path):
+    """Every file processed in a Run carries that Run's run_id on its audit row."""
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched, config, audit = _minimal_watched_dir_and_config(tmp_path)
+    (tmp_path / "watch" / "b.csv").write_text("name,value\nBob,2\n")
+
+    result = run_pipeline(watched, config, audit, run_id="run-xyz")
+
+    assert result["committed"] == 2
+    audit_path = audit.removeprefix("sqlite:///")
+    rows = sqlite3.connect(audit_path).execute(
+        "SELECT filename, state, run_id FROM etl_file_audit ORDER BY filename"
+    ).fetchall()
+    assert rows == [
+        ("a.csv", "COMMITTED", "run-xyz"),
+        ("b.csv", "COMMITTED", "run-xyz"),
+    ]
+
+
+def test_run_pipeline_summary_contains_timing_and_volume(tmp_path):
+    from filedge.pipeline import run_pipeline
+
+    watched, config, audit = _minimal_watched_dir_and_config(tmp_path)
+    (tmp_path / "watch" / "b.csv").write_text("name,value\nBob,2\nCarol,3\n")
+
+    result = run_pipeline(watched, config, audit)
+
+    assert result["files_scanned"] == 2
+    assert result["rows_committed"] == 3  # 1 from a.csv + 2 from b.csv
+    assert result["bytes_processed"] > 0  # sum of both files' bytes
+    assert result["duration_s"] >= 0  # may be 0.0 on a very fast run, but key must exist
+    assert "started_at" in result and "finished_at" in result
+    assert result["started_at"] <= result["finished_at"]
+
+
+def test_run_pipeline_uses_caller_supplied_run_id(tmp_path):
+    from filedge.pipeline import run_pipeline
+
+    watched, config, audit = _minimal_watched_dir_and_config(tmp_path)
+
+    result = run_pipeline(watched, config, audit, run_id="external-scheduler-id-1")
+
+    assert result["run_id"] == "external-scheduler-id-1"
+
+
 def test_pipeline_retries_failed_file(tmp_path):
     """A file that fails on run 1 is retried on run 2 if below retry_cap."""
     from filedge.pipeline import run_pipeline
