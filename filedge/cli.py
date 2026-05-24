@@ -25,6 +25,8 @@ _EXT_TO_FORMAT = {
     ".parquet": "parquet",
 }
 
+_FORMAT_CHOICE = click.Choice(["csv", "ndjson", "parquet"])
+
 
 @click.group()
 def cli():
@@ -32,8 +34,12 @@ def cli():
 
 
 @cli.command()
-@click.option("--dir", "watched_dir", required=True, help="Watched directory path")
-@click.option("--config", "config_path", required=True, help="Path to pipeline.yaml")
+@click.option("--dir", "watched_dir", required=True,
+              type=click.Path(exists=True, file_okay=False, dir_okay=True),
+              help="Watched directory path")
+@click.option("--config", "config_path", required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Path to pipeline.yaml")
 @click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
 @click.option(
     "--progress/--no-progress",
@@ -78,7 +84,9 @@ def run(watched_dir, config_path, audit_db_url, show_progress):
 
 
 @cli.command()
-@click.option("--watched-dir", required=True, help="Source prefix containing small files")
+@click.option("--watched-dir", required=True,
+              type=click.Path(exists=True, file_okay=False, dir_okay=True),
+              help="Source prefix containing small files")
 @click.option("--output", required=True, help="Output prefix for compacted files")
 @click.option("--max-files", default=1000, show_default=True, help="Max input files per output file")
 @click.option("--compress", is_flag=True, help="Gzip-compress output (.ndjson.gz)")
@@ -120,9 +128,12 @@ def status(audit_db_url, output_json):
 
 @cli.command()
 @click.argument("file")
-@click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
+@click.option("--format", "fmt", default=None, type=_FORMAT_CHOICE,
+              help="File format (auto-detected from extension)")
 @click.option("--sample-rows", default=1000, show_default=True, help="Number of rows to sample")
-@click.option("--output", "output_path", default=None, help="Write YAML block to this file instead of stdout")
+@click.option("--output", "output_path", default=None,
+              type=click.Path(dir_okay=False),
+              help="Write YAML block to this file instead of stdout")
 @click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
 def inspect(file, fmt, sample_rows, output_path, encoding):
     """Infer schema from a file and output a columns: block for pipeline.yaml."""
@@ -165,7 +176,8 @@ def inspect(file, fmt, sample_rows, output_path, encoding):
 
 @cli.command()
 @click.argument("file")
-@click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
+@click.option("--format", "fmt", default=None, type=_FORMAT_CHOICE,
+              help="File format (auto-detected from extension)")
 @click.option("--rows", "num_rows", default=10, show_default=True, help="Number of rows to display")
 @click.option("--start-row", "start_row", default=1, show_default=True, help="First row to display (1-indexed)")
 @click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
@@ -197,8 +209,11 @@ def preview(file, fmt, num_rows, start_row, encoding):
 
 @cli.command()
 @click.argument("file")
-@click.option("--config", "config_path", required=True, help="Path to pipeline.yaml")
-@click.option("--format", "fmt", default=None, help="File format: csv or ndjson (auto-detected from extension)")
+@click.option("--config", "config_path", required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Path to pipeline.yaml")
+@click.option("--format", "fmt", default=None, type=_FORMAT_CHOICE,
+              help="File format (auto-detected from extension)")
 @click.option("--sample-rows", default=None, type=int, help="Validate only the first N rows")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON to stdout")
 @click.option("--encoding", default=None, help="Override file encoding from pipeline.yaml (e.g. cp500)")
@@ -236,3 +251,34 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding):
 
     if result.failures:
         sys.exit(1)
+
+
+@cli.command()
+@click.option(
+    "--shell",
+    type=click.Choice(["zsh", "bash"]),
+    default=None,
+    help="Shell type (auto-detected from $SHELL if omitted)",
+)
+def completion(shell):
+    """Print shell completion script.
+
+    \b
+    Zsh:  filedge completion >> ~/.zshrc && source ~/.zshrc
+    Bash: filedge completion --shell bash >> ~/.bashrc && source ~/.bashrc
+    """
+    if shell is None:
+        detected = os.environ.get("SHELL", "")
+        if "zsh" in detected:
+            shell = "zsh"
+        elif "bash" in detected:
+            shell = "bash"
+        else:
+            raise click.UsageError(
+                "Cannot detect shell from $SHELL. Use --shell zsh or --shell bash."
+            )
+
+    from click.shell_completion import BashComplete, ZshComplete
+
+    cls = ZshComplete if shell == "zsh" else BashComplete
+    click.echo(cls(cli, {}, "filedge", "_FILEDGE_COMPLETE").source(), nl=False)
