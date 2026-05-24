@@ -14,22 +14,22 @@ classifiers = [
 dependencies = [
     "click>=8.1",
     "pyyaml>=6.0",
-    "rich>=13.7",
+    "rich>=15.0.0",
 ]
 
 [project.scripts]
 filedge = "filedge.cli:cli"
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.9", "fsspec>=2023.0"]
-postgres = ["psycopg2-binary>=2.9"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.15.14", "fsspec>=2023.0"]
+postgres = ["psycopg2-binary>=2.9.12"]
 bigquery = ["google-cloud-bigquery>=3.0"]
 databricks = ["databricks-sql-connector>=3.0", "fsspec>=2023.0"]
 duckdb = ["duckdb>=1.0", "pyarrow>=14.0"]
 parquet = ["pyarrow>=14.0"]
-s3 = ["fsspec>=2023.0", "s3fs>=2023.0"]
-gcs = ["fsspec>=2023.0", "gcsfs>=2023.0"]
-docs = ["mkdocs>=1.5", "mkdocs-material>=9.0"]
+s3 = ["fsspec>=2023.0", "s3fs>=2026.4.0"]
+gcs = ["fsspec>=2023.0", "gcsfs>=2026.5.0"]
+docs = ["mkdocs>=1.6.1", "mkdocs-material>=9.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["filedge"]
