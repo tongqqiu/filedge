@@ -6,13 +6,18 @@ import click
 
 from filedge.compactor import compact as run_compact
 from filedge.connectors import SchemaError
+from filedge.audit_records import (
+    LineageAmbiguous,
+    LineageFound,
+    LineageMissing,
+    lineage_record,
+    status_summary,
+)
 from filedge.db import (
     Database,
     create_audit_tables,
     find_file_by_hash,
-    find_files_by_filename,
     find_terminal_failed_by_filename,
-    get_status_summary,
     list_terminal_failed,
     requeue_all_terminal_failed,
     requeue_by_hash,
@@ -233,7 +238,7 @@ def status(audit_db_url, output_json):
     """Show pipeline status summary."""
     db = Database(audit_db_url)
     create_audit_tables(db)
-    summary = get_status_summary(db)
+    summary = status_summary(db)
     db.close()
 
     if output_json:
@@ -542,40 +547,44 @@ def lineage(identifier, audit_db_url, output_json, dest_table):
     db = Database(audit_db_url)
     try:
         create_audit_tables(db)
-        record = _resolve_lineage_record(db, identifier)
-        if record is None:
+        result = lineage_record(db, identifier)
+        if isinstance(result, LineageMissing):
             click.echo(f"No File found matching {identifier!r}", err=True)
             sys.exit(1)
-        run_id, created_at, updated_at = _load_run_and_timestamps(db, record.content_hash)
+        if isinstance(result, LineageAmbiguous):
+            click.echo(
+                f"Filename {identifier!r} maps to {len(result.matches)} Content Hashes — "
+                "re-run with one of these Content Hashes:",
+                err=True,
+            )
+            for match in result.matches:
+                click.echo(
+                    f"  {match.content_hash}  state={match.state}",
+                    err=True,
+                )
+            sys.exit(2)
+        assert isinstance(result, LineageFound)
         if output_json:
             click.echo(json_lib.dumps(
-                _lineage_payload(record, run_id, created_at, updated_at, dest_table),
+                _lineage_payload(
+                    result.record,
+                    result.run_id,
+                    result.created_at,
+                    result.updated_at,
+                    dest_table,
+                ),
                 indent=2,
             ))
         else:
-            _print_lineage_human(record, run_id, created_at, updated_at, dest_table)
+            _print_lineage_human(
+                result.record,
+                result.run_id,
+                result.created_at,
+                result.updated_at,
+                dest_table,
+            )
     finally:
         db.close()
-
-
-def _resolve_lineage_record(db, identifier):
-    """Try Content Hash exact match first, then filename. Disambiguates on multi-hit filenames."""
-    by_hash = find_file_by_hash(db, identifier)
-    if by_hash is not None:
-        return by_hash
-    matches = find_files_by_filename(db, identifier)
-    if not matches:
-        return None
-    if len(matches) == 1:
-        return matches[0]
-    click.echo(
-        f"Filename {identifier!r} maps to {len(matches)} Content Hashes — "
-        "re-run with one of these Content Hashes:",
-        err=True,
-    )
-    for m in matches:
-        click.echo(f"  {m.content_hash}  state={m.state}", err=True)
-    sys.exit(2)
 
 
 def _print_lineage_human(record, run_id, created_at, updated_at, dest_table):
@@ -640,18 +649,6 @@ def _lineage_payload(record, run_id, created_at, updated_at, dest_table):
         "dest_table": dest_table,
         "source_manifest": source_manifest,
     }
-
-
-def _load_run_and_timestamps(db, content_hash):
-    cursor = db.execute(
-        "SELECT run_id, created_at, updated_at FROM etl_file_audit WHERE content_hash = ?",
-        [content_hash],
-    )
-    row = cursor.fetchone()
-    if row is None:
-        return None, None, None
-    return row[0], row[1], row[2]
-
 
 @cli.command("export-audit")
 @click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")

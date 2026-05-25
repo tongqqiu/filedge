@@ -23,8 +23,16 @@ class LoadCandidate:
 
 
 @dataclass(frozen=True)
+class PreLoadFailure:
+    path: str
+    content_hash: str
+    error: str
+
+
+@dataclass(frozen=True)
 class FileRegistrationResult:
     load_candidates: list[LoadCandidate]
+    pre_load_failures: list[PreLoadFailure]
     files_scanned: int
     new_files: int
     failed_pre_load: int
@@ -82,6 +90,7 @@ def register_files(
     db.commit()
 
     load_candidates: list[LoadCandidate] = []
+    pre_load_failures: list[PreLoadFailure] = []
     failed_pre_load = skipped = 0
     for path in files:
         content_hash = file_hashes[path]
@@ -89,6 +98,13 @@ def register_files(
             claim_processing(db, content_hash, run_id=run_id)
             mark_failed(db, content_hash, manifest_errors[content_hash])
             db.commit()
+            pre_load_failures.append(
+                PreLoadFailure(
+                    path=path,
+                    content_hash=content_hash,
+                    error=manifest_errors[content_hash],
+                )
+            )
             failed_pre_load += 1
             continue
         state = hash_states.get(content_hash)
@@ -108,6 +124,7 @@ def register_files(
     emit_progress(progress, "registering", "finish", total=len(files))
     return FileRegistrationResult(
         load_candidates=load_candidates,
+        pre_load_failures=pre_load_failures,
         files_scanned=len(files),
         new_files=new_files,
         failed_pre_load=failed_pre_load,

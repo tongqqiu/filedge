@@ -1,9 +1,11 @@
+import json
+
 from filedge.config import ColumnMapping, PipelineConfig
 from filedge.db import find_file_by_hash
 from filedge.file_registration import register_files
 
 
-def _config() -> PipelineConfig:
+def _config(source_manifest: str = "optional") -> PipelineConfig:
     return PipelineConfig(
         format="csv",
         dest_table="items",
@@ -11,6 +13,7 @@ def _config() -> PipelineConfig:
             ColumnMapping(source="name", dest="name", type="string", required=True),
             ColumnMapping(source="value", dest="value", type="string", required=True),
         ],
+        source_manifest=source_manifest,
     )
 
 
@@ -56,3 +59,41 @@ def test_file_registration_discovers_files_and_returns_load_candidates(db, tmp_p
         ("registering", "start", 2),
         ("registering", "finish", 2),
     ]
+
+
+def test_required_manifest_policy_fails_before_load_candidates(db, tmp_path):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    data_file = watched / "missing-manifest.csv"
+    data_file.write_text("name,value\nAlice,1\n")
+
+    result = register_files(str(watched), _config(source_manifest="required"), db)
+
+    assert result.new_files == 1
+    assert result.failed_pre_load == 1
+    assert result.load_candidates == []
+    record = find_file_by_hash(db, result.pre_load_failures[0].content_hash)
+    assert record.filename == "missing-manifest.csv"
+    assert record.state == "FAILED"
+    assert "manifest_missing" in record.error_message
+
+
+def test_disabled_manifest_policy_ignores_valid_sidecar(db, tmp_path):
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    data_file = watched / "direct.csv"
+    data_file.write_text("name,value\nAlice,1\n")
+    (watched / "direct.csv.manifest.json").write_text(json.dumps({
+        "producer": "https://example.com/fetcher",
+        "run": {"runId": "run-1"},
+        "job": {"namespace": "api", "name": "stripe.charges"},
+    }))
+
+    result = register_files(str(watched), _config(source_manifest="disabled"), db)
+
+    assert result.failed_pre_load == 0
+    assert len(result.load_candidates) == 1
+    record = find_file_by_hash(db, result.load_candidates[0].content_hash)
+    assert record.state == "PENDING"
+    assert record.source_type is None
+    assert record.source_name is None
