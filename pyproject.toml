@@ -5,17 +5,39 @@ build-backend = "hatchling.build"
 [project]
 name = "filedge"
 version = "0.1.0"
+description = "Atomic file ingestion with content-hash idempotency and a full audit trail — into SQLite, PostgreSQL, BigQuery, Databricks, or DuckDB."
+readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
+authors = [
+    { name = "Tony Qiu", email = "tongqing.qiu@gmail.com" },
+]
+keywords = ["etl", "data-engineering", "ingestion", "pipeline", "audit", "idempotency"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Logging",
 ]
 dependencies = [
     "click>=8.1",
     "pyyaml>=6.0",
     "rich>=15.0.0",
 ]
+
+[project.urls]
+Homepage = "https://tongqqiu.github.io/filedge/"
+Repository = "https://github.com/tongqqiu/filedge"
+Documentation = "https://tongqqiu.github.io/filedge/"
+"Bug Tracker" = "https://github.com/tongqqiu/filedge/issues"
+Changelog = "https://github.com/tongqqiu/filedge/releases"
 
 [project.scripts]
 filedge = "filedge.cli:cli"
