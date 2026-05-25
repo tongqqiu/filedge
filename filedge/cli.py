@@ -524,3 +524,22 @@ def requeue(filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap
                 click.echo(f"Requeued: {record.filename} ({record.content_hash[:12]}…)")
     finally:
         db.close()
+
+
+@cli.command("export-audit")
+@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--output", required=True, help="Output path for index.html")
+@click.option("--title", default=None, help="Pipeline label shown in the site header")
+@click.option("--dest-table", default=None, help="Destination table name for lineage SQL")
+def export_audit_cmd(audit_db_url, output, title, dest_table):
+    """Generate a read-only static HTML Audit Export from the Audit DB."""
+    from filedge.db import Database, create_audit_tables
+    from filedge.exporter import export_audit
+
+    db = Database(audit_db_url)
+    try:
+        create_audit_tables(db)
+        count = export_audit(db, output, title=title, dest_table=dest_table)
+        click.echo(f"Exported {count} file records to {output}")
+    finally:
+        db.close()

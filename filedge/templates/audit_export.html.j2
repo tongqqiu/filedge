@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ title or "Filedge Audit Export" }}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, sans-serif; font-size: 14px; color: #1a1a1a; background: #f5f5f5; }
+  header { background: #1e293b; color: #fff; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 18px; font-weight: 600; }
+  header .meta { font-size: 12px; color: #94a3b8; }
+  main { padding: 24px; }
+  .toolbar { display: flex; gap: 12px; margin-bottom: 16px; }
+  .toolbar input { flex: 1; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; }
+  .toolbar select { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 14px; background: #fff; }
+  table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  thead { background: #f8fafc; }
+  th { padding: 10px 14px; text-align: left; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; border-bottom: 1px solid #e2e8f0; cursor: pointer; user-select: none; white-space: nowrap; }
+  th:hover { color: #1e293b; }
+  th.sorted-asc::after { content: " ▲"; }
+  th.sorted-desc::after { content: " ▼"; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+  .state { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+  .state-COMMITTED { background: #dcfce7; color: #15803d; }
+  .state-FAILED { background: #fee2e2; color: #b91c1c; }
+  .state-PENDING { background: #fef9c3; color: #854d0e; }
+  .state-PROCESSING { background: #dbeafe; color: #1d4ed8; }
+  .hash { font-family: monospace; font-size: 12px; color: #475569; }
+  .null { color: #94a3b8; }
+  .copy-btn { padding: 3px 8px; font-size: 11px; border: 1px solid #d1d5db; border-radius: 4px; background: #fff; cursor: pointer; color: #374151; }
+  .copy-btn:hover { background: #f3f4f6; }
+  .detail-row td { background: #f8fafc; padding: 8px 14px 14px; }
+  .detail-box { font-size: 12px; color: #374151; background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-top: 4px; }
+  .detail-box pre { white-space: pre-wrap; word-break: break-all; font-family: monospace; }
+  .detail-label { font-weight: 600; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  .empty { text-align: center; padding: 48px; color: #94a3b8; }
+  .summary { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ title or "Filedge Audit Export" }}</h1>
+  <span class="meta">Generated {{ generated_at }} &nbsp;·&nbsp; {{ records | length }} files</span>
+</header>
+<main>
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Search by filename, content hash, or state…" oninput="applyFilters()">
+    <select id="state-filter" onchange="applyFilters()">
+      <option value="">All states</option>
+      <option value="COMMITTED">COMMITTED</option>
+      <option value="FAILED">FAILED</option>
+      <option value="PENDING">PENDING</option>
+      <option value="PROCESSING">PROCESSING</option>
+    </select>
+  </div>
+  <div class="summary" id="summary"></div>
+  <table id="audit-table">
+    <thead>
+      <tr>
+        <th onclick="sortBy(0)">Filename</th>
+        <th onclick="sortBy(1)">Content Hash</th>
+        <th onclick="sortBy(2)">State</th>
+        <th onclick="sortBy(3)">Rows</th>
+        <th onclick="sortBy(4)">Attempts</th>
+        <th onclick="sortBy(5)">Last Updated</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="table-body">
+    {% for r in records %}
+    <tr class="data-row"
+        data-filename="{{ r.filename }}"
+        data-hash="{{ r.content_hash }}"
+        data-state="{{ r.state }}">
+      <td>{{ r.filename }}</td>
+      <td><span class="hash" title="{{ r.content_hash }}">{{ r.content_hash[:12] }}…</span></td>
+      <td><span class="state state-{{ r.state }}">{{ r.state }}</span></td>
+      <td>{% if r.row_count is not none %}{{ "{:,}".format(r.row_count) }}{% else %}<span class="null">—</span>{% endif %}</td>
+      <td>{{ r.attempt_count }}</td>
+      <td>{{ r.updated_at or "" }}</td>
+      <td>
+        {% if dest_table %}
+        <button class="copy-btn" onclick="copySQL('{{ r.content_hash }}')">Copy lineage SQL</button>
+        {% else %}
+        <button class="copy-btn" onclick="copySQL('{{ r.content_hash }}')">Copy lineage SQL</button>
+        {% endif %}
+      </td>
+    </tr>
+    <tr class="detail-row" style="display:none" id="detail-{{ loop.index }}">
+      <td colspan="7">
+        <div class="detail-box">
+          <div class="detail-label">Full content hash</div>
+          <pre>{{ r.content_hash }}</pre>
+          {% if r.source_dir %}<div class="detail-label" style="margin-top:8px">Source directory</div><pre>{{ r.source_dir }}</pre>{% endif %}
+          {% if r.error_message %}<div class="detail-label" style="margin-top:8px">Error</div><pre>{{ r.error_message }}</pre>{% endif %}
+          <div class="detail-label" style="margin-top:8px">Lineage SQL</div>
+          <pre>SELECT *
+FROM {{ dest_table or "&lt;dest_table&gt;" }}
+WHERE _source_file_hash = '{{ r.content_hash }}';</pre>
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</main>
+<script>
+  var sortCol = 5, sortDir = -1;
+
+  function applyFilters() {
+    var q = document.getElementById('search').value.toLowerCase();
+    var sf = document.getElementById('state-filter').value;
+    var rows = document.querySelectorAll('.data-row');
+    var visible = 0;
+    rows.forEach(function(row) {
+      var match = (!q || row.dataset.filename.toLowerCase().includes(q) || row.dataset.hash.toLowerCase().includes(q) || row.dataset.state.toLowerCase().includes(q))
+                && (!sf || row.dataset.state === sf);
+      row.style.display = match ? '' : 'none';
+      var detail = document.getElementById('detail-' + row.rowIndex);
+      if (detail) detail.style.display = 'none';
+      if (match) visible++;
+    });
+    document.getElementById('summary').textContent = visible + ' of ' + rows.length + ' files shown';
+  }
+
+  function sortBy(col) {
+    if (sortCol === col) { sortDir *= -1; } else { sortCol = col; sortDir = 1; }
+    var ths = document.querySelectorAll('th');
+    ths.forEach(function(th) { th.classList.remove('sorted-asc','sorted-desc'); });
+    ths[col].classList.add(sortDir === 1 ? 'sorted-asc' : 'sorted-desc');
+    var tbody = document.getElementById('table-body');
+    var rows = Array.from(tbody.querySelectorAll('.data-row'));
+    rows.sort(function(a, b) {
+      var av = a.cells[col] ? a.cells[col].textContent.trim() : '';
+      var bv = b.cells[col] ? b.cells[col].textContent.trim() : '';
+      return sortDir * av.localeCompare(bv, undefined, {numeric: true});
+    });
+    rows.forEach(function(row) {
+      var detail = document.getElementById('detail-' + row.rowIndex);
+      tbody.appendChild(row);
+      if (detail) tbody.appendChild(detail);
+    });
+  }
+
+  function copySQL(hash) {
+    var dest = '{{ dest_table or "<dest_table>" }}';
+    var sql = 'SELECT *\nFROM ' + dest + '\nWHERE _source_file_hash = \'' + hash + '\';';
+    navigator.clipboard.writeText(sql).catch(function() {
+      var ta = document.createElement('textarea');
+      ta.value = sql; document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+    });
+  }
+
+  document.querySelectorAll('.data-row').forEach(function(row, i) {
+    row.addEventListener('click', function(e) {
+      if (e.target.tagName === 'BUTTON') return;
+      var detail = document.getElementById('detail-' + (i + 1));
+      if (detail) detail.style.display = detail.style.display === 'none' ? '' : 'none';
+    });
+  });
+
+  applyFilters();
+</script>
+</body>
+</html>
