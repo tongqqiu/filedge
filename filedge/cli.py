@@ -10,6 +10,7 @@ from filedge.db import (
     Database,
     create_audit_tables,
     find_file_by_hash,
+    find_files_by_filename,
     find_terminal_failed_by_filename,
     get_status_summary,
     list_terminal_failed,
@@ -527,39 +528,118 @@ def requeue(filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap
 
 
 @cli.command()
-@click.argument("content_hash")
+@click.argument("identifier")
 @click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
-def lineage(content_hash, audit_db_url):
-    """Show the full audit + source-manifest lineage for one File, looked up by Content Hash."""
+@click.option("--json", "output_json", is_flag=True, help="Emit machine-readable JSON")
+@click.option("--dest-table", default=None, help="Destination table name to include in lineage output")
+def lineage(identifier, audit_db_url, output_json, dest_table):
+    """Show the full audit + source-manifest lineage for one File.
+
+    IDENTIFIER may be a Content Hash or a filename. When a filename matches
+    multiple Content Hashes, the command prints a disambiguation list and
+    exits non-zero — re-run with the specific Content Hash to drill in.
+    """
     db = Database(audit_db_url)
     try:
         create_audit_tables(db)
-        record = find_file_by_hash(db, content_hash)
+        record = _resolve_lineage_record(db, identifier)
         if record is None:
-            click.echo(f"No File found with content_hash={content_hash}", err=True)
+            click.echo(f"No File found matching {identifier!r}", err=True)
             sys.exit(1)
-        click.echo(f"filename:         {record.filename}")
-        click.echo(f"content_hash:     {record.content_hash}")
-        click.echo(f"state:            {record.state}")
-        click.echo(f"attempt_count:    {record.attempt_count}")
-        click.echo(f"row_count:        {record.row_count if record.row_count is not None else '-'}")
-        click.echo(f"error_message:    {record.error_message or '-'}")
-        run_id, created_at, updated_at = _load_run_and_timestamps(db, content_hash)
-        click.echo(f"run_id:           {run_id or '-'}")
-        click.echo(f"created_at:       {created_at or '-'}")
-        click.echo(f"updated_at:       {updated_at or '-'}")
-        click.echo(f"claimed_at:       {record.claimed_at or '-'}")
-        click.echo("")
-        click.echo("Source manifest:")
-        if record.source_type is None and record.source_name is None:
-            click.echo("  (no manifest attached)")
+        run_id, created_at, updated_at = _load_run_and_timestamps(db, record.content_hash)
+        if output_json:
+            click.echo(json_lib.dumps(
+                _lineage_payload(record, run_id, created_at, updated_at, dest_table),
+                indent=2,
+            ))
         else:
-            click.echo(f"  source_type:     {record.source_type or '-'}")
-            click.echo(f"  source_name:     {record.source_name or '-'}")
-            click.echo(f"  producer:        {record.producer or '-'}")
-            click.echo(f"  external_run_id: {record.external_run_id or '-'}")
+            _print_lineage_human(record, run_id, created_at, updated_at, dest_table)
     finally:
         db.close()
+
+
+def _resolve_lineage_record(db, identifier):
+    """Try Content Hash exact match first, then filename. Disambiguates on multi-hit filenames."""
+    by_hash = find_file_by_hash(db, identifier)
+    if by_hash is not None:
+        return by_hash
+    matches = find_files_by_filename(db, identifier)
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+    click.echo(
+        f"Filename {identifier!r} maps to {len(matches)} Content Hashes — "
+        "re-run with --hash <content-hash>:",
+        err=True,
+    )
+    for m in matches:
+        click.echo(f"  {m.content_hash}  state={m.state}", err=True)
+    sys.exit(2)
+
+
+def _print_lineage_human(record, run_id, created_at, updated_at, dest_table):
+    click.echo(f"filename:         {record.filename}")
+    click.echo(f"content_hash:     {record.content_hash}")
+    click.echo(f"state:            {record.state}")
+    click.echo(f"attempt_count:    {record.attempt_count}")
+    click.echo(f"row_count:        {record.row_count if record.row_count is not None else '-'}")
+    click.echo(f"dest_table:       {dest_table or '-'}")
+    click.echo(f"error_message:    {record.error_message or '-'}")
+    click.echo(f"run_id:           {run_id or '-'}")
+    click.echo(f"created_at:       {created_at or '-'}")
+    click.echo(f"updated_at:       {updated_at or '-'}")
+    click.echo(f"claimed_at:       {record.claimed_at or '-'}")
+    click.echo("")
+    click.echo("Source manifest:")
+    if record.source_type is None and record.source_name is None:
+        click.echo("  (no manifest attached)")
+        return
+    click.echo(f"  manifest_version: {record.manifest_version or '-'}")
+    click.echo(f"  source_type:      {record.source_type or '-'}")
+    click.echo(f"  source_name:      {record.source_name or '-'}")
+    click.echo(f"  producer:         {record.producer or '-'}")
+    click.echo(f"  external_run_id:  {record.external_run_id or '-'}")
+    click.echo(f"  started_at:       {record.started_at or '-'}")
+    click.echo(f"  finished_at:      {record.finished_at or '-'}")
+    click.echo(f"  record_count:     {record.record_count if record.record_count is not None else '-'}")
+    if record.source_range:
+        click.echo("  source_range:")
+        for k, v in record.source_range.items():
+            click.echo(f"    {k}: {v}")
+    else:
+        click.echo("  source_range:     -")
+
+
+def _lineage_payload(record, run_id, created_at, updated_at, dest_table):
+    if record.source_type is None and record.source_name is None:
+        source_manifest = None
+    else:
+        source_manifest = {
+            "manifest_version": record.manifest_version,
+            "source_type": record.source_type,
+            "source_name": record.source_name,
+            "producer": record.producer,
+            "external_run_id": record.external_run_id,
+            "started_at": record.started_at,
+            "finished_at": record.finished_at,
+            "record_count": record.record_count,
+            "source_range": record.source_range,
+        }
+    return {
+        "filename": record.filename,
+        "content_hash": record.content_hash,
+        "state": record.state,
+        "attempt_count": record.attempt_count,
+        "row_count": record.row_count,
+        "error_message": record.error_message,
+        "run_id": run_id,
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "claimed_at": record.claimed_at,
+        "dest_table": dest_table,
+        "source_manifest": source_manifest,
+    }
 
 
 def _load_run_and_timestamps(db, content_hash):
