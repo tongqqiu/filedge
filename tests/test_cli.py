@@ -506,3 +506,106 @@ def test_lineage_shows_source_range_and_timestamps_when_present(tmp_path, db_url
     assert "record_count" in result.output and "1500" in result.output
     assert "source_range" in result.output
     assert "orders" in result.output
+
+
+def test_lineage_by_filename_returns_record_when_unique(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "stripe.ndjson", "h-stripe-1")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "stripe.ndjson", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    assert "h-stripe-1" in result.output
+    assert "stripe.ndjson" in result.output
+
+
+def test_lineage_by_filename_with_multiple_hashes_disambiguates(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "shared.ndjson", "h-shared-1")
+    insert_pending(db, "shared.ndjson", "h-shared-2")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "shared.ndjson", "--audit-db-url", db_url])
+    assert result.exit_code != 0, result.output
+    assert "h-shared-1" in result.output
+    assert "h-shared-2" in result.output
+    assert "--hash" in result.output
+
+
+def test_lineage_json_output(tmp_path, db_url):
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    insert_pending(
+        db, "stripe.ndjson", "h-stripe-j",
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="https://github.com/dlt-hub/dlt",
+            external_run_id="dlt-run-j",
+            raw_payload='{"foo":1}',
+            manifest_version="1",
+            started_at="2026-05-24T10:00:00Z",
+            finished_at="2026-05-24T10:30:00Z",
+            record_count=42,
+            source_range={"cursor_start": "a", "cursor_end": "b"},
+        ),
+    )
+    claim_processing(db, "h-stripe-j", run_id="filedge-run-j")
+    mark_committed(db, "h-stripe-j", row_count=42)
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-stripe-j", "--json", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["filename"] == "stripe.ndjson"
+    assert payload["content_hash"] == "h-stripe-j"
+    assert payload["state"] == "COMMITTED"
+    assert payload["row_count"] == 42
+    assert payload["run_id"] == "filedge-run-j"
+    assert payload["source_manifest"]["source_type"] == "api"
+    assert payload["source_manifest"]["source_name"] == "stripe.charges"
+    assert payload["source_manifest"]["source_range"] == {"cursor_start": "a", "cursor_end": "b"}
+
+
+def test_lineage_json_for_file_without_source_metadata(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "direct.csv", "h-direct-j")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-direct-j", "--json", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["filename"] == "direct.csv"
+    assert payload["source_manifest"] is None
+
+
+def test_lineage_dest_table_flag_appears_in_output(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "a.csv", "h-dt")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(
+        cli,
+        ["lineage", "h-dt", "--audit-db-url", db_url, "--dest-table", "items"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "dest_table" in result.output
+    assert "items" in result.output
+
+
+def test_lineage_dest_table_in_json(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "a.csv", "h-dt-j")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(
+        cli,
+        ["lineage", "h-dt-j", "--json", "--audit-db-url", db_url, "--dest-table", "items"],
+    )
+    payload = json.loads(result.output)
+    assert payload["dest_table"] == "items"
