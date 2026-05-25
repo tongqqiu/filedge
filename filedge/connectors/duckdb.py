@@ -1,7 +1,7 @@
 import datetime
 from typing import Dict, Iterator, List, Optional
 
-from filedge.cdc import plan_cdc_changes
+from filedge.cdc import apply_transactional_cdc
 from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
@@ -137,38 +137,22 @@ class DuckDBConnector(Connector):
         file_hash: str,
         cdc: CdcConfig,
     ) -> None:
-        # CDC retries are idempotent without an applied-files marker: plan_cdc_changes
+        # CDC retries are idempotent without an applied-files marker: the orchestrator
         # collapses the file to one final change per key, and each apply is
         # "DELETE WHERE key = ?" followed (for insert/update) by an INSERT. Re-running
         # produces the same destination state. Cross-file ordering is operator-owned
         # (see CDC File Order in CONTEXT.md), the same contract as SQLite/Postgres CDC.
         ingested_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None).isoformat()
-        changes = plan_cdc_changes(rows, cdc)
-        key_predicate = " AND ".join([f"{column} = ?" for column in cdc.keys])
-
         try:
             self._conn.begin()
-            for change in changes:
-                self._conn.execute(
-                    f"DELETE FROM {table} WHERE {key_predicate}",
-                    list(change.key),
-                )
-                if change.operation == "delete":
-                    continue
-
-                row = {
-                    key: value
-                    for key, value in change.row.items()
-                    if key != cdc.operation_column
-                }
-                dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
-                placeholders = ", ".join(["?"] * len(dest_cols))
-                values = list(row.values()) + [file_hash, ingested_at]
-                cols = ", ".join(dest_cols)
-                self._conn.execute(
-                    f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
-                    values,
-                )
+            apply_transactional_cdc(
+                _DuckDBCdcAdapter(self._conn),
+                table,
+                rows,
+                file_hash=file_hash,
+                ingested_at=ingested_at,
+                cdc=cdc,
+            )
             self._conn.commit()
         except Exception:
             self._conn.rollback()
@@ -179,3 +163,21 @@ class DuckDBConnector(Connector):
 
     def close(self) -> None:
         self._conn.close()
+
+
+class _DuckDBCdcAdapter:
+    def __init__(self, conn) -> None:
+        self._conn = conn
+
+    def delete_by_key(self, table, key_columns, key_values):
+        predicate = " AND ".join(f"{col} = ?" for col in key_columns)
+        self._conn.execute(
+            f"DELETE FROM {table} WHERE {predicate}", list(key_values)
+        )
+
+    def insert_row(self, table, columns, values):
+        cols = ", ".join(columns)
+        placeholders = ", ".join(["?"] * len(columns))
+        self._conn.execute(
+            f"INSERT INTO {table} ({cols}) VALUES ({placeholders})", list(values)
+        )

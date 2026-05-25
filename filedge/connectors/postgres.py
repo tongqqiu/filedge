@@ -1,7 +1,7 @@
 import datetime
 from typing import Iterator, List, Optional
 
-from filedge.cdc import plan_cdc_changes
+from filedge.cdc import apply_transactional_cdc
 from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
@@ -121,34 +121,16 @@ class PostgresConnector(Connector):
         cdc: CdcConfig,
     ) -> None:
         ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
-        changes = plan_cdc_changes(rows, cdc)
-        key_predicate = " AND ".join([f"{_q(column)} = %s" for column in cdc.keys])
-
         try:
             with self._conn.cursor() as cur:
-                for change in changes:
-                    cur.execute(
-                        f"DELETE FROM {table} WHERE {key_predicate}",
-                        list(change.key),
-                    )
-                    if change.operation == "delete":
-                        continue
-
-                    row = {
-                        key: value
-                        for key, value in change.row.items()
-                        if key != cdc.operation_column
-                    }
-                    dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
-                    placeholders = ", ".join(["%s"] * len(dest_cols))
-                    values = list(row.values()) + [file_hash, ingested_at]
-                    quoted = ", ".join(_q(c) for c in dest_cols)
-                    cur.execute(
-                        f"INSERT INTO {table} ({quoted})"
-                        f" VALUES ({placeholders})",
-                        values,
-                    )
-
+                apply_transactional_cdc(
+                    _PostgresCdcAdapter(cur),
+                    table,
+                    rows,
+                    file_hash=file_hash,
+                    ingested_at=ingested_at,
+                    cdc=cdc,
+                )
             self._conn.commit()
         except Exception:
             self._conn.rollback()
@@ -161,3 +143,21 @@ class PostgresConnector(Connector):
 
     def close(self) -> None:
         self._conn.close()
+
+
+class _PostgresCdcAdapter:
+    def __init__(self, cursor) -> None:
+        self._cursor = cursor
+
+    def delete_by_key(self, table, key_columns, key_values):
+        predicate = " AND ".join(f"{_q(col)} = %s" for col in key_columns)
+        self._cursor.execute(
+            f"DELETE FROM {table} WHERE {predicate}", list(key_values)
+        )
+
+    def insert_row(self, table, columns, values):
+        quoted = ", ".join(_q(col) for col in columns)
+        placeholders = ", ".join(["%s"] * len(columns))
+        self._cursor.execute(
+            f"INSERT INTO {table} ({quoted}) VALUES ({placeholders})", list(values)
+        )
