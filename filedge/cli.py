@@ -554,10 +554,20 @@ def lineage(content_hash, audit_db_url):
         if record.source_type is None and record.source_name is None:
             click.echo("  (no manifest attached)")
         else:
-            click.echo(f"  source_type:     {record.source_type or '-'}")
-            click.echo(f"  source_name:     {record.source_name or '-'}")
-            click.echo(f"  producer:        {record.producer or '-'}")
-            click.echo(f"  external_run_id: {record.external_run_id or '-'}")
+            click.echo(f"  manifest_version: {record.manifest_version or '-'}")
+            click.echo(f"  source_type:      {record.source_type or '-'}")
+            click.echo(f"  source_name:      {record.source_name or '-'}")
+            click.echo(f"  producer:         {record.producer or '-'}")
+            click.echo(f"  external_run_id:  {record.external_run_id or '-'}")
+            click.echo(f"  started_at:       {record.started_at or '-'}")
+            click.echo(f"  finished_at:      {record.finished_at or '-'}")
+            click.echo(f"  record_count:     {record.record_count if record.record_count is not None else '-'}")
+            if record.source_range:
+                click.echo("  source_range:")
+                for k, v in record.source_range.items():
+                    click.echo(f"    {k}: {v}")
+            else:
+                click.echo("  source_range:     -")
     finally:
         db.close()
 

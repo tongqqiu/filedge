@@ -66,7 +66,12 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     source_name TEXT,
     producer TEXT,
     external_run_id TEXT,
-    manifest_payload TEXT
+    manifest_payload TEXT,
+    manifest_version TEXT,
+    manifest_started_at TEXT,
+    manifest_finished_at TEXT,
+    manifest_record_count INTEGER,
+    source_range TEXT
 )
 """
 
@@ -89,11 +94,20 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     source_name TEXT,
     producer TEXT,
     external_run_id TEXT,
-    manifest_payload TEXT
+    manifest_payload TEXT,
+    manifest_version TEXT,
+    manifest_started_at TIMESTAMP WITH TIME ZONE,
+    manifest_finished_at TIMESTAMP WITH TIME ZONE,
+    manifest_record_count BIGINT,
+    source_range TEXT
 )
 """
 
-_SOURCE_MANIFEST_COLUMNS = ("source_type", "source_name", "producer", "external_run_id", "manifest_payload")
+_SOURCE_MANIFEST_TEXT_COLUMNS = (
+    "source_type", "source_name", "producer", "external_run_id", "manifest_payload",
+    "manifest_version", "manifest_started_at", "manifest_finished_at", "source_range",
+)
+_SOURCE_MANIFEST_INT_COLUMNS = ("manifest_record_count",)
 
 
 def create_audit_tables(db: Database) -> None:
@@ -109,8 +123,10 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS source_dir TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS run_id TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS row_count INTEGER")  # pragma: no cover
-        for col in _SOURCE_MANIFEST_COLUMNS:
+        for col in _SOURCE_MANIFEST_TEXT_COLUMNS:
             db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS {col} TEXT")
+        for col in _SOURCE_MANIFEST_INT_COLUMNS:
+            db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS {col} BIGINT")
         return
 
     cursor = db.execute("PRAGMA table_info(etl_file_audit)")
@@ -123,9 +139,12 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN run_id TEXT")
     if "row_count" not in existing:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN row_count INTEGER")
-    for col in _SOURCE_MANIFEST_COLUMNS:
+    for col in _SOURCE_MANIFEST_TEXT_COLUMNS:
         if col not in existing:
             db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN {col} TEXT")
+    for col in _SOURCE_MANIFEST_INT_COLUMNS:
+        if col not in existing:
+            db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN {col} INTEGER")
 
 
 # --- File record ---
@@ -147,6 +166,11 @@ class FileRecord:
     producer: Optional[str] = None
     external_run_id: Optional[str] = None
     manifest_payload: Optional[str] = None
+    manifest_version: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    record_count: Optional[int] = None
+    source_range: Optional[dict] = None
 
 
 def _now() -> str:
@@ -176,19 +200,28 @@ def get_hash_states(db: Database, hashes: list) -> Dict[str, str]:
 def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     cursor = db.execute(
         "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at, row_count,"
-        " source_type, source_name, producer, external_run_id, manifest_payload"
+        " source_type, source_name, producer, external_run_id, manifest_payload,"
+        " manifest_version, manifest_started_at, manifest_finished_at, manifest_record_count, source_range"
         " FROM etl_file_audit WHERE content_hash = ?",
         [content_hash],
     )
     row = cursor.fetchone()
     if row is None:
         return None
+    import json as _json
+    raw_source_range = row[19]
+    source_range = _json.loads(raw_source_range) if raw_source_range else None
     return FileRecord(
         id=row[0], filename=row[1], source_dir=row[2], content_hash=row[3], state=row[4],
         attempt_count=row[5], error_message=row[6], worker_id=row[7], claimed_at=row[8],
         row_count=row[9],
         source_type=row[10], source_name=row[11], producer=row[12],
         external_run_id=row[13], manifest_payload=row[14],
+        manifest_version=row[15],
+        started_at=row[16] if row[16] is None or isinstance(row[16], str) else row[16].isoformat(),
+        finished_at=row[17] if row[17] is None or isinstance(row[17], str) else row[17].isoformat(),
+        record_count=row[18],
+        source_range=source_range,
     )
 
 
@@ -209,16 +242,24 @@ def insert_pending(
             [filename, source_dir, content_hash, now, now],
         )
         return
+    import json as _json
+    range_blob = _json.dumps(source_metadata.source_range) if source_metadata.source_range else None
     db.execute(
         "INSERT INTO etl_file_audit"
         " (filename, source_dir, content_hash, state, created_at, updated_at,"
-        "  source_type, source_name, producer, external_run_id, manifest_payload)"
-        " VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?)",
+        "  source_type, source_name, producer, external_run_id, manifest_payload,"
+        "  manifest_version, manifest_started_at, manifest_finished_at, manifest_record_count, source_range)"
+        " VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             filename, source_dir, content_hash, now, now,
             source_metadata.source_type, source_metadata.source_name,
             source_metadata.producer, source_metadata.external_run_id,
             source_metadata.raw_payload,
+            source_metadata.manifest_version,
+            source_metadata.started_at,
+            source_metadata.finished_at,
+            source_metadata.record_count,
+            range_blob,
         ],
     )
 
