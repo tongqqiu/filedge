@@ -129,6 +129,31 @@ When a field in a NDJSON file contains a nested object (e.g. `{"address": {"city
 
 The pipeline has no flattening step, so a `string` column is the safe choice. If you need individual nested fields, flatten the data upstream before ingestion.
 
+## Plain JSON files (`.json`)
+
+Filedge supports **newline-delimited JSON** (NDJSON / JSONL), not single-document JSON. A `.json` file containing one array or one object is not recognized — `filedge inspect` returns a "format not detected" error. This is intentional: the ingestion path is streaming, and a single top-level JSON value cannot be consumed row-by-row.
+
+Convert to NDJSON upstream with `jq` (one shell line):
+
+```bash
+# Array of objects → one object per line
+jq -c '.[]' events.json > events.ndjson
+
+# Envelope shape {"data": [...]} → one object per line
+jq -c '.data[]' events.json > events.ndjson
+
+# Single object → one-row NDJSON file
+jq -c '.' record.json > record.ndjson
+```
+
+Then inspect the NDJSON:
+
+```bash
+filedge inspect events.ndjson
+```
+
+For data sources you control, the cleaner fix is to have your [Fetcher](../../CONTEXT.md#fetcher) or [Queue Materializer](../../CONTEXT.md#queue-materializer) write NDJSON directly to the Watched Directory.
+
 ## Options
 
 | Option | Default | Description |
