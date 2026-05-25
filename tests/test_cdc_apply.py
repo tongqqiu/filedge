@@ -1,6 +1,11 @@
 import pytest
 
-from filedge.cdc import CdcError, apply_transactional_cdc
+from filedge.cdc import (
+    CdcError,
+    DEFAULT_OPERATION_MARKER_COLUMN,
+    apply_transactional_cdc,
+    plan_staged_cdc_records,
+)
 from filedge.config import CdcConfig
 
 
@@ -114,6 +119,51 @@ def test_apply_transactional_cdc_passes_composite_keys_in_declared_order():
     delete_call = adapter.calls[0]
     assert delete_call[2] == ("tenant", "id")
     assert delete_call[3] == ("a", 1)
+
+
+def test_plan_staged_cdc_records_marks_operation_and_strips_operation_column():
+    rows = [
+        {"id": 1, "name": "Ada", "op": "U", "seq": 5},
+        {"id": 2, "name": "Bea", "op": "D", "seq": 4},
+    ]
+
+    staged = plan_staged_cdc_records(rows, _cdc())
+
+    assert staged.data_columns == ["id", "name", "seq"]
+    assert staged.records == [
+        {"id": 1, "name": "Ada", "seq": 5, DEFAULT_OPERATION_MARKER_COLUMN: "update"},
+        {"id": 2, "name": "Bea", "seq": 4, DEFAULT_OPERATION_MARKER_COLUMN: "delete"},
+    ]
+
+
+def test_plan_staged_cdc_records_empty_for_empty_rows():
+    staged = plan_staged_cdc_records([], _cdc())
+
+    assert staged.records == []
+    assert staged.data_columns == []
+
+
+def test_plan_staged_cdc_records_collapses_to_latest_per_key():
+    rows = [
+        {"id": 1, "name": "Ada", "op": "I", "seq": 1},
+        {"id": 1, "name": "Ada v2", "op": "U", "seq": 2},
+    ]
+
+    staged = plan_staged_cdc_records(rows, _cdc())
+
+    assert len(staged.records) == 1
+    record = staged.records[0]
+    assert record["name"] == "Ada v2"
+    assert record[DEFAULT_OPERATION_MARKER_COLUMN] == "update"
+
+
+def test_plan_staged_cdc_records_supports_custom_marker_column():
+    rows = [{"id": 1, "name": "Ada", "op": "I", "seq": 1}]
+
+    staged = plan_staged_cdc_records(rows, _cdc(), operation_marker_column="_op")
+
+    assert staged.records == [{"id": 1, "name": "Ada", "seq": 1, "_op": "insert"}]
+    assert "_op" not in staged.data_columns
 
 
 def test_apply_transactional_cdc_propagates_plan_errors():

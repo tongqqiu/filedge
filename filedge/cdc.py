@@ -16,6 +16,7 @@ class CdcChange:
 
 
 PROVENANCE_COLUMNS = ("_source_file_hash", "_ingested_at")
+DEFAULT_OPERATION_MARKER_COLUMN = "_filedge_cdc_operation"
 
 
 def plan_cdc_changes(rows: Iterable[dict], cdc: CdcConfig) -> list[CdcChange]:
@@ -74,6 +75,45 @@ class TransactionalCdcAdapter(Protocol):
         columns: Sequence[str],
         values: Sequence,
     ) -> None: ...
+
+
+@dataclass(frozen=True)
+class StagedCdcRecords:
+    """CDC changes shaped as staging rows for warehouse-style apply.
+
+    Each record contains the row's data columns (excluding `cdc.operation_column`)
+    and an operation-marker column (default `_filedge_cdc_operation`) carrying
+    the planned operation. `data_columns` lists the data column names in row order,
+    excluding the operation marker; the Connector uses it to build MERGE / INSERT
+    column lists. The Applied File Marker write remains destination-side per
+    ADR-0009.
+    """
+
+    records: list[dict]
+    data_columns: list[str]
+
+
+def plan_staged_cdc_records(
+    rows: Iterable[dict],
+    cdc: CdcConfig,
+    *,
+    operation_marker_column: str = DEFAULT_OPERATION_MARKER_COLUMN,
+) -> StagedCdcRecords:
+    """Plan CDC changes and shape them as warehouse staging records."""
+    changes = plan_cdc_changes(rows, cdc)
+    records: list[dict] = []
+    data_columns: list[str] = []
+    for change in changes:
+        record = {
+            key: value
+            for key, value in change.row.items()
+            if key != cdc.operation_column
+        }
+        if not data_columns:
+            data_columns = list(record.keys())
+        record[operation_marker_column] = change.operation
+        records.append(record)
+    return StagedCdcRecords(records=records, data_columns=data_columns)
 
 
 def apply_transactional_cdc(
