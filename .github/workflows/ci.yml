@@ -15,7 +15,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-          enable-caching: true
+          enable-cache: true
 
       - run: uv lock --check
       - run: uv sync --extra s3 --extra gcs
@@ -28,7 +28,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.13"
-          enable-caching: true
+          enable-cache: true
 
       - run: uv sync --extra dev
       - run: uv run ruff check .
@@ -59,7 +59,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.python-version }}
-          enable-caching: true
+          enable-cache: true
 
       - run: uv sync --extra dev --extra postgres --extra duckdb
 
