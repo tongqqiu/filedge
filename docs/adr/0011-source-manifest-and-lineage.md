@@ -85,6 +85,20 @@ The product message is unchanged: bring your Fetcher, sync job, or Queue Materia
 - **Naming risk: "OpenLineage support" overpromise.** Calling the sidecar an "OpenLineage manifest" would imply event receiver support that Filedge does not provide. The chosen framing — "Filedge source manifest, OpenLineage-shaped" — is deliberate.
 - **Future expansion is constrained, not blocked.** If the ecosystem moves and event ingestion becomes the dominant pattern, Filedge can add an event listener as a separate component without invalidating the sidecar contract. Sidecar-first does not foreclose event-later.
 
+## Future Expansion: Emitting OpenLineage Downstream
+
+This ADR commits Filedge to **consuming** the OpenLineage shape (upstream → File → Audit Record). It does **not** commit Filedge to **emitting** OpenLineage `RunEvent` JSON for downstream lineage catalogs (Marquez, DataHub, OpenMetadata, Atlan, Collibra). Emission is deliberately out of scope.
+
+Three reasons:
+
+1. **No named consumer.** The target users in `CONTEXT.md` (fintech data engineering teams focused on compliance auditability) are served today by the Audit DB and the Audit Export (ADR-0010). The PRD addresses auditors, operators, and compliance reviewers — all surfaces the Audit Export already covers. A downstream lineage catalog is not in the documented target environment.
+2. **Schema coupling cost.** Reading OpenLineage-shaped sidecars is forgiving — Filedge extracts only the fields it knows about and stores the rest as raw payload. Emitting RunEvents is the inverse: Filedge would have to commit to OpenLineage's URI scheme for dataset identity, evolve with the OpenLineage schema, and pick a stable `producer` URI. That cost is worth paying when there is a real consumer; without one, it is speculative work.
+3. **Surface duplication.** The Audit Export is already the batch-emitted compliance surface. Adding a parallel OpenLineage emission surface would create two answers to "what did Filedge load?" The Audit DB stays the system of record either way.
+
+If a named downstream consumer emerges, the natural shape is a separate batch-export slice — `filedge export-lineage` — analogous to `filedge export-audit` from ADR-0010. It would write OpenLineage `RunEvent` JSON per Run (or per File) to a configured output prefix, with no daemon and no HTTP client. HTTP emission to a backend would remain a further opt-in beyond that. Sidecar-out-first preserves the batch deploy model from ADR-0010 and stays symmetric with this ADR's sidecar-in decision.
+
+This deferral is recorded so the asymmetry — Filedge consumes the OpenLineage shape but does not emit it — is recognized as deliberate, not accidental.
+
 ## Alternatives Considered
 
 **Filedge as an OpenLineage event receiver.** Run an HTTP listener or pull from a Marquez backend, then asynchronously correlate received events with Files at ingestion time. Rejected because it (a) re-opens the network handoff ADR-0005/0006/0007 closed, (b) introduces event ordering and late-event reconciliation Filedge would have to own, (c) breaks the batch deploy model — Filedge becomes a long-running process or grows a dependency on a backend, and (d) does not work for producers that do not emit OpenLineage.
