@@ -27,6 +27,120 @@ def test_parses_openlineage_shaped_sidecar(tmp_path):
     assert result.metadata.external_run_id == "dlt-run-abc-123"
 
 
+def test_parses_started_finished_record_count_and_version(tmp_path):
+    data_file = tmp_path / "kafka.ndjson"
+    data_file.write_text("{}\n")
+    (tmp_path / "kafka.ndjson.manifest.json").write_text(json.dumps({
+        "eventType": "COMPLETE",
+        "eventTime": "2026-05-24T10:30:00Z",
+        "producer": "https://github.com/apache/kafka-connect",
+        "run": {
+            "runId": "kc-run-1",
+            "facets": {
+                "_filedgeManifest": {
+                    "manifest_version": "1",
+                    "started_at": "2026-05-24T10:00:00Z",
+                    "record_count": 1500,
+                },
+            },
+        },
+        "job": {"namespace": "queue", "name": "kafka.orders"},
+    }))
+
+    result = discover_and_parse(str(data_file), fs=None)
+
+    assert result.metadata.manifest_version == "1"
+    assert result.metadata.started_at == "2026-05-24T10:00:00Z"
+    assert result.metadata.finished_at == "2026-05-24T10:30:00Z"
+    assert result.metadata.record_count == 1500
+
+
+def test_parses_kafka_offset_range(tmp_path):
+    data_file = tmp_path / "kafka.ndjson"
+    data_file.write_text("{}\n")
+    (tmp_path / "kafka.ndjson.manifest.json").write_text(json.dumps({
+        "producer": "https://github.com/apache/kafka-connect",
+        "run": {"runId": "kc-run-1"},
+        "job": {"namespace": "queue", "name": "kafka.orders"},
+        "inputs": [{
+            "name": "kafka://broker/orders",
+            "facets": {"_sourceRange": {
+                "topic": "orders", "partition": 3,
+                "start_offset": 1000, "end_offset": 2000,
+            }},
+        }],
+    }))
+
+    result = discover_and_parse(str(data_file), fs=None)
+
+    assert result.metadata.source_range == {
+        "topic": "orders", "partition": 3,
+        "start_offset": 1000, "end_offset": 2000,
+    }
+
+
+def test_parses_api_cursor_range(tmp_path):
+    data_file = tmp_path / "stripe.ndjson"
+    data_file.write_text("{}\n")
+    (tmp_path / "stripe.ndjson.manifest.json").write_text(json.dumps({
+        "producer": "https://github.com/dlt-hub/dlt",
+        "run": {"runId": "dlt-run-1"},
+        "job": {"namespace": "api", "name": "stripe.charges"},
+        "inputs": [{
+            "name": "https://api.stripe.com/v1/charges",
+            "facets": {"_sourceRange": {
+                "cursor_start": "ch_aaa", "cursor_end": "ch_zzz",
+                "endpoint": "/v1/charges",
+            }},
+        }],
+    }))
+
+    result = discover_and_parse(str(data_file), fs=None)
+
+    assert result.metadata.source_range == {
+        "cursor_start": "ch_aaa", "cursor_end": "ch_zzz",
+        "endpoint": "/v1/charges",
+    }
+
+
+def test_parses_sftp_partner_remote_path(tmp_path):
+    data_file = tmp_path / "sftp.ndjson"
+    data_file.write_text("{}\n")
+    (tmp_path / "sftp.ndjson.manifest.json").write_text(json.dumps({
+        "producer": "https://rclone.org",
+        "run": {"runId": "rclone-run-1"},
+        "job": {"namespace": "sftp", "name": "acme-partner"},
+        "inputs": [{
+            "name": "sftp://acme/inbox/file.csv",
+            "facets": {"_sourceRange": {
+                "partner": "acme", "remote_path": "/inbox/file.csv",
+            }},
+        }],
+    }))
+
+    result = discover_and_parse(str(data_file), fs=None)
+
+    assert result.metadata.source_range == {"partner": "acme", "remote_path": "/inbox/file.csv"}
+
+
+def test_parses_vendor_export_job_id(tmp_path):
+    data_file = tmp_path / "vendor.ndjson"
+    data_file.write_text("{}\n")
+    (tmp_path / "vendor.ndjson.manifest.json").write_text(json.dumps({
+        "producer": "https://salesforce.com",
+        "run": {"runId": "sf-run-1"},
+        "job": {"namespace": "vendor_export", "name": "salesforce.account"},
+        "inputs": [{
+            "name": "salesforce://Account",
+            "facets": {"_sourceRange": {"export_job_id": "750xx0000004C92"}},
+        }],
+    }))
+
+    result = discover_and_parse(str(data_file), fs=None)
+
+    assert result.metadata.source_range == {"export_job_id": "750xx0000004C92"}
+
+
 def test_returns_not_found_when_no_sidecar(tmp_path):
     data_file = tmp_path / "direct-drop.csv"
     data_file.write_text("name,value\nAlice,1\n")

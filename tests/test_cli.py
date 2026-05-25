@@ -476,3 +476,33 @@ def test_lineage_for_file_without_source_metadata_still_works(tmp_path, db_url):
 def test_lineage_unknown_hash_exits_nonzero(tmp_path, db_url):
     result = CliRunner().invoke(cli, ["lineage", "nope-not-here", "--audit-db-url", db_url])
     assert result.exit_code != 0
+
+
+def test_lineage_shows_source_range_and_timestamps_when_present(tmp_path, db_url):
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    insert_pending(
+        db, "kafka.ndjson", "h-kafka",
+        source_metadata=SourceMetadata(
+            source_type="queue", source_name="kafka.orders",
+            producer="https://github.com/apache/kafka-connect",
+            external_run_id="kc-run-1",
+            raw_payload="{}",
+            manifest_version="1",
+            started_at="2026-05-24T10:00:00Z",
+            finished_at="2026-05-24T10:30:00Z",
+            record_count=1500,
+            source_range={"topic": "orders", "partition": 3, "start_offset": 1000, "end_offset": 2000},
+        ),
+    )
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-kafka", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    assert "manifest_version" in result.output and "1" in result.output
+    assert "started_at" in result.output and "2026-05-24T10:00:00Z" in result.output
+    assert "finished_at" in result.output and "2026-05-24T10:30:00Z" in result.output
+    assert "record_count" in result.output and "1500" in result.output
+    assert "source_range" in result.output
+    assert "orders" in result.output

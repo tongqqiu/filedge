@@ -96,6 +96,31 @@ def test_create_audit_tables_migrates_existing_table_without_run_id(tmp_path):
     upgraded.close()
 
 
+def test_insert_pending_stores_full_source_metadata(db):
+    from filedge.source_manifest import SourceMetadata
+    metadata = SourceMetadata(
+        source_type="queue",
+        source_name="kafka.orders",
+        producer="https://github.com/apache/kafka-connect",
+        external_run_id="kc-run-1",
+        raw_payload='{"raw":"payload"}',
+        manifest_version="1",
+        started_at="2026-05-24T10:00:00Z",
+        finished_at="2026-05-24T10:30:00Z",
+        record_count=1500,
+        source_range={"topic": "orders", "partition": 3, "start_offset": 1000, "end_offset": 2000},
+    )
+    insert_pending(db, "kafka.ndjson", "h-kafka", source_metadata=metadata)
+    db.commit()
+
+    record = find_file_by_hash(db, "h-kafka")
+    assert record.manifest_version == "1"
+    assert record.started_at == "2026-05-24T10:00:00Z"
+    assert record.finished_at == "2026-05-24T10:30:00Z"
+    assert record.record_count == 1500
+    assert record.source_range == {"topic": "orders", "partition": 3, "start_offset": 1000, "end_offset": 2000}
+
+
 def test_insert_pending_stores_source_metadata(db):
     from filedge.source_manifest import SourceMetadata
     metadata = SourceMetadata(
