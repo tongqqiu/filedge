@@ -2,6 +2,7 @@ import datetime
 import os
 from typing import Optional
 
+from filedge.audit_records import export_records
 from filedge.db import Database
 
 
@@ -14,29 +15,7 @@ def export_audit(
     """Render the Audit DB to a self-contained HTML file. Returns the record count."""
     from jinja2 import Environment, FileSystemLoader
 
-    cursor = db.execute(
-        "SELECT id, filename, source_dir, content_hash, state, attempt_count,"
-        " error_message, worker_id, claimed_at, row_count, updated_at"
-        " FROM etl_file_audit ORDER BY updated_at DESC"
-    )
-    rows = cursor.fetchall()
-
-    records = [
-        {
-            "id": r[0],
-            "filename": r[1],
-            "source_dir": r[2],
-            "content_hash": r[3],
-            "state": r[4],
-            "attempt_count": r[5],
-            "error_message": r[6],
-            "worker_id": r[7],
-            "claimed_at": r[8],
-            "row_count": r[9],
-            "updated_at": r[10],
-        }
-        for r in rows
-    ]
+    records = export_records(db)
 
     templates_dir = os.path.join(os.path.dirname(__file__), "templates")
     env = Environment(loader=FileSystemLoader(templates_dir), autoescape=True)
