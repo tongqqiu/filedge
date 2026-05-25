@@ -675,3 +675,70 @@ def test_status_human_output_unchanged_when_failures_have_source_metadata(tmp_pa
     assert "boom" in result.output
     assert "source_type" not in result.output
     assert "producer" not in result.output
+
+
+def _make_terminal_failed_with_metadata(db, filename, content_hash, retry_cap=3):
+    from filedge.source_manifest import SourceMetadata
+    insert_pending(
+        db, filename, content_hash,
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="https://github.com/dlt-hub/dlt",
+            external_run_id="dlt-run-q",
+            raw_payload='{"foo":1}',
+            manifest_version="1",
+            started_at="2026-05-24T10:00:00Z",
+            finished_at="2026-05-24T10:30:00Z",
+            record_count=7,
+            source_range={"cursor_start": "a", "cursor_end": "b"},
+        ),
+    )
+    for _ in range(retry_cap):
+        claim_processing(db, content_hash)
+        mark_failed(db, content_hash, "persistent error")
+    db.commit()
+
+
+def test_requeue_by_hash_preserves_source_metadata_cli(db_url):
+    db = Database(db_url)
+    _make_terminal_failed_with_metadata(db, "stripe.ndjson", "h-cli-req")
+    db.close()
+
+    result = CliRunner().invoke(
+        cli, ["requeue", "stripe.ndjson", "--hash", "h-cli-req", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0, result.output
+
+    db = Database(db_url)
+    record = find_file_by_hash(db, "h-cli-req")
+    db.close()
+    assert record.state == "PENDING"
+    assert record.attempt_count == 0
+    assert record.source_type == "api"
+    assert record.source_name == "stripe.charges"
+    assert record.producer == "https://github.com/dlt-hub/dlt"
+    assert record.external_run_id == "dlt-run-q"
+    assert record.manifest_version == "1"
+    assert record.started_at == "2026-05-24T10:00:00Z"
+    assert record.finished_at == "2026-05-24T10:30:00Z"
+    assert record.record_count == 7
+    assert record.source_range == {"cursor_start": "a", "cursor_end": "b"}
+    assert record.manifest_payload == '{"foo":1}'
+
+
+def test_requeue_by_filename_preserves_source_metadata_cli(db_url):
+    db = Database(db_url)
+    _make_terminal_failed_with_metadata(db, "stripe.ndjson", "h-cli-req-fn")
+    db.close()
+
+    result = CliRunner().invoke(
+        cli, ["requeue", "stripe.ndjson", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0, result.output
+
+    db = Database(db_url)
+    record = find_file_by_hash(db, "h-cli-req-fn")
+    db.close()
+    assert record.state == "PENDING"
+    assert record.source_type == "api"
+    assert record.manifest_payload == '{"foo":1}'
