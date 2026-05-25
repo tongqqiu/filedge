@@ -481,3 +481,79 @@ def test_disabled_mode_does_not_invoke_parser(tmp_path):
         "SELECT source_type, source_name FROM etl_file_audit WHERE filename = 'a.csv'"
     ).fetchone()
     assert row == (None, None)
+
+
+def test_pipeline_persists_kafka_offset_range_end_to_end(tmp_path):
+    """A File with a Kafka offset-range manifest produces an Audit Record whose stored
+    source_range matches the manifest input."""
+    import json
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched, config, audit = _minimal_watched_dir_and_config(tmp_path)
+    (tmp_path / "watch" / "a.csv.manifest.json").write_text(json.dumps({
+        "eventType": "COMPLETE",
+        "eventTime": "2026-05-24T10:30:00Z",
+        "producer": "https://github.com/apache/kafka-connect",
+        "run": {
+            "runId": "kc-run-1",
+            "facets": {"_filedgeManifest": {
+                "manifest_version": "1",
+                "started_at": "2026-05-24T10:00:00Z",
+                "record_count": 1500,
+            }},
+        },
+        "job": {"namespace": "queue", "name": "kafka.orders"},
+        "inputs": [{
+            "name": "kafka://broker/orders",
+            "facets": {"_sourceRange": {
+                "topic": "orders", "partition": 3,
+                "start_offset": 1000, "end_offset": 2000,
+            }},
+        }],
+    }))
+
+    result = run_pipeline(watched, config, audit)
+
+    assert result["committed"] == 1
+    audit_path = audit.removeprefix("sqlite:///")
+    row = sqlite3.connect(audit_path).execute(
+        "SELECT manifest_version, manifest_started_at, manifest_finished_at,"
+        " manifest_record_count, source_range FROM etl_file_audit WHERE filename = 'a.csv'"
+    ).fetchone()
+    assert row[0] == "1"
+    assert row[1] == "2026-05-24T10:00:00Z"
+    assert row[2] == "2026-05-24T10:30:00Z"
+    assert row[3] == 1500
+    assert json.loads(row[4]) == {"topic": "orders", "partition": 3, "start_offset": 1000, "end_offset": 2000}
+
+
+def test_pipeline_preserves_namespaced_extras_in_raw_payload(tmp_path):
+    """Custom facets (namespaced extras) survive end-to-end via the raw payload column."""
+    import json
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched, config, audit = _minimal_watched_dir_and_config(tmp_path)
+    manifest = {
+        "producer": "https://example.com/custom",
+        "run": {
+            "runId": "custom-run-1",
+            "facets": {
+                "_acmeRegulatoryReport": {"jurisdiction": "EU", "report_id": "RP-42"},
+            },
+        },
+        "job": {"namespace": "vendor_export", "name": "acme.regulatory"},
+    }
+    (tmp_path / "watch" / "a.csv.manifest.json").write_text(json.dumps(manifest))
+
+    run_pipeline(watched, config, audit)
+
+    audit_path = audit.removeprefix("sqlite:///")
+    raw = sqlite3.connect(audit_path).execute(
+        "SELECT manifest_payload FROM etl_file_audit WHERE filename = 'a.csv'"
+    ).fetchone()[0]
+    payload = json.loads(raw)
+    assert payload["run"]["facets"]["_acmeRegulatoryReport"] == {
+        "jurisdiction": "EU", "report_id": "RP-42",
+    }

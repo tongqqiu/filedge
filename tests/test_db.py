@@ -96,6 +96,144 @@ def test_create_audit_tables_migrates_existing_table_without_run_id(tmp_path):
     upgraded.close()
 
 
+def _insert_with_full_metadata(db, content_hash, filename="kafka.ndjson"):
+    from filedge.source_manifest import SourceMetadata
+    metadata = SourceMetadata(
+        source_type="queue",
+        source_name="kafka.orders",
+        producer="https://github.com/apache/kafka-connect",
+        external_run_id="kc-run-1",
+        raw_payload='{"raw":true}',
+        manifest_version="1",
+        started_at="2026-05-24T10:00:00Z",
+        finished_at="2026-05-24T10:30:00Z",
+        record_count=1500,
+        source_range={"topic": "orders", "partition": 3, "start_offset": 1, "end_offset": 99},
+    )
+    insert_pending(db, filename, content_hash, source_metadata=metadata)
+
+
+def _assert_metadata_unchanged(record):
+    assert record.source_type == "queue"
+    assert record.source_name == "kafka.orders"
+    assert record.producer == "https://github.com/apache/kafka-connect"
+    assert record.external_run_id == "kc-run-1"
+    assert record.manifest_payload == '{"raw":true}'
+    assert record.manifest_version == "1"
+    assert record.started_at == "2026-05-24T10:00:00Z"
+    assert record.finished_at == "2026-05-24T10:30:00Z"
+    assert record.record_count == 1500
+    assert record.source_range == {"topic": "orders", "partition": 3, "start_offset": 1, "end_offset": 99}
+
+
+def test_retry_reset_preserves_source_metadata(db):
+    """A FAILED → PENDING reset (auto-retry below cap) must not clear source metadata."""
+    from filedge.db import reset_eligible_failed
+    _insert_with_full_metadata(db, "h-retry")
+    claim_processing(db, "h-retry")
+    mark_failed(db, "h-retry", "boom")
+    db.commit()
+
+    reset_eligible_failed(db, retry_cap=3)
+    db.commit()
+
+    record = find_file_by_hash(db, "h-retry")
+    assert record.state == "PENDING"
+    _assert_metadata_unchanged(record)
+
+
+def test_stale_processing_reclaim_preserves_source_metadata(db):
+    """Stale PROCESSING reclamation must not clear source metadata."""
+    from filedge.db import reclaim_stale_processing
+    _insert_with_full_metadata(db, "h-stale")
+    claim_processing(db, "h-stale")
+    db.commit()
+    # Manually backdate claimed_at to look stale
+    db.execute(
+        "UPDATE etl_file_audit SET claimed_at = '2020-01-01T00:00:00+00:00' WHERE content_hash = ?",
+        ["h-stale"],
+    )
+    db.commit()
+
+    reclaim_stale_processing(db, stale_minutes=1)
+    db.commit()
+
+    record = find_file_by_hash(db, "h-stale")
+    assert record.state == "PENDING"
+    _assert_metadata_unchanged(record)
+
+
+def test_requeue_by_hash_preserves_source_metadata(db):
+    _insert_with_full_metadata(db, "h-req")
+    claim_processing(db, "h-req")
+    mark_failed(db, "h-req", "boom")
+    mark_failed(db, "h-req", "boom")
+    mark_failed(db, "h-req", "boom")  # at cap=3, terminal
+    db.commit()
+
+    requeue_by_hash(db, "h-req")
+    db.commit()
+
+    record = find_file_by_hash(db, "h-req")
+    assert record.state == "PENDING"
+    assert record.attempt_count == 0
+    _assert_metadata_unchanged(record)
+
+
+def test_requeue_all_terminal_failed_preserves_source_metadata(db):
+    _insert_with_full_metadata(db, "h-req-all")
+    claim_processing(db, "h-req-all")
+    mark_failed(db, "h-req-all", "boom")
+    mark_failed(db, "h-req-all", "boom")
+    mark_failed(db, "h-req-all", "boom")  # terminal
+    db.commit()
+
+    requeue_all_terminal_failed(db, retry_cap=3)
+    db.commit()
+
+    record = find_file_by_hash(db, "h-req-all")
+    assert record.state == "PENDING"
+    assert record.attempt_count == 0
+    _assert_metadata_unchanged(record)
+
+
+def test_mark_committed_preserves_source_metadata(db):
+    _insert_with_full_metadata(db, "h-commit")
+    claim_processing(db, "h-commit")
+    mark_committed(db, "h-commit", row_count=42)
+    db.commit()
+
+    record = find_file_by_hash(db, "h-commit")
+    assert record.state == "COMMITTED"
+    assert record.row_count == 42
+    _assert_metadata_unchanged(record)
+
+
+def test_insert_pending_stores_full_source_metadata(db):
+    from filedge.source_manifest import SourceMetadata
+    metadata = SourceMetadata(
+        source_type="queue",
+        source_name="kafka.orders",
+        producer="https://github.com/apache/kafka-connect",
+        external_run_id="kc-run-1",
+        raw_payload='{"raw":"payload"}',
+        manifest_version="1",
+        started_at="2026-05-24T10:00:00Z",
+        finished_at="2026-05-24T10:30:00Z",
+        record_count=1500,
+        source_range={"topic": "orders", "partition": 3, "start_offset": 1000, "end_offset": 2000},
+    )
+    insert_pending(db, "kafka.ndjson", "h-kafka", source_metadata=metadata)
+    db.commit()
+
+    record = find_file_by_hash(db, "h-kafka")
+    assert record.manifest_version == "1"
+    assert record.started_at == "2026-05-24T10:00:00Z"
+    assert record.finished_at == "2026-05-24T10:30:00Z"
+    assert record.record_count == 1500
+    assert record.source_range == {"topic": "orders", "partition": 3, "start_offset": 1000, "end_offset": 2000}
+
+
 def test_insert_pending_stores_source_metadata(db):
     from filedge.source_manifest import SourceMetadata
     metadata = SourceMetadata(

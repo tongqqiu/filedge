@@ -476,3 +476,269 @@ def test_lineage_for_file_without_source_metadata_still_works(tmp_path, db_url):
 def test_lineage_unknown_hash_exits_nonzero(tmp_path, db_url):
     result = CliRunner().invoke(cli, ["lineage", "nope-not-here", "--audit-db-url", db_url])
     assert result.exit_code != 0
+
+
+def test_lineage_shows_source_range_and_timestamps_when_present(tmp_path, db_url):
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    insert_pending(
+        db, "kafka.ndjson", "h-kafka",
+        source_metadata=SourceMetadata(
+            source_type="queue", source_name="kafka.orders",
+            producer="https://github.com/apache/kafka-connect",
+            external_run_id="kc-run-1",
+            raw_payload="{}",
+            manifest_version="1",
+            started_at="2026-05-24T10:00:00Z",
+            finished_at="2026-05-24T10:30:00Z",
+            record_count=1500,
+            source_range={"topic": "orders", "partition": 3, "start_offset": 1000, "end_offset": 2000},
+        ),
+    )
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-kafka", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    assert "manifest_version" in result.output and "1" in result.output
+    assert "started_at" in result.output and "2026-05-24T10:00:00Z" in result.output
+    assert "finished_at" in result.output and "2026-05-24T10:30:00Z" in result.output
+    assert "record_count" in result.output and "1500" in result.output
+    assert "source_range" in result.output
+    assert "orders" in result.output
+
+
+def test_lineage_by_filename_returns_record_when_unique(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "stripe.ndjson", "h-stripe-1")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "stripe.ndjson", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    assert "h-stripe-1" in result.output
+    assert "stripe.ndjson" in result.output
+
+
+def test_lineage_by_filename_with_multiple_hashes_disambiguates(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "shared.ndjson", "h-shared-1")
+    insert_pending(db, "shared.ndjson", "h-shared-2")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "shared.ndjson", "--audit-db-url", db_url])
+    assert result.exit_code != 0, result.output
+    assert "h-shared-1" in result.output
+    assert "h-shared-2" in result.output
+    assert "--hash" in result.output
+
+
+def test_lineage_json_output(tmp_path, db_url):
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    insert_pending(
+        db, "stripe.ndjson", "h-stripe-j",
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="https://github.com/dlt-hub/dlt",
+            external_run_id="dlt-run-j",
+            raw_payload='{"foo":1}',
+            manifest_version="1",
+            started_at="2026-05-24T10:00:00Z",
+            finished_at="2026-05-24T10:30:00Z",
+            record_count=42,
+            source_range={"cursor_start": "a", "cursor_end": "b"},
+        ),
+    )
+    claim_processing(db, "h-stripe-j", run_id="filedge-run-j")
+    mark_committed(db, "h-stripe-j", row_count=42)
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-stripe-j", "--json", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["filename"] == "stripe.ndjson"
+    assert payload["content_hash"] == "h-stripe-j"
+    assert payload["state"] == "COMMITTED"
+    assert payload["row_count"] == 42
+    assert payload["run_id"] == "filedge-run-j"
+    assert payload["source_manifest"]["source_type"] == "api"
+    assert payload["source_manifest"]["source_name"] == "stripe.charges"
+    assert payload["source_manifest"]["source_range"] == {"cursor_start": "a", "cursor_end": "b"}
+
+
+def test_lineage_json_for_file_without_source_metadata(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "direct.csv", "h-direct-j")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-direct-j", "--json", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["filename"] == "direct.csv"
+    assert payload["source_manifest"] is None
+
+
+def test_lineage_dest_table_flag_appears_in_output(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "a.csv", "h-dt")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(
+        cli,
+        ["lineage", "h-dt", "--audit-db-url", db_url, "--dest-table", "items"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "dest_table" in result.output
+    assert "items" in result.output
+
+
+def test_lineage_dest_table_in_json(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "a.csv", "h-dt-j")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(
+        cli,
+        ["lineage", "h-dt-j", "--json", "--audit-db-url", db_url, "--dest-table", "items"],
+    )
+    payload = json.loads(result.output)
+    assert payload["dest_table"] == "items"
+
+
+def test_status_json_includes_source_metadata_for_recent_failures(tmp_path, db_url):
+    """Recent failures with source metadata expose source_type/source_name/producer/external_run_id."""
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    # File with source metadata that fails
+    insert_pending(
+        db, "stripe.ndjson", "h-fail-stripe",
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="https://github.com/dlt-hub/dlt",
+            external_run_id="dlt-run-1",
+            raw_payload="{}",
+        ),
+    )
+    claim_processing(db, "h-fail-stripe")
+    mark_failed(db, "h-fail-stripe", "boom")
+    # File without source metadata that also fails
+    insert_pending(db, "direct.csv", "h-fail-direct")
+    claim_processing(db, "h-fail-direct")
+    mark_failed(db, "h-fail-direct", "bad-row")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["status", "--json", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+
+    by_hash = {f["content_hash"]: f for f in payload["recent_failures"]}
+    stripe = by_hash["h-fail-stripe"]
+    assert stripe["source_type"] == "api"
+    assert stripe["source_name"] == "stripe.charges"
+    assert stripe["producer"] == "https://github.com/dlt-hub/dlt"
+    assert stripe["external_run_id"] == "dlt-run-1"
+
+    direct = by_hash["h-fail-direct"]
+    assert direct["source_type"] is None
+    assert direct["source_name"] is None
+    assert direct["producer"] is None
+    assert direct["external_run_id"] is None
+
+
+def test_status_human_output_unchanged_when_failures_have_source_metadata(tmp_path, db_url):
+    """Human `filedge status` must not gain source-metadata columns."""
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    insert_pending(
+        db, "stripe.ndjson", "h-fail-stripe",
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="x", external_run_id="y", raw_payload="{}",
+        ),
+    )
+    claim_processing(db, "h-fail-stripe")
+    mark_failed(db, "h-fail-stripe", "boom")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["status", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    # Human output should still be the lean failure summary
+    assert "stripe.ndjson" in result.output
+    assert "boom" in result.output
+    assert "source_type" not in result.output
+    assert "producer" not in result.output
+
+
+def _make_terminal_failed_with_metadata(db, filename, content_hash, retry_cap=3):
+    from filedge.source_manifest import SourceMetadata
+    insert_pending(
+        db, filename, content_hash,
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="https://github.com/dlt-hub/dlt",
+            external_run_id="dlt-run-q",
+            raw_payload='{"foo":1}',
+            manifest_version="1",
+            started_at="2026-05-24T10:00:00Z",
+            finished_at="2026-05-24T10:30:00Z",
+            record_count=7,
+            source_range={"cursor_start": "a", "cursor_end": "b"},
+        ),
+    )
+    for _ in range(retry_cap):
+        claim_processing(db, content_hash)
+        mark_failed(db, content_hash, "persistent error")
+    db.commit()
+
+
+def test_requeue_by_hash_preserves_source_metadata_cli(db_url):
+    db = Database(db_url)
+    _make_terminal_failed_with_metadata(db, "stripe.ndjson", "h-cli-req")
+    db.close()
+
+    result = CliRunner().invoke(
+        cli, ["requeue", "stripe.ndjson", "--hash", "h-cli-req", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0, result.output
+
+    db = Database(db_url)
+    record = find_file_by_hash(db, "h-cli-req")
+    db.close()
+    assert record.state == "PENDING"
+    assert record.attempt_count == 0
+    assert record.source_type == "api"
+    assert record.source_name == "stripe.charges"
+    assert record.producer == "https://github.com/dlt-hub/dlt"
+    assert record.external_run_id == "dlt-run-q"
+    assert record.manifest_version == "1"
+    assert record.started_at == "2026-05-24T10:00:00Z"
+    assert record.finished_at == "2026-05-24T10:30:00Z"
+    assert record.record_count == 7
+    assert record.source_range == {"cursor_start": "a", "cursor_end": "b"}
+    assert record.manifest_payload == '{"foo":1}'
+
+
+def test_requeue_by_filename_preserves_source_metadata_cli(db_url):
+    db = Database(db_url)
+    _make_terminal_failed_with_metadata(db, "stripe.ndjson", "h-cli-req-fn")
+    db.close()
+
+    result = CliRunner().invoke(
+        cli, ["requeue", "stripe.ndjson", "--audit-db-url", db_url]
+    )
+    assert result.exit_code == 0, result.output
+
+    db = Database(db_url)
+    record = find_file_by_hash(db, "h-cli-req-fn")
+    db.close()
+    assert record.state == "PENDING"
+    assert record.source_type == "api"
+    assert record.manifest_payload == '{"foo":1}'

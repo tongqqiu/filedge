@@ -31,6 +31,11 @@ class SourceMetadata:
     producer: Optional[str]
     external_run_id: Optional[str]
     raw_payload: str
+    manifest_version: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    record_count: Optional[int] = None
+    source_range: Optional[dict] = None
 
 
 @dataclass(frozen=True)
@@ -93,12 +98,19 @@ def discover_and_parse(data_file_path: str, fs=None) -> ManifestResult:
         )
 
     run = payload.get("run") or {}
+    facets = (run.get("facets") or {})
+    fm_facet = facets.get("_filedgeManifest") or {}
     metadata = SourceMetadata(
         source_type=source_type,
         source_name=source_name,
         producer=payload.get("producer"),
         external_run_id=run.get("runId"),
         raw_payload=raw,
+        manifest_version=version,
+        started_at=fm_facet.get("started_at"),
+        finished_at=payload.get("eventTime"),
+        record_count=fm_facet.get("record_count"),
+        source_range=_first_source_range(payload),
     )
     return ManifestResult(
         found=True, metadata=metadata,
@@ -111,6 +123,16 @@ def _extract_version(payload: dict) -> str:
     facets = run.get("facets") or {}
     fm = facets.get("_filedgeManifest") or {}
     return fm.get("manifest_version", DEFAULT_MANIFEST_VERSION)
+
+
+def _first_source_range(payload: dict) -> Optional[dict]:
+    """Return the first input's `_sourceRange` facet, if any."""
+    for inp in payload.get("inputs") or []:
+        facets = inp.get("facets") or {}
+        rng = facets.get("_sourceRange")
+        if isinstance(rng, dict):
+            return rng
+    return None
 
 
 def _source_range_is_valid(payload: dict) -> bool:
