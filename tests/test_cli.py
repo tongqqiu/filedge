@@ -609,3 +609,69 @@ def test_lineage_dest_table_in_json(tmp_path, db_url):
     )
     payload = json.loads(result.output)
     assert payload["dest_table"] == "items"
+
+
+def test_status_json_includes_source_metadata_for_recent_failures(tmp_path, db_url):
+    """Recent failures with source metadata expose source_type/source_name/producer/external_run_id."""
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    # File with source metadata that fails
+    insert_pending(
+        db, "stripe.ndjson", "h-fail-stripe",
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="https://github.com/dlt-hub/dlt",
+            external_run_id="dlt-run-1",
+            raw_payload="{}",
+        ),
+    )
+    claim_processing(db, "h-fail-stripe")
+    mark_failed(db, "h-fail-stripe", "boom")
+    # File without source metadata that also fails
+    insert_pending(db, "direct.csv", "h-fail-direct")
+    claim_processing(db, "h-fail-direct")
+    mark_failed(db, "h-fail-direct", "bad-row")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["status", "--json", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+
+    by_hash = {f["content_hash"]: f for f in payload["recent_failures"]}
+    stripe = by_hash["h-fail-stripe"]
+    assert stripe["source_type"] == "api"
+    assert stripe["source_name"] == "stripe.charges"
+    assert stripe["producer"] == "https://github.com/dlt-hub/dlt"
+    assert stripe["external_run_id"] == "dlt-run-1"
+
+    direct = by_hash["h-fail-direct"]
+    assert direct["source_type"] is None
+    assert direct["source_name"] is None
+    assert direct["producer"] is None
+    assert direct["external_run_id"] is None
+
+
+def test_status_human_output_unchanged_when_failures_have_source_metadata(tmp_path, db_url):
+    """Human `filedge status` must not gain source-metadata columns."""
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    insert_pending(
+        db, "stripe.ndjson", "h-fail-stripe",
+        source_metadata=SourceMetadata(
+            source_type="api", source_name="stripe.charges",
+            producer="x", external_run_id="y", raw_payload="{}",
+        ),
+    )
+    claim_processing(db, "h-fail-stripe")
+    mark_failed(db, "h-fail-stripe", "boom")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["status", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    # Human output should still be the lean failure summary
+    assert "stripe.ndjson" in result.output
+    assert "boom" in result.output
+    assert "source_type" not in result.output
+    assert "producer" not in result.output
