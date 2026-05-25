@@ -1,7 +1,8 @@
 # Release checklist
 
-Follow these steps in order to prepare a new Filedge release. Publishing is handled
-by the GitHub Actions release workflow when a `v*` tag is pushed.
+Follow these steps in order to prepare a new Filedge release. Package publishing
+and versioned docs deployment are handled by GitHub Actions when a `v*` tag is
+pushed.
 
 ## 1. Pre-release checks
 
@@ -68,21 +69,33 @@ git tag v0.x.y
 git push origin v0.x.y
 ```
 
-Pushing the tag triggers `.github/workflows/release.yml`. The workflow runs lint,
-tests, builds the source distribution and wheel, uploads the `dist/` artifact,
-and publishes to PyPI via trusted publishing.
+Pushing the tag triggers:
 
-## 5. Watch the GitHub Actions release workflow
+- `.github/workflows/release.yml`, which runs lint, tests, builds the source
+  distribution and wheel, uploads the `dist/` artifact, and publishes to PyPI
+  via trusted publishing.
+- `.github/workflows/docs.yml`, which deploys the docs for the tag with `mike`
+  under the tag's version number and updates the `latest` alias.
 
-Open the release workflow run for the pushed tag and confirm both jobs pass:
+## 5. Watch the GitHub Actions workflows
+
+Open the release and docs workflow runs for the pushed tag and confirm they pass:
 
 ```bash
 gh run list --workflow release.yml --limit 5
+gh run watch <run-id>
+
+gh run list --workflow docs.yml --limit 5
 gh run watch <run-id>
 ```
 
 When the workflow succeeds, confirm the release appears at
 <https://pypi.org/project/filedge/>.
+
+Confirm the docs appear at:
+
+- `https://tongqqiu.github.io/filedge/0.x.y/`
+- `https://tongqqiu.github.io/filedge/latest/`
 
 ## 6. Optional local artifact smoke test
 
@@ -123,10 +136,17 @@ git commit -m "docs: update install command to PyPI uvx form for v0.x.y"
 git push origin main
 ```
 
-## 8. Redeploy docs (if using GitHub Pages)
+## 8. Redeploy docs after post-publish docs edits
 
 ```bash
-uv run mkdocs gh-deploy --force
+uv run mike deploy --push --update-aliases 0.x.y latest
+uv run mike set-default --push latest
 ```
 
 Confirm the live docs site reflects the updated install command.
+
+## One-time GitHub Pages setup
+
+Versioned docs are published to the `gh-pages` branch by `mike`. In the GitHub
+repository settings, configure Pages to deploy from the `gh-pages` branch,
+root directory. This replaces the previous Pages artifact deployment flow.
