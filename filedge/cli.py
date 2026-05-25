@@ -22,26 +22,37 @@ from filedge.db import (
     requeue_all_terminal_failed,
     requeue_by_hash,
 )
-from filedge.filesystem import get_filesystem, open_file
 from filedge.config import load_config
+from filedge.file_sample import (
+    FormatNotDetected,
+    open_sample,
+    read_parquet_schema,
+    resolve_format,
+)
 from filedge.health import HealthcheckError
 from filedge.inferrer import infer_schema, infer_schema_from_parquet
 from filedge.inspect_formatter import format_summary, format_yaml
-from filedge.parser import get_parser
 from filedge.preview_formatter import format_preview
 from filedge.progress import RichPipelineProgress
 from filedge.validate_formatter import format_json, format_text
 from filedge.validator import validate_file
 from filedge.pipeline import run_pipeline
 
-_EXT_TO_FORMAT = {
-    ".csv": "csv",
-    ".ndjson": "ndjson",
-    ".jsonl": "ndjson",
-    ".parquet": "parquet",
-}
 
 _FORMAT_CHOICE = click.Choice(["csv", "ndjson", "parquet"])
+
+
+def _require_format(file: str, fmt: str | None, exit_code: int) -> str:
+    """Resolve format or print the standard error and exit with the given code."""
+    resolved = resolve_format(file, fmt)
+    if isinstance(resolved, FormatNotDetected):
+        click.echo(
+            f"Error: cannot detect format for {resolved.file!r}. "
+            f"Use --format csv or --format ndjson.",
+            err=True,
+        )
+        sys.exit(exit_code)
+    return resolved
 
 
 @click.group()
@@ -265,27 +276,14 @@ def status(audit_db_url, output_json):
 @click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
 def inspect(file, fmt, sample_rows, output_path, encoding):
     """Infer schema from a file and output a columns: block for pipeline.yaml."""
-    if fmt is None:
-        _, ext = os.path.splitext(file)
-        fmt = _EXT_TO_FORMAT.get(ext.lower())
-        if fmt is None:
-            click.echo(
-                f"Error: cannot detect format for {file!r}. "
-                f"Use --format csv or --format ndjson.",
-                err=True,
-            )
-            sys.exit(1)
+    fmt = _require_format(file, fmt, exit_code=1)
 
     try:
-        fs, path = get_filesystem(file)
         if fmt == "parquet":
-            import pyarrow.parquet as pq
-            with open_file(path, fs=fs, mode="rb") as f:
-                columns = infer_schema_from_parquet(pq.ParquetFile(f).schema_arrow)
+            columns = infer_schema_from_parquet(read_parquet_schema(file))
         else:
-            parser = get_parser(fmt)
-            with open_file(path, fs=fs, encoding=encoding) as f:
-                columns = infer_schema(parser.parse(f), sample_rows=sample_rows)
+            with open_sample(file, fmt, encoding=encoding) as rows:
+                columns = infer_schema(rows, sample_rows=sample_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -311,28 +309,22 @@ def inspect(file, fmt, sample_rows, output_path, encoding):
 @click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
 def preview(file, fmt, num_rows, start_row, encoding):
     """Show N rows of a file as a formatted table, optionally starting at a given row."""
-    if fmt is None:
-        _, ext = os.path.splitext(file)
-        fmt = _EXT_TO_FORMAT.get(ext.lower())
-        if fmt is None:
-            click.echo(
-                f"Error: cannot detect format for {file!r}. "
-                f"Use --format csv or --format ndjson.",
-                err=True,
-            )
-            sys.exit(2)
+    fmt = _require_format(file, fmt, exit_code=2)
 
     try:
-        from itertools import islice
-        fs, path = get_filesystem(file)
-        parser = get_parser(fmt)
-        with open_file(path, fs=fs, mode=parser.mode, encoding=encoding) as f:
-            rows = list(islice(parser.parse(f), start_row - 1, start_row - 1 + num_rows))
+        with open_sample(
+            file,
+            fmt,
+            encoding=encoding,
+            start_row=start_row,
+            num_rows=num_rows,
+        ) as rows:
+            materialized = list(rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(2)
 
-    click.echo(format_preview(rows, start_row=start_row))
+    click.echo(format_preview(materialized, start_row=start_row))
 
 
 @cli.command()
@@ -347,27 +339,17 @@ def preview(file, fmt, num_rows, start_row, encoding):
 @click.option("--encoding", default=None, help="Override file encoding from pipeline.yaml (e.g. cp500)")
 def validate(file, config_path, fmt, sample_rows, output_json, encoding):
     """Validate a file against a pipeline.yaml schema without loading it."""
-    if fmt is None:
-        _, ext = os.path.splitext(file)
-        fmt = _EXT_TO_FORMAT.get(ext.lower())
-        if fmt is None:
-            click.echo(
-                f"Error: cannot detect format for {file!r}. "
-                f"Use --format csv or --format ndjson.",
-                err=True,
-            )
-            sys.exit(2)
+    fmt = _require_format(file, fmt, exit_code=2)
 
     try:
         config = load_config(config_path)
         effective_encoding = encoding or config.encoding
-        fs, path = get_filesystem(file)
-        parser = get_parser(fmt)
-        with open_file(path, fs=fs, mode=parser.mode, encoding=effective_encoding) as f:
-            rows = parser.parse(f)
-            if sample_rows is not None:
-                from itertools import islice
-                rows = islice(rows, sample_rows)
+        with open_sample(
+            file,
+            fmt,
+            encoding=effective_encoding,
+            num_rows=sample_rows,
+        ) as rows:
             result = validate_file(rows, config.columns)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
