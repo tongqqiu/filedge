@@ -195,3 +195,32 @@ columns:
         assert "Unknown Filedge column type 'money'" in str(e)
     else:
         raise AssertionError("Expected load_config to reject unknown column type")
+
+
+def test_source_manifest_default_is_optional(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML)
+    config = load_config(str(f))
+    assert config.source_manifest == "optional"
+
+
+def test_source_manifest_required(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML + "\nsource_manifest: required\n")
+    config = load_config(str(f))
+    assert config.source_manifest == "required"
+
+
+def test_source_manifest_disabled(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML + "\nsource_manifest: disabled\n")
+    config = load_config(str(f))
+    assert config.source_manifest == "disabled"
+
+
+def test_source_manifest_invalid_value_rejected(tmp_path):
+    import pytest
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML + "\nsource_manifest: maybe\n")
+    with pytest.raises(ValueError, match="source_manifest"):
+        load_config(str(f))

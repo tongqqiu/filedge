@@ -291,3 +291,194 @@ def test_pipeline_without_manifest_commits_normally(tmp_path):
         "SELECT state, source_type FROM etl_file_audit WHERE filename = 'a.csv'"
     ).fetchone()
     assert row == ("COMMITTED", None)
+
+
+def _pipeline_yaml_with_manifest_policy(tmp_path, policy: str) -> str:
+    config_file = tmp_path / "pipeline.yaml"
+    config_file.write_text(
+        f"format: csv\ndest_table: items\nretry_cap: 3\nbatch_size: 100\n"
+        f"stale_timeout_minutes: 30\n"
+        f"source_manifest: {policy}\n"
+        f"connector:\n  type: sqlite\n  url: sqlite:///{tmp_path}/dest.db\n"
+        f"columns:\n"
+        f"  - source: name\n    dest: name\n    type: string\n    required: true\n"
+        f"  - source: value\n    dest: value\n    type: string\n    required: true\n"
+    )
+    return str(config_file)
+
+
+def test_required_mode_fails_file_when_manifest_missing(tmp_path):
+    """Required mode fails before destination write when no sidecar exists."""
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "required")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+
+    assert result["failed"] == 1
+    assert result["committed"] == 0
+    # Destination table empty — no destination write happened
+    dest = sqlite3.connect(f"{tmp_path}/dest.db")
+    rows = dest.execute("SELECT COUNT(*) FROM items").fetchone()
+    assert rows[0] == 0
+    # Audit record carries the error category and manifest path
+    audit_path = audit_url.removeprefix("sqlite:///")
+    err = sqlite3.connect(audit_path).execute(
+        "SELECT error_message FROM etl_file_audit WHERE filename = 'a.csv'"
+    ).fetchone()[0]
+    assert "manifest_missing" in err
+    assert "a.csv.manifest.json" in err
+
+
+def test_required_mode_fails_file_when_manifest_malformed_json(tmp_path):
+    import json
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    (watched / "a.csv.manifest.json").write_text("{ not valid")
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "required")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+
+    assert result["failed"] == 1
+    audit_path = audit_url.removeprefix("sqlite:///")
+    err = sqlite3.connect(audit_path).execute(
+        "SELECT error_message FROM etl_file_audit WHERE filename = 'a.csv'"
+    ).fetchone()[0]
+    assert "manifest_malformed_json" in err
+
+
+def test_required_mode_fails_file_when_manifest_unsupported_version(tmp_path):
+    import json
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    (watched / "a.csv.manifest.json").write_text(json.dumps({
+        "producer": "x",
+        "run": {"runId": "r", "facets": {"_filedgeManifest": {"manifest_version": "9999"}}},
+        "job": {"namespace": "api", "name": "x"},
+    }))
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "required")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+
+    assert result["failed"] == 1
+    audit_path = audit_url.removeprefix("sqlite:///")
+    err = sqlite3.connect(audit_path).execute(
+        "SELECT error_message FROM etl_file_audit WHERE filename = 'a.csv'"
+    ).fetchone()[0]
+    assert "manifest_unsupported_version" in err
+
+
+def test_required_mode_fails_file_when_manifest_missing_required_field(tmp_path):
+    import json
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    (watched / "a.csv.manifest.json").write_text(json.dumps({
+        "producer": "x",
+        "run": {"runId": "r"},
+        "job": {"namespace": "api"},  # job.name missing
+    }))
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "required")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+    assert result["failed"] == 1
+
+
+def test_required_mode_fails_file_when_source_range_invalid(tmp_path):
+    import json
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    (watched / "a.csv.manifest.json").write_text(json.dumps({
+        "producer": "x",
+        "run": {"runId": "r"},
+        "job": {"namespace": "api", "name": "x"},
+        "inputs": [{"name": "src", "facets": {"_sourceRange": "not-an-object"}}],
+    }))
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "required")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+    assert result["failed"] == 1
+
+
+def test_required_mode_commits_file_with_valid_manifest(tmp_path):
+    import json
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    (watched / "a.csv.manifest.json").write_text(json.dumps({
+        "producer": "x",
+        "run": {"runId": "r"},
+        "job": {"namespace": "api", "name": "stripe.charges"},
+    }))
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "required")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+    assert result["committed"] == 1
+    assert result["failed"] == 0
+
+
+def test_optional_mode_commits_file_with_invalid_manifest(tmp_path):
+    """Optional mode tolerates an invalid manifest — does not fail the File."""
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    (watched / "a.csv.manifest.json").write_text("{ not valid")
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "optional")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+    assert result["committed"] == 1
+    assert result["failed"] == 0
+
+
+def test_disabled_mode_does_not_invoke_parser(tmp_path):
+    """Disabled mode: even a valid manifest is ignored — no source metadata stored."""
+    import json
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched = tmp_path / "watch"
+    watched.mkdir()
+    (watched / "a.csv").write_text("name,value\nAlice,1\n")
+    (watched / "a.csv.manifest.json").write_text(json.dumps({
+        "producer": "x",
+        "run": {"runId": "r"},
+        "job": {"namespace": "api", "name": "stripe.charges"},
+    }))
+    config_file = _pipeline_yaml_with_manifest_policy(tmp_path, "disabled")
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+
+    result = run_pipeline(str(watched), config_file, audit_url)
+    assert result["committed"] == 1
+    audit_path = audit_url.removeprefix("sqlite:///")
+    row = sqlite3.connect(audit_path).execute(
+        "SELECT source_type, source_name FROM etl_file_audit WHERE filename = 'a.csv'"
+    ).fetchone()
+    assert row == (None, None)

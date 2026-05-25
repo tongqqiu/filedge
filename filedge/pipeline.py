@@ -67,16 +67,25 @@ def run_pipeline(
         emit_progress(progress, "registering", "start", total=len(files))
         hash_states = get_hash_states(db, list(file_hashes.values()))
         new_files = 0
+        manifest_errors: dict[str, str] = {}
         for path in files:
             content_hash = file_hashes[path]
             if content_hash not in hash_states:
-                manifest = discover_and_parse(path, fs=fs)
+                metadata = None
+                if config.source_manifest != "disabled":
+                    manifest = discover_and_parse(path, fs=fs)
+                    if manifest.metadata is not None:
+                        metadata = manifest.metadata
+                    elif config.source_manifest == "required":
+                        manifest_errors[content_hash] = (
+                            f"{manifest.error_category}: {manifest.manifest_path}"
+                        )
                 insert_pending(
                     db,
                     file_basename(path),
                     content_hash,
                     source_dir=watched_dir,
-                    source_metadata=manifest.metadata if manifest.found else None,
+                    source_metadata=metadata,
                 )
                 hash_states[content_hash] = "PENDING"
                 new_files += 1
@@ -89,6 +98,12 @@ def run_pipeline(
         pending_files = []
         for path in files:
             content_hash = file_hashes[path]
+            if content_hash in manifest_errors:
+                claim_processing(db, content_hash, run_id=run_id)
+                mark_failed(db, content_hash, manifest_errors[content_hash])
+                db.commit()
+                failed += 1
+                continue
             state = hash_states.get(content_hash)
             if state != "PENDING":
                 if state == "FAILED":
