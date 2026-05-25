@@ -147,3 +147,15 @@ _Avoid_: offset range key, consumer checkpoint.
 ### Sources Config
 A Fetcher-specific config file that declares how an API Source is pulled: which endpoints to fetch, the incremental key or cursor, credentials lookup, and the staging/landing paths. This is outside Filedge's core config surface. `pipeline.yaml` remains the Filedge config for ingesting the resulting Files.
 _Avoid_: fetch config, source pipeline.
+
+### Source Manifest
+An optional OpenLineage-shaped JSON sidecar placed next to a data File in the Watched Directory (suffix `.manifest.json`), produced by an external Fetcher, sync job, or Queue Materializer. Filedge reads it during pipeline registration and stores normalized common fields (`source_type`, `source_name`, `producer`, `external_run_id`, `started_at`, `finished_at`, `record_count`) plus the full raw payload on the File's Audit Record, keyed by Content Hash. Source Manifest metadata annotates a File for audit and lineage; it never becomes the deduplication key — Content Hash remains the only idempotency key. Filedge does not run an OpenLineage event receiver; the sidecar shape is borrowed, the event transport is not. See ADR-0011.
+_Avoid_: lineage event, OpenLineage event, run event, provenance record.
+
+### Manifest Policy
+The `source_manifest:` setting in `pipeline.yaml` declaring how strictly Filedge enforces Source Manifests. Three modes: `disabled` (parser not invoked), `optional` (default — valid manifests are recorded, missing or invalid manifests warn but do not fail the File), `required` (missing or invalid manifests fail the File before destination write, with the validation error category and manifest path captured on the Audit Record). Required mode is for regulated pipelines that cannot silently lose audit coverage; optional mode preserves direct file-drop workflows.
+_Avoid_: manifest mode, manifest strictness.
+
+### Lineage
+The end-to-end audit view from upstream source range to materialized File to destination rows. Exposed via the `filedge lineage` Operator CLI subcommand, which accepts a Content Hash or filename, disambiguates when one filename maps to multiple Content Hashes, and returns the File's audit state, attempt count, Run ID, timestamps, error message, destination table, row count when available, and Source Manifest metadata when present. Supports `--json` for machine-readable output. Complements `filedge status` (recent state at a glance) and the Audit Export (browse-first compliance surface) by drilling into one File's full provenance.
+_Avoid_: trace, history, audit query.
