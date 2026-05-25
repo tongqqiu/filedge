@@ -1,5 +1,7 @@
 from filedge.db import (
+    Database,
     claim_processing,
+    create_audit_tables,
     find_file_by_hash,
     find_terminal_failed_by_filename,
     get_status_summary,
@@ -54,6 +56,36 @@ def test_create_audit_tables_migrates_existing_table_without_run_id(tmp_path):
     upgraded.close()
 
 
+def test_migration_adds_row_count_to_existing_table(tmp_path):
+    """An audit DB without row_count must be upgraded without losing data."""
+    db_path = tmp_path / "no_row_count.db"
+    old = Database(f"sqlite:///{db_path}")
+    old.execute(
+        "CREATE TABLE etl_file_audit ("
+        "id INTEGER PRIMARY KEY, filename TEXT NOT NULL, source_dir TEXT,"
+        " content_hash TEXT NOT NULL UNIQUE, state TEXT NOT NULL,"
+        " attempt_count INTEGER NOT NULL DEFAULT 0, error_message TEXT,"
+        " worker_id TEXT, run_id TEXT, claimed_at TEXT,"
+        " created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+    )
+    old.execute(
+        "INSERT INTO etl_file_audit (filename, content_hash, state, created_at, updated_at)"
+        " VALUES ('orders.csv', 'hash-old', 'COMMITTED', '2026-01-01', '2026-01-01')"
+    )
+    old.commit()
+    old.close()
+
+    upgraded = Database(f"sqlite:///{db_path}")
+    create_audit_tables(upgraded)
+
+    columns = _audit_columns(upgraded)
+    assert "row_count" in columns
+    record = find_file_by_hash(upgraded, "hash-old")
+    assert record is not None and record.filename == "orders.csv"
+    assert record.row_count is None
+    upgraded.close()
+
+
 def test_insert_and_find_pending(db):
     insert_pending(db, "orders.csv", "abc123")
     db.commit()
@@ -85,6 +117,16 @@ def test_success_state_machine(db):
     record = find_file_by_hash(db, "h1")
     assert record.state == "COMMITTED"
     assert record.worker_id is None
+
+
+def test_mark_committed_persists_row_count(db):
+    insert_pending(db, "file.csv", "h1rc")
+    claim_processing(db, "h1rc")
+    mark_committed(db, "h1rc", row_count=1500)
+    db.commit()
+
+    record = find_file_by_hash(db, "h1rc")
+    assert record.row_count == 1500
 
 
 def test_failure_state_machine(db):

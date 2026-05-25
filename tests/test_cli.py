@@ -417,3 +417,15 @@ def test_run_accepts_progress_flag(tmp_path):
 
     assert result.exit_code == 0
     assert "Committed: 1" in result.output
+
+
+def test_export_audit_creates_html_file(db_url, tmp_path):
+    runner = CliRunner()
+    output = tmp_path / "site" / "index.html"
+    result = runner.invoke(cli, [
+        "export-audit",
+        "--audit-db-url", db_url,
+        "--output", str(output),
+    ])
+    assert result.exit_code == 0, result.output
+    assert output.exists()

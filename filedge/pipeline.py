@@ -118,7 +118,7 @@ def run_pipeline(
             )
 
             if error is None:
-                mark_committed(db, content_hash)
+                mark_committed(db, content_hash, row_count=rows)
                 db.commit()
                 committed += 1
                 rows_committed += rows or 0

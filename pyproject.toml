@@ -28,6 +28,7 @@ classifiers = [
 ]
 dependencies = [
     "click>=8.1",
+    "jinja2>=3.0",
     "pyyaml>=6.0",
     "rich>=15.0.0",
 ]

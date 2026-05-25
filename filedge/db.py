@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     error_message TEXT,
     worker_id TEXT,
     run_id TEXT,
+    row_count INTEGER,
     claimed_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     error_message TEXT,
     worker_id TEXT,
     run_id TEXT,
+    row_count INTEGER,
     claimed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE NOT NULL
@@ -94,6 +96,7 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS worker_id TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS source_dir TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS run_id TEXT")
+        db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS row_count INTEGER")  # pragma: no cover
         return
 
     cursor = db.execute("PRAGMA table_info(etl_file_audit)")
@@ -104,6 +107,8 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN source_dir TEXT")
     if "run_id" not in existing:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN run_id TEXT")
+    if "row_count" not in existing:
+        db.execute("ALTER TABLE etl_file_audit ADD COLUMN row_count INTEGER")
 
 
 # --- File record ---
@@ -119,6 +124,7 @@ class FileRecord:
     error_message: Optional[str]
     worker_id: Optional[str]
     claimed_at: Optional[str]
+    row_count: Optional[int] = None
 
 
 def _now() -> str:
@@ -147,7 +153,7 @@ def get_hash_states(db: Database, hashes: list) -> Dict[str, str]:
 
 def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     cursor = db.execute(
-        "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at"
+        "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at, row_count"
         " FROM etl_file_audit WHERE content_hash = ?",
         [content_hash],
     )
@@ -157,6 +163,7 @@ def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     return FileRecord(
         id=row[0], filename=row[1], source_dir=row[2], content_hash=row[3], state=row[4],
         attempt_count=row[5], error_message=row[6], worker_id=row[7], claimed_at=row[8],
+        row_count=row[9],
     )
 
 
@@ -189,10 +196,10 @@ def claim_processing(
     return cursor.rowcount == 1
 
 
-def mark_committed(db: Database, content_hash: str) -> None:
+def mark_committed(db: Database, content_hash: str, row_count: Optional[int] = None) -> None:
     db.execute(
-        "UPDATE etl_file_audit SET state='COMMITTED', worker_id=NULL, updated_at=? WHERE content_hash=?",
-        [_now(), content_hash],
+        "UPDATE etl_file_audit SET state='COMMITTED', worker_id=NULL, row_count=?, updated_at=? WHERE content_hash=?",
+        [row_count, _now(), content_hash],
     )
 
 
