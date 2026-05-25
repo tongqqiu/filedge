@@ -4,6 +4,12 @@ site_url: https://tongqqiu.github.io/filedge/
 repo_url: https://github.com/tongqqiu/filedge
 repo_name: tongqqiu/filedge
 
+extra:
+  version:
+    provider: mike
+    default: latest
+    alias: true
+
 theme:
   name: material
   palette:
