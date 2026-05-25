@@ -637,6 +637,7 @@ version = "0.1.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "jinja2" },
     { name = "pyyaml" },
     { name = "rich" },
 ]
@@ -694,6 +695,7 @@ requires-dist = [
     { name = "fsspec", marker = "extra == 's3'", specifier = ">=2023.0" },
     { name = "gcsfs", marker = "extra == 'gcs'", specifier = ">=2023.0" },
     { name = "google-cloud-bigquery", marker = "extra == 'bigquery'", specifier = ">=3.0" },
+    { name = "jinja2", specifier = ">=3.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.27" },
