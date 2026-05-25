@@ -531,7 +531,7 @@ def test_lineage_by_filename_with_multiple_hashes_disambiguates(tmp_path, db_url
     assert result.exit_code != 0, result.output
     assert "h-shared-1" in result.output
     assert "h-shared-2" in result.output
-    assert "--hash" in result.output
+    assert "re-run with one of these Content Hashes" in result.output
 
 
 def test_lineage_json_output(tmp_path, db_url):

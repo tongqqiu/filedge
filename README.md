@@ -109,7 +109,7 @@ The audit DB and the destination are separate systems. A crash between connector
 
 ## More
 
-- Guides: [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md)
+- Guides: [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [audit export](docs/guides/audit-export.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md) · [source manifests](docs/guides/source-manifests.md)
 - Domain model: [CONTEXT.md](CONTEXT.md)
 - Architecture decisions:
   - [ADR-0001: Single-transaction commit](docs/adr/0001-single-transaction-commit.md)
@@ -121,6 +121,8 @@ The audit DB and the destination are separate systems. A crash between connector
   - [ADR-0007: Queue source ingestion model](docs/adr/0007-queue-source-ingestion-model.md)
   - [ADR-0008: Schema inference confidence tiers](docs/adr/0008-schema-inference-confidence-tiers.md)
   - [ADR-0009: Warehouse CDC applied-file markers](docs/adr/0009-warehouse-cdc-applied-file-markers.md)
+  - [ADR-0010: Audit export static site](docs/adr/0010-audit-export-static-site.md)
+  - [ADR-0011: Source manifest and lineage](docs/adr/0011-source-manifest-and-lineage.md)
 
 ## License
 

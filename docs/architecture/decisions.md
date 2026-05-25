@@ -95,3 +95,23 @@ Warehouse CDC Connectors use a Destination-side Applied File Marker keyed by des
 This is needed because replaying a CDC File re-applies business-key mutations, which cannot be made safe by row-level `_source_file_hash` alone. The Applied File Marker complements the Audit DB; it does not replace the Audit Record.
 
 [Full ADR](../adr/0009-warehouse-cdc-applied-file-markers.md)
+
+---
+
+## ADR-0010: Audit Export is a read-only static site {#adr-0010}
+
+`filedge export-audit` renders Audit DB records into a self-contained HTML file for compliance stakeholders who need read-only evidence without database or CLI access.
+
+The export deliberately excludes destination row data. It shows file-level audit state and copyable lineage SQL keyed by `_source_file_hash`, keeping sensitive row data inside the warehouse and leaving authentication to the static hosting layer.
+
+[Full ADR](../adr/0010-audit-export-static-site.md)
+
+---
+
+## ADR-0011: Source Manifest is an OpenLineage-shaped sidecar {#adr-0011}
+
+Upstream Fetchers, Queue Materializers, SFTP sync jobs, and vendor export processes may write `<data-file>.manifest.json` sidecars next to complete Files. Filedge reads a small OpenLineage-shaped subset, stores the raw manifest on the Audit Record, and surfaces it through `filedge lineage` and `status --json`.
+
+Filedge consumes this shape but does not emit to lineage backends or take over source mechanics. That keeps the File boundary intact while giving regulated pipelines a deterministic link back to upstream source ranges.
+
+[Full ADR](../adr/0011-source-manifest-and-lineage.md)
