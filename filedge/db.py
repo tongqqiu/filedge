@@ -317,31 +317,8 @@ def reclaim_stale_processing(db: Database, stale_minutes: int) -> int:
 
 
 def get_status_summary(db: Database) -> dict:
-    cursor = db.execute("SELECT state, COUNT(*) FROM etl_file_audit GROUP BY state")
-    counts: Dict[str, int] = {"PENDING": 0, "PROCESSING": 0, "COMMITTED": 0, "FAILED": 0}
-    for row in cursor.fetchall():
-        counts[row[0]] = row[1]
-
-    cursor = db.execute(
-        "SELECT filename, content_hash, error_message,"
-        " source_type, source_name, producer, external_run_id"
-        " FROM etl_file_audit"
-        " WHERE state='FAILED' ORDER BY updated_at DESC LIMIT 10"
-    )
-    recent_failures = [
-        {
-            "filename": row[0],
-            "content_hash": row[1],
-            "error_message": row[2],
-            "source_type": row[3],
-            "source_name": row[4],
-            "producer": row[5],
-            "external_run_id": row[6],
-        }
-        for row in cursor.fetchall()
-    ]
-
-    return {**counts, "recent_failures": recent_failures}
+    from filedge.audit_records import status_summary
+    return status_summary(db)
 
 
 def find_files_by_filename(db: Database, filename: str) -> list["FileRecord"]:

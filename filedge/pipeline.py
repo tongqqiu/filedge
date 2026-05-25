@@ -8,18 +8,14 @@ from filedge.db import (
     Database,
     claim_processing,
     create_audit_tables,
-    get_hash_states,
-    insert_pending,
     mark_committed,
     mark_failed,
     reclaim_stale_processing,
     reset_eligible_failed,
 )
-from filedge.filesystem import file_basename, file_size, get_filesystem, list_files
-from filedge.hashing import compute_hash
+from filedge.file_registration import register_files
 from filedge.loader import load_file
 from filedge.progress import ProgressReporter, emit_progress
-from filedge.source_manifest import discover_and_parse
 
 
 def run_pipeline(
@@ -41,7 +37,6 @@ def run_pipeline(
 
     db = Database(audit_db_url)
     connector = get_connector(config)
-    fs, root = get_filesystem(watched_dir)
 
     try:
         create_audit_tables(db)
@@ -52,67 +47,23 @@ def run_pipeline(
 
         connector.ensure_table(config)
 
-        files = list_files(fs, root, file_pattern=config.file_pattern)
-        emit_progress(progress, "hashing", "start", total=len(files))
-        file_hashes = {}
-        file_sizes = {}
-        bytes_processed = 0
-        for path in files:
-            file_hashes[path] = compute_hash(path, fs)
-            file_sizes[path] = file_size(path, fs)
-            bytes_processed += file_sizes[path]
-            emit_progress(progress, "hashing", "advance", path=path)
-        emit_progress(progress, "hashing", "finish", total=len(files))
+        registration = register_files(
+            watched_dir,
+            config,
+            db,
+            progress=progress,
+            run_id=run_id,
+        )
 
-        emit_progress(progress, "registering", "start", total=len(files))
-        hash_states = get_hash_states(db, list(file_hashes.values()))
-        new_files = 0
-        manifest_errors: dict[str, str] = {}
-        for path in files:
-            content_hash = file_hashes[path]
-            if content_hash not in hash_states:
-                metadata = None
-                if config.source_manifest != "disabled":
-                    manifest = discover_and_parse(path, fs=fs)
-                    if manifest.metadata is not None:
-                        metadata = manifest.metadata
-                    elif config.source_manifest == "required":
-                        manifest_errors[content_hash] = (
-                            f"{manifest.error_category}: {manifest.manifest_path}"
-                        )
-                insert_pending(
-                    db,
-                    file_basename(path),
-                    content_hash,
-                    source_dir=watched_dir,
-                    source_metadata=metadata,
-                )
-                hash_states[content_hash] = "PENDING"
-                new_files += 1
-            emit_progress(progress, "registering", "advance", path=path)
-        db.commit()
-        emit_progress(progress, "registering", "finish", total=len(files))
-
-        committed = failed = skipped = 0
+        committed = 0
+        failed = registration.failed_pre_load
+        skipped = registration.skipped
         rows_committed = 0
-        pending_files = []
-        for path in files:
-            content_hash = file_hashes[path]
-            if content_hash in manifest_errors:
-                claim_processing(db, content_hash, run_id=run_id)
-                mark_failed(db, content_hash, manifest_errors[content_hash])
-                db.commit()
-                failed += 1
-                continue
-            state = hash_states.get(content_hash)
-            if state != "PENDING":
-                if state == "FAILED":
-                    skipped += 1
-                continue
-            pending_files.append((path, content_hash))
 
-        emit_progress(progress, "loading", "start", total=len(pending_files))
-        for path, content_hash in pending_files:
+        emit_progress(progress, "loading", "start", total=len(registration.load_candidates))
+        for candidate in registration.load_candidates:
+            path = candidate.path
+            content_hash = candidate.content_hash
             claimed = claim_processing(db, content_hash, run_id=run_id)
             db.commit()
             if not claimed:
@@ -121,14 +72,14 @@ def run_pipeline(
 
             emit_progress(
                 progress, "loading", "file_start",
-                path=path, file_hash=content_hash, bytes=file_sizes.get(path),
+                path=path, file_hash=content_hash, bytes=candidate.size,
             )
             rows, error = load_file(
                 connector,
                 config,
                 path,
                 content_hash,
-                fs,
+                candidate.fs,
                 progress=progress,
             )
             emit_progress(
@@ -150,7 +101,7 @@ def run_pipeline(
                 db.commit()
                 failed += 1
             emit_progress(progress, "loading", "advance", path=path)
-        emit_progress(progress, "loading", "finish", total=len(pending_files))
+        emit_progress(progress, "loading", "finish", total=len(registration.load_candidates))
 
         finished_at = datetime.datetime.now(datetime.UTC).isoformat()
         duration_s = time.perf_counter() - started_perf
@@ -159,15 +110,15 @@ def run_pipeline(
             "started_at": started_at,
             "finished_at": finished_at,
             "duration_s": duration_s,
-            "files_scanned": len(files),
-            "new_files": new_files,
+            "files_scanned": registration.files_scanned,
+            "new_files": registration.new_files,
             "committed": committed,
             "failed": failed,
             "skipped": skipped,
             "reclaimed": reclaimed,
             "retried": retried,
             "rows_committed": rows_committed,
-            "bytes_processed": bytes_processed,
+            "bytes_processed": registration.bytes_processed,
         }
     finally:
         connector.close()

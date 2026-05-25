@@ -21,6 +21,9 @@ The act of successfully applying one File to the Destination and then marking th
 ### Run
 A single execution of `filedge run` — a short-lived process that scans the Watched Directory, enqueues new Files as PENDING, processes them through the pipeline, and exits. Triggered by an external scheduler (cron, Airflow, Kubernetes CronJob). Stale PROCESSING locks older than a configured timeout are reclaimed at the start of each Run.
 
+### File Registration
+The pre-load phase of a Run that discovers Files in the Watched Directory, computes each Content Hash and file size, applies Manifest Policy, creates or updates Audit Records, and decides which Files are eligible to load. Files that fail pre-load policy, such as a missing required Source Manifest, fail before any Destination write.
+
 ### Streaming Load
 Files are processed in row batches (configurable size, default 1,000) rather than loaded entirely into memory. The Connector writes the File as one idempotent unit and commits only when the full File is processed, keeping memory bounded by `batch_size`.
 
