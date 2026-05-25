@@ -336,7 +336,6 @@ def test_required_mode_fails_file_when_manifest_missing(tmp_path):
 
 
 def test_required_mode_fails_file_when_manifest_malformed_json(tmp_path):
-    import json
     import sqlite3
     from filedge.pipeline import run_pipeline
 
