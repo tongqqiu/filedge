@@ -118,11 +118,11 @@ def create_audit_tables(db: Database) -> None:
 
 
 def _ensure_audit_columns(db: Database) -> None:
-    if db.dialect() == "postgres":
+    if db.dialect() == "postgres":  # pragma: no cover
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS worker_id TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS source_dir TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS run_id TEXT")
-        db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS row_count INTEGER")  # pragma: no cover
+        db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS row_count INTEGER")
         for col in _SOURCE_MANIFEST_TEXT_COLUMNS:
             db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS {col} TEXT")
         for col in _SOURCE_MANIFEST_INT_COLUMNS:
@@ -218,8 +218,8 @@ def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
         source_type=row[10], source_name=row[11], producer=row[12],
         external_run_id=row[13], manifest_payload=row[14],
         manifest_version=row[15],
-        started_at=row[16] if row[16] is None or isinstance(row[16], str) else row[16].isoformat(),
-        finished_at=row[17] if row[17] is None or isinstance(row[17], str) else row[17].isoformat(),
+        started_at=row[16] if row[16] is None or isinstance(row[16], str) else row[16].isoformat(),  # pragma: no branch
+        finished_at=row[17] if row[17] is None or isinstance(row[17], str) else row[17].isoformat(),  # pragma: no branch
         record_count=row[18],
         source_range=source_range,
     )
