@@ -9,7 +9,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 
-from filedge.cdc import plan_cdc_changes
+from filedge.cdc import plan_staged_cdc_records
 from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
@@ -169,7 +169,8 @@ class DatabricksConnector(Connector):
         file_hash: str,
         cdc: CdcConfig,
     ) -> None:
-        changes = plan_cdc_changes(rows, cdc)
+        staged = plan_staged_cdc_records(rows, cdc)
+        records = staged.records
         self._ensure_applied_files_table()
         if self._cdc_file_already_applied(table, file_hash):
             return
@@ -179,15 +180,6 @@ class DatabricksConnector(Connector):
             .replace(tzinfo=None)
             .strftime("%Y-%m-%d %H:%M:%S.%f")
         )
-        records = []
-        for change in changes:
-            record = {
-                key: value
-                for key, value in change.row.items()
-                if key != cdc.operation_column
-            }
-            record["_filedge_cdc_operation"] = change.operation
-            records.append(record)
 
         if not records:
             self._insert_applied_file_marker(table, file_hash, ingested_at)

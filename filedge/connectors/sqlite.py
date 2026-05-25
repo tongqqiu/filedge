@@ -2,7 +2,7 @@ import datetime
 import sqlite3
 from typing import Iterator, List, Optional
 
-from filedge.cdc import plan_cdc_changes
+from filedge.cdc import apply_transactional_cdc
 from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import configured_columns, expected_columns, provenance_columns, schema_mismatches
@@ -109,32 +109,15 @@ class SQLiteConnector(Connector):
     ) -> None:
         conn = self._get_conn()
         ingested_at = datetime.datetime.now(datetime.UTC).isoformat()
-        changes = plan_cdc_changes(rows, cdc)
-        key_predicate = " AND ".join([f"{_q(column)} = ?" for column in cdc.keys])
-
         try:
-            for change in changes:
-                conn.execute(
-                    f"DELETE FROM {table} WHERE {key_predicate}",
-                    list(change.key),
-                )
-                if change.operation == "delete":
-                    continue
-
-                row = {
-                    key: value
-                    for key, value in change.row.items()
-                    if key != cdc.operation_column
-                }
-                dest_cols = list(row.keys()) + ["_source_file_hash", "_ingested_at"]
-                placeholders = ", ".join(["?"] * len(dest_cols))
-                values = list(row.values()) + [file_hash, ingested_at]
-                quoted = ", ".join(_q(c) for c in dest_cols)
-                conn.execute(
-                    f"INSERT INTO {table} ({quoted}) VALUES ({placeholders})",
-                    values,
-                )
-
+            apply_transactional_cdc(
+                _SQLiteCdcAdapter(conn),
+                table,
+                rows,
+                file_hash=file_hash,
+                ingested_at=ingested_at,
+                cdc=cdc,
+            )
             conn.commit()
         except Exception:
             conn.rollback()
@@ -147,3 +130,21 @@ class SQLiteConnector(Connector):
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+
+class _SQLiteCdcAdapter:
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+
+    def delete_by_key(self, table, key_columns, key_values):
+        predicate = " AND ".join(f"{_q(col)} = ?" for col in key_columns)
+        self._conn.execute(
+            f"DELETE FROM {table} WHERE {predicate}", list(key_values)
+        )
+
+    def insert_row(self, table, columns, values):
+        quoted = ", ".join(_q(col) for col in columns)
+        placeholders = ", ".join(["?"] * len(columns))
+        self._conn.execute(
+            f"INSERT INTO {table} ({quoted}) VALUES ({placeholders})", list(values)
+        )

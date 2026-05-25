@@ -4,7 +4,7 @@ import os
 import tempfile
 from typing import Iterator, Optional
 
-from filedge.cdc import plan_cdc_changes
+from filedge.cdc import plan_staged_cdc_records
 from filedge.config import CdcConfig, PipelineConfig
 from filedge.connectors import Connector, SchemaError
 from filedge.schema import PROVENANCE_COLUMN_NAMES, expected_columns, schema_mismatches
@@ -165,19 +165,11 @@ class BigQueryConnector(Connector):
     ) -> None:
         from google.cloud import bigquery
 
-        changes = plan_cdc_changes(rows, cdc)
+        staged = plan_staged_cdc_records(rows, cdc)
+        records = staged.records
         self._ensure_applied_files_table()
         staging_table = f"_filedge_staging_{_safe_job_id_part(file_hash, 20)}_{int(datetime.datetime.now(datetime.UTC).timestamp())}"
         staging_ref = self._table_ref(staging_table)
-        records = []
-        for change in changes:
-            record = {
-                key: value
-                for key, value in change.row.items()
-                if key != cdc.operation_column
-            }
-            record["_filedge_cdc_operation"] = change.operation
-            records.append(record)
 
         if records:
             schema = [

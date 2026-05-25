@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Protocol, Sequence
 
 from filedge.config import CdcConfig
 
@@ -13,6 +13,10 @@ class CdcChange:
     operation: str
     key: tuple
     row: dict
+
+
+PROVENANCE_COLUMNS = ("_source_file_hash", "_ingested_at")
+DEFAULT_OPERATION_MARKER_COLUMN = "_filedge_cdc_operation"
 
 
 def plan_cdc_changes(rows: Iterable[dict], cdc: CdcConfig) -> list[CdcChange]:
@@ -47,3 +51,95 @@ def plan_cdc_changes(rows: Iterable[dict], cdc: CdcConfig) -> list[CdcChange]:
         CdcChange(operation=operation, key=key, row=row)
         for key, (_sequence, operation, row) in latest_by_key.items()
     ]
+
+
+class TransactionalCdcAdapter(Protocol):
+    """Dialect operations a transactional Connector exposes to apply CDC changes.
+
+    The orchestrator owns the change-by-change delete-then-insert sequence and the
+    provenance columns; the adapter owns identifier quoting, parameter placeholders,
+    and statement execution. Transaction boundaries are owned by the Connector
+    outside the orchestrator.
+    """
+
+    def delete_by_key(
+        self,
+        table: str,
+        key_columns: Sequence[str],
+        key_values: Sequence,
+    ) -> None: ...
+
+    def insert_row(
+        self,
+        table: str,
+        columns: Sequence[str],
+        values: Sequence,
+    ) -> None: ...
+
+
+@dataclass(frozen=True)
+class StagedCdcRecords:
+    """CDC changes shaped as staging rows for warehouse-style apply.
+
+    Each record contains the row's data columns (excluding `cdc.operation_column`)
+    and an operation-marker column (default `_filedge_cdc_operation`) carrying
+    the planned operation. `data_columns` lists the data column names in row order,
+    excluding the operation marker; the Connector uses it to build MERGE / INSERT
+    column lists. The Applied File Marker write remains destination-side per
+    ADR-0009.
+    """
+
+    records: list[dict]
+    data_columns: list[str]
+
+
+def plan_staged_cdc_records(
+    rows: Iterable[dict],
+    cdc: CdcConfig,
+    *,
+    operation_marker_column: str = DEFAULT_OPERATION_MARKER_COLUMN,
+) -> StagedCdcRecords:
+    """Plan CDC changes and shape them as warehouse staging records."""
+    changes = plan_cdc_changes(rows, cdc)
+    records: list[dict] = []
+    data_columns: list[str] = []
+    for change in changes:
+        record = {
+            key: value
+            for key, value in change.row.items()
+            if key != cdc.operation_column
+        }
+        if not data_columns:
+            data_columns = list(record.keys())
+        record[operation_marker_column] = change.operation
+        records.append(record)
+    return StagedCdcRecords(records=records, data_columns=data_columns)
+
+
+def apply_transactional_cdc(
+    adapter: TransactionalCdcAdapter,
+    table: str,
+    rows: Iterable[dict],
+    file_hash: str,
+    ingested_at: str,
+    cdc: CdcConfig,
+) -> None:
+    """Plan CDC changes from rows and apply them via the adapter.
+
+    For each planned change, the orchestrator deletes by key and then (for non-delete
+    operations) inserts the row's data columns plus `_source_file_hash` and
+    `_ingested_at`. The caller is responsible for the surrounding transaction.
+    """
+    changes = plan_cdc_changes(rows, cdc)
+    for change in changes:
+        adapter.delete_by_key(table, cdc.keys, list(change.key))
+        if change.operation == "delete":
+            continue
+        row = {
+            key: value
+            for key, value in change.row.items()
+            if key != cdc.operation_column
+        }
+        columns = list(row.keys()) + list(PROVENANCE_COLUMNS)
+        values = list(row.values()) + [file_hash, ingested_at]
+        adapter.insert_row(table, columns, values)
