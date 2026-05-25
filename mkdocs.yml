@@ -56,6 +56,7 @@ nav:
     - CDC files: guides/cdc-files.md
     - API sources: guides/api-sources.md
     - Queue sources: guides/queue-sources.md
+    - Source manifests: guides/source-manifests.md
   - Reference:
     - pipeline.yaml: reference/pipeline-yaml.md
     - CLI commands: reference/cli.md

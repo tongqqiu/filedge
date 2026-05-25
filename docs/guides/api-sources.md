@@ -188,3 +188,40 @@ Every destination row carries `_source_file_hash` linking it back to the exact f
 | Row-level provenance (`_source_file_hash`) | `filedge run` |
 | Retry on ingestion failure | `filedge run` |
 | Operator visibility (`filedge status`) | `filedge run` |
+
+---
+
+## Source Manifests (optional)
+
+The Fetcher can write a `*.manifest.json` sidecar next to each NDJSON file to record the API cursor range, run ID, and producer identity:
+
+```
+landing/stripe/
+  stripe_events_20260522T140000_0001.ndjson
+  stripe_events_20260522T140000_0001.ndjson.manifest.json
+```
+
+Filedge reads the sidecar at registration and stores the metadata on the File's Audit Record. Then operators can drill in with `filedge lineage` or filter `filedge status --json` failures by API source.
+
+```json
+{
+  "eventType": "COMPLETE",
+  "eventTime": "2026-05-22T14:00:30Z",
+  "producer": "https://github.com/dlt-hub/dlt",
+  "run": {
+    "runId": "dlt-stripe-2026-05-22T14:00",
+    "facets": {"_filedgeManifest": {"manifest_version": "1", "record_count": 1500}}
+  },
+  "job": {"namespace": "api", "name": "stripe.charges"},
+  "inputs": [{
+    "name": "https://api.stripe.com/v1/charges",
+    "facets": {"_sourceRange": {
+      "cursor_start": "ch_3OXa...",
+      "cursor_end":   "ch_3OYz...",
+      "endpoint": "/v1/charges"
+    }}
+  }]
+}
+```
+
+See [Source Manifests](source-manifests.md) for the full schema, policy modes (`disabled` / `optional` / `required`), and validation error categories. Direct file drops without manifests continue to work unchanged under the default `optional` policy.
