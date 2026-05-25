@@ -41,6 +41,7 @@ class PipelineConfig:
     encoding: str = "utf-8"
     cdc: Optional[CdcConfig] = None
     file_pattern: Optional[str] = None
+    source_manifest: str = "optional"
 
 
 def load_config(path: str) -> PipelineConfig:
@@ -99,4 +100,13 @@ def load_config(path: str) -> PipelineConfig:
         encoding=data.get("encoding", "utf-8"),
         cdc=cdc,
         file_pattern=data.get("file_pattern"),
+        source_manifest=_validate_source_manifest(data.get("source_manifest", "optional")),
     )
+
+
+def _validate_source_manifest(value: str) -> str:
+    if value not in ("disabled", "optional", "required"):
+        raise ValueError(
+            f"source_manifest must be one of disabled/optional/required, got {value!r}"
+        )
+    return value
