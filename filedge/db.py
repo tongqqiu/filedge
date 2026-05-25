@@ -334,6 +334,17 @@ def get_status_summary(db: Database) -> dict:
     return {**counts, "recent_failures": recent_failures}
 
 
+def find_files_by_filename(db: Database, filename: str) -> list["FileRecord"]:
+    """Return every audit record matching filename, regardless of state."""
+    cursor = db.execute(
+        "SELECT content_hash FROM etl_file_audit WHERE filename = ?",
+        [filename],
+    )
+    hashes = [r[0] for r in cursor.fetchall()]
+    records = [find_file_by_hash(db, h) for h in hashes]
+    return [r for r in records if r is not None]
+
+
 def find_terminal_failed_by_filename(
     db: Database, filename: str, retry_cap: int
 ) -> list["FileRecord"]:
