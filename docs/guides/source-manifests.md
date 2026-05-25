@@ -154,7 +154,7 @@ For machine-readable output (dashboards, scripts):
 filedge lineage <content-hash> --json --audit-db-url $FILEDGE_AUDIT_DB_URL
 ```
 
-When a filename maps to multiple Content Hashes, `filedge lineage` prints both and exits non-zero — re-run with `--hash <content-hash>` to drill into one.
+When a filename maps to multiple Content Hashes, `filedge lineage` prints both and exits non-zero — re-run with one of those Content Hashes as the identifier to drill into a single file.
 
 `filedge status --json` also surfaces a concise source metadata block on each recent-failure entry (`source_type`, `source_name`, `producer`, `external_run_id`), so monitoring systems can route failures to the right upstream owner without a separate audit-DB query.
 

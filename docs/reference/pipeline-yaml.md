@@ -32,6 +32,7 @@ write_mode: append
 retry_cap: 3
 stale_timeout_minutes: 30
 batch_size: 1000
+source_manifest: optional
 
 connector:
   type: postgres
@@ -126,6 +127,20 @@ First-version CDC support is SCD Type 1 only. Inserts and updates replace the cu
 ### `batch_size`
 
 **Optional.** Default: `1000`. Number of rows per database batch during `write_rows`. Larger batches are more efficient but use more memory.
+
+### `source_manifest`
+
+**Optional.** Default: `optional`.
+
+Controls whether Filedge reads an OpenLineage-shaped sidecar named `<data-file>.manifest.json` when it registers files in the watched directory.
+
+| Value | Behaviour |
+|-------|-----------|
+| `disabled` | Do not look for sidecar manifests. Files ingest without source metadata. |
+| `optional` | Attach valid manifest metadata when present. Missing or invalid manifests do not fail the file. |
+| `required` | Fail the file before destination write when the manifest is missing or invalid. The audit error records the validation category and expected manifest path. |
+
+Source manifests let upstream Fetchers, Queue Materializers, SFTP sync jobs, and vendor exports attach source ranges to the File audit record without making Filedge responsible for those source mechanics. See the [Source manifests guide](../guides/source-manifests.md) for the sidecar schema and lineage commands.
 
 ---
 

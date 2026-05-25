@@ -570,7 +570,7 @@ def _resolve_lineage_record(db, identifier):
         return matches[0]
     click.echo(
         f"Filename {identifier!r} maps to {len(matches)} Content Hashes — "
-        "re-run with --hash <content-hash>:",
+        "re-run with one of these Content Hashes:",
         err=True,
     )
     for m in matches:

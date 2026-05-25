@@ -198,6 +198,50 @@ Recent failures:
 
 ---
 
+## `filedge lineage`
+
+Show the full audit record and source-manifest metadata for one file.
+
+```bash
+filedge lineage <content-hash-or-filename> --audit-db-url <url> [--json]
+```
+
+| Option | Env var | Default | Description |
+|--------|---------|---------|-------------|
+| `<content-hash-or-filename>` | — | required | Exact content hash or filename to inspect |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--json` | — | off | Emit machine-readable JSON |
+| `--dest-table` | — | none | Destination table name to include in output |
+
+When a filename maps to multiple content hashes, the command prints the matching hashes and exits non-zero. Re-run with one of those hashes to inspect a specific file.
+
+**Exit codes:** `0` on success, `1` when no file matches, `2` when a filename is ambiguous.
+
+See the [Source manifests guide](../guides/source-manifests.md) for full details.
+
+---
+
+## `filedge export-audit`
+
+Generate a self-contained, read-only HTML audit site from the Audit DB.
+
+```bash
+filedge export-audit --audit-db-url <url> --output <path> [options]
+```
+
+| Option | Env var | Default | Description |
+|--------|---------|---------|-------------|
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--output` | — | required | Output path for the generated `index.html` |
+| `--title` | — | none | Pipeline label shown in the site header |
+| `--dest-table` | — | none | Destination table name for lineage SQL snippets |
+
+**Exit codes:** `0` on success, `1` on error.
+
+See the [Audit Export guide](../guides/audit-export.md) for full details.
+
+---
+
 ## `filedge completion`
 
 Print shell completion scripts for zsh or bash.
