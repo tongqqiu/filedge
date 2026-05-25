@@ -28,6 +28,7 @@ Core CLI commands, each useful on its own:
 | `filedge compact` | Merge many small files into fewer large ones before ingestion |
 | `filedge run` | Ingest files with retry-safe commits and a full audit trail |
 | `filedge status` | Show counts and recent failures from the audit DB |
+| `filedge lineage <hash\|filename>` | Show one File's full audit + source-manifest lineage |
 | `filedge export-audit` | Generate a read-only static HTML site for compliance and audit stakeholders |
 | `filedge healthcheck` | Probe the audit DB and destination connector without writing rows |
 | `filedge requeue` | Move terminal failed files back to `PENDING` after remediation |
@@ -60,5 +61,6 @@ Pluggable via a `connector:` block in `pipeline.yaml`:
 - [Getting Started](getting-started.md) — install and run your first pipeline in 5 minutes
 - [Guides](guides/run.md) — one page per workflow
 - [Scale ingestion](guides/scale.md) — large files, many files, parallel workers, and backfills
+- [Source manifests](guides/source-manifests.md) — upstream lineage for API / Queue / SFTP / vendor exports
 - [pipeline.yaml reference](reference/pipeline-yaml.md) — every config option
 - [Connectors](reference/connectors.md) — destination setup for each backend

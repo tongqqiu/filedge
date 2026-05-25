@@ -138,3 +138,43 @@ For lower latency, run `filedge run` more frequently or partition the Watched Di
 | Row-level provenance (`_source_file_hash`) | `filedge run` |
 | Retry on ingestion failure | `filedge run` |
 | Operator visibility (`filedge status`) | `filedge run` |
+
+---
+
+## Source Manifests (optional)
+
+Filename conventions (`{topic}.{partition}.{start_offset}-{end_offset}.ndjson`) make Files queryable but don't survive across renames or repartitioning. For durable lineage, write a `*.manifest.json` sidecar next to each NDJSON file:
+
+```
+landing/orders/
+  orders.3.1450000-1455000.ndjson
+  orders.3.1450000-1455000.ndjson.manifest.json
+```
+
+The sidecar records the full offset range as structured JSON, plus the Queue Materializer's run identity:
+
+```json
+{
+  "eventType": "COMPLETE",
+  "eventTime": "2026-05-25T10:30:00Z",
+  "producer": "https://github.com/apache/kafka-connect",
+  "run": {
+    "runId": "kc-orders-2026-05-25T10:00",
+    "facets": {"_filedgeManifest": {"manifest_version": "1", "record_count": 5000}}
+  },
+  "job": {"namespace": "queue", "name": "kafka.orders"},
+  "inputs": [{
+    "name": "kafka://broker/orders",
+    "facets": {"_sourceRange": {
+      "topic": "orders",
+      "partition": 3,
+      "start_offset": 1450000,
+      "end_offset": 1455000
+    }}
+  }]
+}
+```
+
+Filedge stores `source_type`, `source_name`, `producer`, `external_run_id`, and the full source range on each Audit Record. Operators query with `filedge lineage <hash>` or use `filedge status --json` to route Kafka failures back to the materializer team.
+
+See [Source Manifests](source-manifests.md) for the full schema, policy modes, and validation rules. The default `optional` policy preserves the existing filename-only workflow when manifests are absent.
