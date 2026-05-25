@@ -28,6 +28,7 @@ Core CLI commands, each useful on its own:
 | `filedge compact` | Merge many small files into fewer large ones before ingestion |
 | `filedge run` | Ingest files with retry-safe commits and a full audit trail |
 | `filedge status` | Show counts and recent failures from the audit DB |
+| `filedge export-audit` | Generate a read-only static HTML site for compliance and audit stakeholders |
 | `filedge healthcheck` | Probe the audit DB and destination connector without writing rows |
 | `filedge requeue` | Move terminal failed files back to `PENDING` after remediation |
 
