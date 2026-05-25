@@ -429,3 +429,50 @@ def test_export_audit_creates_html_file(db_url, tmp_path):
     ])
     assert result.exit_code == 0, result.output
     assert output.exists()
+
+
+def test_lineage_prints_source_metadata_for_known_hash(tmp_path, db_url):
+    from filedge.source_manifest import SourceMetadata
+    db = Database(db_url)
+    insert_pending(
+        db, "stripe.ndjson", "h-stripe",
+        source_metadata=SourceMetadata(
+            source_type="api",
+            source_name="stripe.charges",
+            producer="https://github.com/dlt-hub/dlt",
+            external_run_id="dlt-run-xyz",
+            raw_payload="{}",
+        ),
+    )
+    claim_processing(db, "h-stripe", run_id="filedge-run-1")
+    mark_committed(db, "h-stripe", row_count=42)
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-stripe", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    assert "h-stripe" in result.output
+    assert "stripe.ndjson" in result.output
+    assert "COMMITTED" in result.output
+    assert "api" in result.output
+    assert "stripe.charges" in result.output
+    assert "dlt-hub/dlt" in result.output
+    assert "dlt-run-xyz" in result.output
+    assert "filedge-run-1" in result.output
+
+
+def test_lineage_for_file_without_source_metadata_still_works(tmp_path, db_url):
+    db = Database(db_url)
+    insert_pending(db, "direct.csv", "h-direct")
+    db.commit()
+    db.close()
+
+    result = CliRunner().invoke(cli, ["lineage", "h-direct", "--audit-db-url", db_url])
+    assert result.exit_code == 0, result.output
+    assert "direct.csv" in result.output
+    assert "PENDING" in result.output
+
+
+def test_lineage_unknown_hash_exits_nonzero(tmp_path, db_url):
+    result = CliRunner().invoke(cli, ["lineage", "nope-not-here", "--audit-db-url", db_url])
+    assert result.exit_code != 0

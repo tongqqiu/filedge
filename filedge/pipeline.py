@@ -19,6 +19,7 @@ from filedge.filesystem import file_basename, file_size, get_filesystem, list_fi
 from filedge.hashing import compute_hash
 from filedge.loader import load_file
 from filedge.progress import ProgressReporter, emit_progress
+from filedge.source_manifest import discover_and_parse
 
 
 def run_pipeline(
@@ -69,7 +70,14 @@ def run_pipeline(
         for path in files:
             content_hash = file_hashes[path]
             if content_hash not in hash_states:
-                insert_pending(db, file_basename(path), content_hash, source_dir=watched_dir)
+                manifest = discover_and_parse(path, fs=fs)
+                insert_pending(
+                    db,
+                    file_basename(path),
+                    content_hash,
+                    source_dir=watched_dir,
+                    source_metadata=manifest.metadata if manifest.found else None,
+                )
                 hash_states[content_hash] = "PENDING"
                 new_files += 1
             emit_progress(progress, "registering", "advance", path=path)
