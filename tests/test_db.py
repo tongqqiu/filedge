@@ -24,6 +24,46 @@ def test_create_audit_tables_adds_run_id_column(db):
     assert "run_id" in _audit_columns(db)
 
 
+def test_create_audit_tables_adds_source_manifest_columns(db):
+    columns = _audit_columns(db)
+    assert "source_type" in columns
+    assert "source_name" in columns
+    assert "producer" in columns
+    assert "external_run_id" in columns
+    assert "manifest_payload" in columns
+
+
+def test_create_audit_tables_migrates_legacy_table_to_add_source_manifest_columns(tmp_path):
+    """An audit DB written by an older filedge (no source-manifest columns) must be
+    upgraded by create_audit_tables() without losing rows."""
+    db_path = tmp_path / "legacy.db"
+    legacy = Database(f"sqlite:///{db_path}")
+    legacy.execute(
+        "CREATE TABLE etl_file_audit ("
+        "id INTEGER PRIMARY KEY, filename TEXT NOT NULL, source_dir TEXT,"
+        " content_hash TEXT NOT NULL UNIQUE, state TEXT NOT NULL,"
+        " attempt_count INTEGER NOT NULL DEFAULT 0, error_message TEXT,"
+        " worker_id TEXT, run_id TEXT, row_count INTEGER, claimed_at TEXT,"
+        " created_at TEXT NOT NULL, updated_at TEXT NOT NULL)"
+    )
+    legacy.execute(
+        "INSERT INTO etl_file_audit (filename, content_hash, state, created_at, updated_at)"
+        " VALUES ('old.csv', 'old-hash', 'COMMITTED', '2026-01-01', '2026-01-01')"
+    )
+    legacy.commit()
+    legacy.close()
+
+    upgraded = Database(f"sqlite:///{db_path}")
+    create_audit_tables(upgraded)
+
+    cursor = upgraded.execute("PRAGMA table_info(etl_file_audit)")
+    columns = {row[1] for row in cursor.fetchall()}
+    assert {"source_type", "source_name", "producer", "external_run_id", "manifest_payload"} <= columns
+    legacy_row = find_file_by_hash(upgraded, "old-hash")
+    assert legacy_row is not None and legacy_row.filename == "old.csv"
+    upgraded.close()
+
+
 def test_create_audit_tables_migrates_existing_table_without_run_id(tmp_path):
     """An audit DB written by an older filedge (no run_id column) must be upgraded
     by create_audit_tables() without losing rows."""
@@ -54,6 +94,38 @@ def test_create_audit_tables_migrates_existing_table_without_run_id(tmp_path):
     legacy_row = find_file_by_hash(upgraded, "legacy-hash")
     assert legacy_row is not None and legacy_row.filename == "legacy.csv"
     upgraded.close()
+
+
+def test_insert_pending_stores_source_metadata(db):
+    from filedge.source_manifest import SourceMetadata
+    metadata = SourceMetadata(
+        source_type="api",
+        source_name="stripe.charges",
+        producer="https://github.com/dlt-hub/dlt",
+        external_run_id="dlt-run-1",
+        raw_payload='{"eventType":"COMPLETE"}',
+    )
+    insert_pending(db, "stripe.ndjson", "h-stripe", source_metadata=metadata)
+    db.commit()
+
+    record = find_file_by_hash(db, "h-stripe")
+    assert record.source_type == "api"
+    assert record.source_name == "stripe.charges"
+    assert record.producer == "https://github.com/dlt-hub/dlt"
+    assert record.external_run_id == "dlt-run-1"
+    assert record.manifest_payload == '{"eventType":"COMPLETE"}'
+
+
+def test_insert_pending_without_source_metadata_leaves_columns_null(db):
+    insert_pending(db, "direct.csv", "h-direct")
+    db.commit()
+
+    record = find_file_by_hash(db, "h-direct")
+    assert record.source_type is None
+    assert record.source_name is None
+    assert record.producer is None
+    assert record.external_run_id is None
+    assert record.manifest_payload is None
 
 
 def test_migration_adds_row_count_to_existing_table(tmp_path):

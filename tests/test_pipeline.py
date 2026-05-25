@@ -246,3 +246,48 @@ columns:
     assert row[1] == "new"
     assert row[2] is not None
     conn.close()
+
+
+def test_pipeline_attaches_source_manifest_metadata_to_audit_record(tmp_path):
+    """A File with a sidecar manifest produces an Audit Record carrying source metadata."""
+    import json
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched, config, audit = _minimal_watched_dir_and_config(tmp_path)
+
+    manifest_path = tmp_path / "watch" / "a.csv.manifest.json"
+    manifest_path.write_text(json.dumps({
+        "eventType": "COMPLETE",
+        "eventTime": "2026-05-24T10:00:00Z",
+        "producer": "https://github.com/dlt-hub/dlt",
+        "run": {"runId": "dlt-run-xyz"},
+        "job": {"namespace": "api", "name": "stripe.charges"},
+    }))
+
+    result = run_pipeline(watched, config, audit)
+
+    assert result["committed"] == 1
+    audit_path = audit.removeprefix("sqlite:///")
+    row = sqlite3.connect(audit_path).execute(
+        "SELECT source_type, source_name, producer, external_run_id FROM etl_file_audit"
+        " WHERE filename = 'a.csv'"
+    ).fetchone()
+    assert row == ("api", "stripe.charges", "https://github.com/dlt-hub/dlt", "dlt-run-xyz")
+
+
+def test_pipeline_without_manifest_commits_normally(tmp_path):
+    """Optional mode default: a File without a sidecar still ingests and commits."""
+    import sqlite3
+    from filedge.pipeline import run_pipeline
+
+    watched, config, audit = _minimal_watched_dir_and_config(tmp_path)
+
+    result = run_pipeline(watched, config, audit)
+
+    assert result["committed"] == 1
+    audit_path = audit.removeprefix("sqlite:///")
+    row = sqlite3.connect(audit_path).execute(
+        "SELECT state, source_type FROM etl_file_audit WHERE filename = 'a.csv'"
+    ).fetchone()
+    assert row == ("COMMITTED", None)

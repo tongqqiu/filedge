@@ -61,7 +61,12 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     row_count INTEGER,
     claimed_at TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    source_type TEXT,
+    source_name TEXT,
+    producer TEXT,
+    external_run_id TEXT,
+    manifest_payload TEXT
 )
 """
 
@@ -79,9 +84,16 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     row_count INTEGER,
     claimed_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    source_type TEXT,
+    source_name TEXT,
+    producer TEXT,
+    external_run_id TEXT,
+    manifest_payload TEXT
 )
 """
+
+_SOURCE_MANIFEST_COLUMNS = ("source_type", "source_name", "producer", "external_run_id", "manifest_payload")
 
 
 def create_audit_tables(db: Database) -> None:
@@ -97,6 +109,8 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS source_dir TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS run_id TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS row_count INTEGER")  # pragma: no cover
+        for col in _SOURCE_MANIFEST_COLUMNS:
+            db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS {col} TEXT")
         return
 
     cursor = db.execute("PRAGMA table_info(etl_file_audit)")
@@ -109,6 +123,9 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN run_id TEXT")
     if "row_count" not in existing:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN row_count INTEGER")
+    for col in _SOURCE_MANIFEST_COLUMNS:
+        if col not in existing:
+            db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN {col} TEXT")
 
 
 # --- File record ---
@@ -125,6 +142,11 @@ class FileRecord:
     worker_id: Optional[str]
     claimed_at: Optional[str]
     row_count: Optional[int] = None
+    source_type: Optional[str] = None
+    source_name: Optional[str] = None
+    producer: Optional[str] = None
+    external_run_id: Optional[str] = None
+    manifest_payload: Optional[str] = None
 
 
 def _now() -> str:
@@ -153,7 +175,8 @@ def get_hash_states(db: Database, hashes: list) -> Dict[str, str]:
 
 def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     cursor = db.execute(
-        "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at, row_count"
+        "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at, row_count,"
+        " source_type, source_name, producer, external_run_id, manifest_payload"
         " FROM etl_file_audit WHERE content_hash = ?",
         [content_hash],
     )
@@ -164,19 +187,39 @@ def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
         id=row[0], filename=row[1], source_dir=row[2], content_hash=row[3], state=row[4],
         attempt_count=row[5], error_message=row[6], worker_id=row[7], claimed_at=row[8],
         row_count=row[9],
+        source_type=row[10], source_name=row[11], producer=row[12],
+        external_run_id=row[13], manifest_payload=row[14],
     )
 
 
 def insert_pending(
-    db: Database, filename: str, content_hash: str, source_dir: Optional[str] = None
+    db: Database,
+    filename: str,
+    content_hash: str,
+    source_dir: Optional[str] = None,
+    source_metadata=None,
 ) -> None:
     if find_file_by_hash(db, content_hash) is not None:
         return  # Content Hash already tracked — idempotent by design (ADR-0002)
     now = _now()
+    if source_metadata is None:
+        db.execute(
+            "INSERT INTO etl_file_audit (filename, source_dir, content_hash, state, created_at, updated_at)"
+            " VALUES (?, ?, ?, 'PENDING', ?, ?)",
+            [filename, source_dir, content_hash, now, now],
+        )
+        return
     db.execute(
-        "INSERT INTO etl_file_audit (filename, source_dir, content_hash, state, created_at, updated_at)"
-        " VALUES (?, ?, ?, 'PENDING', ?, ?)",
-        [filename, source_dir, content_hash, now, now],
+        "INSERT INTO etl_file_audit"
+        " (filename, source_dir, content_hash, state, created_at, updated_at,"
+        "  source_type, source_name, producer, external_run_id, manifest_payload)"
+        " VALUES (?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?)",
+        [
+            filename, source_dir, content_hash, now, now,
+            source_metadata.source_type, source_metadata.source_name,
+            source_metadata.producer, source_metadata.external_run_id,
+            source_metadata.raw_payload,
+        ],
     )
 
 

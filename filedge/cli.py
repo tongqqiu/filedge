@@ -526,6 +526,53 @@ def requeue(filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap
         db.close()
 
 
+@cli.command()
+@click.argument("content_hash")
+@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+def lineage(content_hash, audit_db_url):
+    """Show the full audit + source-manifest lineage for one File, looked up by Content Hash."""
+    db = Database(audit_db_url)
+    try:
+        create_audit_tables(db)
+        record = find_file_by_hash(db, content_hash)
+        if record is None:
+            click.echo(f"No File found with content_hash={content_hash}", err=True)
+            sys.exit(1)
+        click.echo(f"filename:         {record.filename}")
+        click.echo(f"content_hash:     {record.content_hash}")
+        click.echo(f"state:            {record.state}")
+        click.echo(f"attempt_count:    {record.attempt_count}")
+        click.echo(f"row_count:        {record.row_count if record.row_count is not None else '-'}")
+        click.echo(f"error_message:    {record.error_message or '-'}")
+        run_id, created_at, updated_at = _load_run_and_timestamps(db, content_hash)
+        click.echo(f"run_id:           {run_id or '-'}")
+        click.echo(f"created_at:       {created_at or '-'}")
+        click.echo(f"updated_at:       {updated_at or '-'}")
+        click.echo(f"claimed_at:       {record.claimed_at or '-'}")
+        click.echo("")
+        click.echo("Source manifest:")
+        if record.source_type is None and record.source_name is None:
+            click.echo("  (no manifest attached)")
+        else:
+            click.echo(f"  source_type:     {record.source_type or '-'}")
+            click.echo(f"  source_name:     {record.source_name or '-'}")
+            click.echo(f"  producer:        {record.producer or '-'}")
+            click.echo(f"  external_run_id: {record.external_run_id or '-'}")
+    finally:
+        db.close()
+
+
+def _load_run_and_timestamps(db, content_hash):
+    cursor = db.execute(
+        "SELECT run_id, created_at, updated_at FROM etl_file_audit WHERE content_hash = ?",
+        [content_hash],
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None, None, None
+    return row[0], row[1], row[2]
+
+
 @cli.command("export-audit")
 @click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
 @click.option("--output", required=True, help="Output path for index.html")
