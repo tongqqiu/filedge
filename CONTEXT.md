@@ -105,6 +105,10 @@ The validation policy for a File load: if any row fails schema validation, the e
 ### Transform
 A declarative, configuration-driven step that maps source column names to destination column names and coerces types (e.g. string → integer, ISO string → timestamp). Rejects rows that don't conform to the declared schema. No business logic — that belongs in the application layer consuming the destination.
 
+### Field Encryption
+A declarative, per-column step between Transform and Connector that produces ciphertext or HMAC tokens in the destination so plaintext PII never reaches the warehouse. An `encrypt:` block (AES-256-GCM, randomized) provides confidentiality; a `hash:` block (HMAC-SHA256) provides a one-way joinable token. A column may declare neither, one, or both, and the same source column may produce two destination columns when both are needed. Filedge owns the crypto math; key material is supplied by environment variable or secrets mount, never in YAML — Filedge does not integrate with KMS. See ADR-0014.
+_Avoid_: column encryption, field-level security, PII masking, tokenization.
+
 ### Compaction
 A pre-processing step that merges many small Files in a source prefix into fewer, larger NDJSON files in a separate output prefix before ingestion. Solves the small-files problem common with event streams and cloud object stores — reducing object-store listing cost and enabling bulk loads into cloud warehouses. Invoked via `filedge compact` as a separate CLI command, scheduled before `filedge run`. Compaction reads via fsspec (no extra dependencies), groups files by count (`--max-files`), writes NDJSON with optional gzip compression (`--compress`), and names output files by timestamp and batch index. Originals in the source prefix are never modified. The output prefix becomes the Watched Directory for the subsequent `filedge run`.
 
