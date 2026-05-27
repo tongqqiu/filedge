@@ -82,6 +82,35 @@ filedge validate data.csv --config pipeline.yaml --sample-rows 100
 
 Useful for quick checks on large files. For full pre-load validation, omit `--sample-rows`.
 
+## Excel files
+
+`.xlsx` workbooks are detected from the extension. The sheet to read is taken from the `excel:` block in `pipeline.yaml`:
+
+```yaml
+format: excel
+excel:
+  sheet: Orders
+```
+
+Then:
+
+```bash
+filedge validate orders.xlsx --config pipeline.yaml
+```
+
+!!! note "Excel requires openpyxl"
+    ```bash
+    uv sync --extra excel
+    ```
+
+Use `--sheet <name-or-index>` to validate a different sheet of the same workbook against the same `pipeline.yaml` — useful when one file contains both production and overflow tabs with the same schema:
+
+```bash
+filedge validate orders.xlsx --config pipeline.yaml --sheet Overflow
+```
+
+The formula-cache and leading-zeros gotchas described in the [inspect guide](inspect.md#excel-files) apply here too. `.xls`, `.xlsb`, and `.ods` are not supported — re-save as `.xlsx`.
+
 ## Fixed-width files
 
 For `--format fixed_width`, `filedge validate` reads `start:` and `width:` from the same `pipeline.yaml` it validates against. The standard invocation works unchanged:
@@ -106,6 +135,7 @@ filedge validate gs://my-bucket/events.ndjson --config pipeline.yaml
 | Option | Default | Description |
 |--------|---------|-------------|
 | `--config` | required | Path to `pipeline.yaml` |
-| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, `parquet`, or `excel` |
 | `--sample-rows` | all rows | Validate only the first N rows |
 | `--json` | off | Emit JSON to stdout in addition to text summary |
+| `--sheet` | from `pipeline.yaml` | Override the `excel:` sheet from `pipeline.yaml` (excel only) |

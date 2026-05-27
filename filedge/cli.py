@@ -39,7 +39,7 @@ from filedge.validator import validate_file
 from filedge.pipeline import run_pipeline
 
 
-_FORMAT_CHOICE = click.Choice(["csv", "ndjson", "parquet", "fixed_width"])
+_FORMAT_CHOICE = click.Choice(["csv", "ndjson", "parquet", "fixed_width", "excel"])
 
 _FIXED_WIDTH_DOCS = "docs/guides/fixed-width.md"
 
@@ -55,6 +55,38 @@ def _require_format(file: str, fmt: str | None, exit_code: int) -> str:
         )
         sys.exit(exit_code)
     return resolved
+
+
+def _parse_sheet_selector(value):
+    """`--sheet` accepts either an integer (0-based index) or a sheet name."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
+def _resolve_excel_sheet(file: str, selector):
+    """Resolve a sheet selector to the concrete sheet name in the workbook.
+
+    Used by `filedge inspect` so the inferred YAML records the exact sheet that
+    was read — not the placeholder `None`, which would defeat reproducibility.
+    """
+    from filedge.file_sample import read_excel_sheet_names
+
+    names = read_excel_sheet_names(file)
+    if selector is None:
+        return names[0]
+    if isinstance(selector, int):
+        if selector < 0 or selector >= len(names):
+            raise ValueError(
+                f"Sheet index {selector} out of range; workbook has {len(names)} sheet(s): {names!r}"
+            )
+        return names[selector]
+    if selector not in names:
+        raise ValueError(f"Missing sheet {selector!r}; workbook has {names!r}")
+    return selector
 
 
 def _fixed_width_layout(config) -> list:
@@ -285,7 +317,9 @@ def status(audit_db_url, output_json):
               type=click.Path(dir_okay=False),
               help="Write YAML block to this file instead of stdout")
 @click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
-def inspect(file, fmt, sample_rows, output_path, encoding):
+@click.option("--sheet", default=None,
+              help="Excel sheet name or 0-based index (excel format only). Default: first sheet.")
+def inspect(file, fmt, sample_rows, output_path, encoding, sheet):
     """Infer schema from a file and output a columns: block for pipeline.yaml."""
     fmt = _require_format(file, fmt, exit_code=1)
 
@@ -298,17 +332,32 @@ def inspect(file, fmt, sample_rows, output_path, encoding):
         )
         sys.exit(1)
 
+    if sheet is not None and fmt != "excel":
+        click.echo("Error: --sheet is only valid with --format excel.", err=True)
+        sys.exit(1)
+
+    parser_kwargs = {}
+    sheet_for_header: object | None = None
+    if fmt == "excel":
+        sheet_for_header = _resolve_excel_sheet(file, _parse_sheet_selector(sheet))
+        parser_kwargs["sheet"] = sheet_for_header
+
     try:
         if fmt == "parquet":
             columns = infer_schema_from_parquet(read_parquet_schema(file))
         else:
-            with open_sample(file, fmt, encoding=encoding) as rows:
+            with open_sample(file, fmt, encoding=encoding, **parser_kwargs) as rows:
                 columns = infer_schema(rows, sample_rows=sample_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
-    yaml_block = format_yaml(columns, source_path=file, sample_rows=sample_rows)
+    yaml_block = format_yaml(
+        columns,
+        source_path=file,
+        sample_rows=sample_rows,
+        sheet=sheet_for_header,
+    )
     summary = format_summary(columns)
 
     click.echo(summary, err=True)
@@ -330,9 +379,15 @@ def inspect(file, fmt, sample_rows, output_path, encoding):
 @click.option("--rows", "num_rows", default=10, show_default=True, help="Number of rows to display")
 @click.option("--start-row", "start_row", default=1, show_default=True, help="First row to display (1-indexed)")
 @click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
-def preview(file, fmt, config_path, num_rows, start_row, encoding):
+@click.option("--sheet", default=None,
+              help="Excel sheet name or 0-based index (excel format only). Default: first sheet.")
+def preview(file, fmt, config_path, num_rows, start_row, encoding, sheet):
     """Show N rows of a file as a formatted table, optionally starting at a given row."""
     fmt = _require_format(file, fmt, exit_code=2)
+
+    if sheet is not None and fmt != "excel":
+        click.echo("Error: --sheet is only valid with --format excel.", err=True)
+        sys.exit(2)
 
     parser_kwargs = {}
     if fmt == "fixed_width":
@@ -348,6 +403,8 @@ def preview(file, fmt, config_path, num_rows, start_row, encoding):
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(2)
+    if fmt == "excel":
+        parser_kwargs["sheet"] = _parse_sheet_selector(sheet)
 
     try:
         with open_sample(
@@ -376,9 +433,15 @@ def preview(file, fmt, config_path, num_rows, start_row, encoding):
 @click.option("--sample-rows", default=None, type=int, help="Validate only the first N rows")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON to stdout")
 @click.option("--encoding", default=None, help="Override file encoding from pipeline.yaml (e.g. cp500)")
-def validate(file, config_path, fmt, sample_rows, output_json, encoding):
+@click.option("--sheet", default=None,
+              help="Override the excel: sheet from pipeline.yaml (excel format only).")
+def validate(file, config_path, fmt, sample_rows, output_json, encoding, sheet):
     """Validate a file against a pipeline.yaml schema without loading it."""
     fmt = _require_format(file, fmt, exit_code=2)
+
+    if sheet is not None and fmt != "excel":
+        click.echo("Error: --sheet is only valid with --format excel.", err=True)
+        sys.exit(2)
 
     try:
         config = load_config(config_path)
@@ -386,6 +449,11 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding):
         parser_kwargs = {}
         if fmt == "fixed_width":
             parser_kwargs["columns"] = _fixed_width_layout(config)
+        if fmt == "excel":
+            if sheet is not None:
+                parser_kwargs["sheet"] = _parse_sheet_selector(sheet)
+            elif config.excel is not None:
+                parser_kwargs["sheet"] = config.excel.sheet
         with open_sample(
             file,
             fmt,

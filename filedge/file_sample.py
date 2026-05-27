@@ -13,10 +13,11 @@ _EXT_TO_FORMAT = {
     ".ndjson": "ndjson",
     ".jsonl": "ndjson",
     ".parquet": "parquet",
+    ".xlsx": "excel",
 }
 
 
-SUPPORTED_FORMATS = ("csv", "ndjson", "parquet", "fixed_width")
+SUPPORTED_FORMATS = ("csv", "ndjson", "parquet", "fixed_width", "excel")
 
 
 @dataclass(frozen=True)
@@ -66,6 +67,24 @@ def open_sample(
         if num_rows is not None:
             rows = islice(rows, num_rows)
         yield rows
+
+
+def read_excel_sheet_names(file: str) -> list[str]:
+    """Return the sheet names of an .xlsx workbook without parsing rows.
+
+    Used by `filedge inspect` to record the actual sheet name in the inferred
+    YAML header even when `--sheet` was not passed (ADR-0012).
+    """
+    try:
+        import openpyxl
+    except ImportError:
+        raise ImportError(
+            "Excel support requires openpyxl — run: uv sync --extra excel"
+        )
+    fs, path = get_filesystem(file)
+    with open_file(path, fs=fs, mode="rb") as f:
+        wb = openpyxl.load_workbook(f, read_only=True, data_only=True)
+        return list(wb.sheetnames)
 
 
 def read_parquet_schema(file: str):

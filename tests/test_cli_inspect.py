@@ -111,6 +111,80 @@ def test_inspect_non_iso_date_like_output_stays_string(tmp_path):
     assert "filedge date requires YYYY-MM-DD" in result.output
 
 
+def _build_xlsx(path, *sheets):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for name, rows in sheets:
+        ws = wb.create_sheet(title=name)
+        for row in rows:
+            ws.append(row)
+    wb.save(str(path))
+
+
+def test_inspect_xlsx_exits_zero(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "data.xlsx"
+    _build_xlsx(src, ("Sheet1", [["a", "b"], ["1", "x"], ["2", "y"]]))
+    out = tmp_path / "cols.yaml"
+    result = _inspect(str(src), output_file=out)
+    assert result.exit_code == 0
+    parsed = yaml.safe_load(out.read_text())
+    assert "columns" in parsed
+    assert [c["source"] for c in parsed["columns"]] == ["a", "b"]
+
+
+def test_inspect_xlsx_sheet_flag_selects_by_name(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "wb.xlsx"
+    _build_xlsx(
+        src,
+        ("Customers", [["wrong"], ["x"]]),
+        ("Orders", [["order_id", "amount"], ["A-1", "9.99"]]),
+    )
+    out = tmp_path / "cols.yaml"
+    result = _inspect(str(src), "--sheet", "Orders", output_file=out)
+    assert result.exit_code == 0
+    parsed = yaml.safe_load(out.read_text())
+    assert [c["source"] for c in parsed["columns"]] == ["order_id", "amount"]
+
+
+def test_inspect_xlsx_header_note_includes_sheet(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "wb.xlsx"
+    _build_xlsx(
+        src,
+        ("Customers", [["wrong"], ["x"]]),
+        ("Orders", [["order_id", "amount"], ["A-1", "9.99"]]),
+    )
+    out = tmp_path / "cols.yaml"
+    _inspect(str(src), "--sheet", "Orders", output_file=out)
+    text = out.read_text()
+    assert "Orders" in text
+    assert "sheet" in text.lower()
+
+
+def test_inspect_xlsx_header_note_records_default_sheet(tmp_path):
+    # When --sheet is omitted, the YAML still records which sheet was read so
+    # the inferred config is reproducible.
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "wb.xlsx"
+    _build_xlsx(
+        src,
+        ("Orders", [["order_id"], ["A-1"]]),
+        ("Customers", [["cid"], ["C-1"]]),
+    )
+    out = tmp_path / "cols.yaml"
+    _inspect(str(src), output_file=out)
+    text = out.read_text()
+    assert "Orders" in text  # first sheet name recorded
+    assert "sheet" in text.lower()
+
+
 def test_inspect_fixed_width_hard_errors_with_docs_pointer(tmp_path):
     source = tmp_path / "transactions.fwf"
     source.write_text("ACME000123\n")

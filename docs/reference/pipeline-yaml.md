@@ -65,10 +65,13 @@ columns:
 
 **Required.** The file format for files in the watched directory.
 
-| Value | File types |
-|-------|-----------|
-| `csv` | `.csv` |
-| `ndjson` | `.ndjson`, `.jsonl`, `.ndjson.gz` |
+| Value | File types | Notes |
+|-------|-----------|-------|
+| `csv` | `.csv` | |
+| `ndjson` | `.ndjson`, `.jsonl`, `.ndjson.gz` | |
+| `parquet` | `.parquet` | Requires `uv sync --extra parquet` |
+| `fixed_width` | any | Layout declared via `start:`/`width:` on each column |
+| `excel` | `.xlsx` | Requires `uv sync --extra excel` and a peer `excel:` block |
 
 ### `dest_table`
 
@@ -141,6 +144,27 @@ Controls whether Filedge reads an OpenLineage-shaped sidecar named `<data-file>.
 | `required` | Fail the file before destination write when the manifest is missing or invalid. The audit error records the validation category and expected manifest path. |
 
 Source manifests let upstream Fetchers, Queue Materializers, SFTP sync jobs, and vendor exports attach source ranges to the File audit record without making Filedge responsible for those source mechanics. See the [Source manifests guide](../guides/source-manifests.md) for the sidecar schema and lineage commands.
+
+---
+
+## `excel` block
+
+**Required when `format: excel`.** Declares the sheet to read from each `.xlsx` file in the Watched Directory. See [ADR-0012](https://github.com/tongqqiu/filedge/blob/main/docs/adr/0012-excel-format-support.md).
+
+```yaml
+format: excel
+
+excel:
+  sheet: Orders    # sheet name (string) or 0-based index (integer)
+```
+
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `sheet` | Yes | Sheet name (string) or 0-based index (integer). No silent first-sheet defaulting in `filedge run`. |
+
+The `excel:` block is rejected when `format` is anything other than `excel`. Multi-sheet workbooks where each tab is a different logical table must be split into per-sheet files upstream — Content Hash is one file's bytes, so two sheets cannot be ingested as two Files from one workbook.
+
+`.xls`, `.xlsb`, and `.ods` are not supported; re-save as `.xlsx` in Excel.
 
 ---
 

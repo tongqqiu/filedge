@@ -666,6 +666,9 @@ duckdb = [
     { name = "duckdb" },
     { name = "pyarrow" },
 ]
+excel = [
+    { name = "openpyxl" },
+]
 gcs = [
     { name = "fsspec" },
     { name = "gcsfs" },
@@ -702,6 +705,7 @@ requires-dist = [
     { name = "mike", marker = "extra == 'docs'", specifier = ">=2.0" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.6.1" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.0" },
+    { name = "openpyxl", marker = "extra == 'excel'", specifier = ">=3.1" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.27" },
     { name = "opentelemetry-exporter-otlp", marker = "extra == 'otel'", specifier = ">=1.27" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.27" },
@@ -715,7 +719,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.14" },
     { name = "s3fs", marker = "extra == 's3'", specifier = ">=2026.4.0" },
 ]
-provides-extras = ["dev", "postgres", "bigquery", "databricks", "duckdb", "parquet", "s3", "gcs", "otel", "docs"]
+provides-extras = ["dev", "postgres", "bigquery", "databricks", "duckdb", "parquet", "excel", "s3", "gcs", "otel", "docs"]
 
 [[package]]
 name = "frozenlist"

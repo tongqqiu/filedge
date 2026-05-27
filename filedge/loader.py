@@ -29,7 +29,7 @@ def load_file(
         return rows_loaded[0], str(e)
 
     def row_iter():
-        with open_file(path, fs=fs, encoding=config.encoding) as f:
+        with open_file(path, fs=fs, mode=parser.mode, encoding=config.encoding) as f:
             for raw_row in parser.parse(f):
                 transformed = transform_row(raw_row, config.columns)
                 transformed = field_crypto.apply_to_row(transformed)
@@ -71,6 +71,8 @@ def _parser_kwargs(config: PipelineConfig) -> dict:
                 for c in config.columns
             ]
         }
+    if config.format == "excel" and config.excel is not None:
+        return {"sheet": config.excel.sheet}
     return {}
 
 

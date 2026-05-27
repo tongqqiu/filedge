@@ -102,6 +102,45 @@ def test_open_sample_reads_fixed_width_with_layout(tmp_path):
     ]
 
 
+def test_resolve_format_detects_xlsx_from_extension():
+    assert resolve_format("data.xlsx") == "excel"
+
+
+def test_resolve_format_xls_is_not_supported():
+    # .xls is deliberately not mapped (ADR-0012). Users should re-save as .xlsx.
+    result = resolve_format("data.xls")
+    assert isinstance(result, FormatNotDetected)
+    assert result.extension == ".xls"
+
+
+def test_supported_formats_includes_excel():
+    from filedge.file_sample import SUPPORTED_FORMATS
+
+    assert "excel" in SUPPORTED_FORMATS
+
+
+def test_open_sample_threads_sheet_to_excel_parser(tmp_path):
+    openpyxl = pytest.importorskip("openpyxl")
+
+    path = tmp_path / "wb.xlsx"
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    a = wb.create_sheet("First")
+    a.append(["x"])
+    a.append(["from-first"])
+    b = wb.create_sheet("Second")
+    b.append(["x"])
+    b.append(["from-second"])
+    wb.save(str(path))
+
+    from filedge.file_sample import open_sample
+
+    with open_sample(str(path), "excel", sheet="Second") as rows:
+        materialized = list(rows)
+
+    assert materialized == [{"x": "from-second"}]
+
+
 def test_read_parquet_schema_returns_arrow_schema(tmp_path):
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")

@@ -127,6 +127,57 @@ def test_preview_fixed_width_renders_rows_with_config(tmp_path):
     assert "000100" in result.output
 
 
+def _build_xlsx(path, *sheets):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for name, rows in sheets:
+        ws = wb.create_sheet(title=name)
+        for row in rows:
+            ws.append(row)
+    wb.save(str(path))
+
+
+def test_preview_xlsx_default_sheet(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "data.xlsx"
+    _build_xlsx(src, ("Sheet1", [["a", "b"], ["alpha", "1"], ["beta", "2"]]))
+    result = _preview(str(src))
+    assert result.exit_code == 0
+    assert "alpha" in result.output
+    assert "beta" in result.output
+
+
+def test_preview_xlsx_sheet_by_name(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "wb.xlsx"
+    _build_xlsx(
+        src,
+        ("Customers", [["a"], ["wrong"]]),
+        ("Orders", [["a"], ["right"]]),
+    )
+    result = _preview(str(src), "--sheet", "Orders")
+    assert result.exit_code == 0
+    assert "right" in result.output
+    assert "wrong" not in result.output
+
+
+def test_preview_xlsx_sheet_by_index(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "wb.xlsx"
+    _build_xlsx(
+        src,
+        ("First", [["a"], ["from-first"]]),
+        ("Second", [["a"], ["from-second"]]),
+    )
+    result = _preview(str(src), "--sheet", "1")
+    assert result.exit_code == 0
+    assert "from-second" in result.output
+
+
 def test_cloud_path_preview(tmp_path):
     pytest_skip = False
     try:

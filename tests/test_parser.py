@@ -71,3 +71,24 @@ def test_get_parser_fixed_width_builds_parser_from_columns():
 def test_get_parser_fixed_width_requires_columns():
     with pytest.raises(ValueError, match="fixed_width.*columns"):
         get_parser("fixed_width")
+
+
+# --- excel via factory ---
+
+
+def test_get_parser_excel_builds_parser_with_sheet():
+    pytest.importorskip("openpyxl")
+    from filedge.excel import ExcelParser
+
+    parser = get_parser("excel", sheet="Orders")
+    assert isinstance(parser, ExcelParser)
+    assert parser._sheet == "Orders"
+
+
+def test_get_parser_excel_defaults_sheet_to_none():
+    pytest.importorskip("openpyxl")
+    from filedge.excel import ExcelParser
+
+    parser = get_parser("excel")
+    assert isinstance(parser, ExcelParser)
+    assert parser._sheet is None
