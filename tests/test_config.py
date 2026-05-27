@@ -1,4 +1,6 @@
 
+import pytest
+
 from filedge.config import load_config
 
 _FULL_YAML = """
@@ -55,6 +57,98 @@ def test_load_config_columns(tmp_path):
     assert col.dest == "order_id"
     assert col.type == "integer"
     assert col.required is True
+
+
+def test_load_config_parses_field_crypto_blocks(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: csv
+dest_table: customers
+columns:
+  - source: ssn
+    dest: ssn_ct
+    type: string
+    encrypt:
+      algorithm: aes-256-gcm
+      key: env:DATA_KEY
+  - source: ssn
+    dest: ssn_join
+    type: string
+    hash:
+      algorithm: hmac-sha256
+      key: secrets:/run/secrets/join_key
+"""
+    )
+
+    config = load_config(str(f))
+
+    assert config.columns[0].encrypt is not None
+    assert config.columns[0].encrypt.algorithm == "aes-256-gcm"
+    assert config.columns[0].encrypt.key == "env:DATA_KEY"
+    assert config.columns[1].hash is not None
+    assert config.columns[1].hash.algorithm == "hmac-sha256"
+    assert config.columns[1].hash.key == "secrets:/run/secrets/join_key"
+
+
+def test_load_config_rejects_encrypt_on_non_string_column(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: csv
+dest_table: customers
+columns:
+  - source: customer_id
+    dest: customer_id_ct
+    type: integer
+    encrypt:
+      algorithm: aes-256-gcm
+      key: env:DATA_KEY
+"""
+    )
+
+    with pytest.raises(ValueError, match="encrypt.*type: string"):
+        load_config(str(f))
+
+
+def test_load_config_rejects_unknown_field_crypto_algorithm(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: csv
+dest_table: customers
+columns:
+  - source: ssn
+    dest: ssn_ct
+    type: string
+    encrypt:
+      algorithm: aes-256-cbc
+      key: env:DATA_KEY
+"""
+    )
+
+    with pytest.raises(ValueError, match="Unsupported encrypt algorithm"):
+        load_config(str(f))
+
+
+def test_load_config_rejects_malformed_field_crypto_key_reference(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: csv
+dest_table: customers
+columns:
+  - source: ssn
+    dest: ssn_ct
+    type: string
+    encrypt:
+      algorithm: aes-256-gcm
+      key: vault://data-key
+"""
+    )
+
+    with pytest.raises(ValueError, match="key reference"):
+        load_config(str(f))
 
 
 def test_load_config_optional_column(tmp_path):
@@ -219,7 +313,6 @@ def test_source_manifest_disabled(tmp_path):
 
 
 def test_source_manifest_invalid_value_rejected(tmp_path):
-    import pytest
     f = tmp_path / "pipeline.yaml"
     f.write_text(_MINIMAL_YAML + "\nsource_manifest: maybe\n")
     with pytest.raises(ValueError, match="source_manifest"):

@@ -1,6 +1,8 @@
+import base64
+
 import pytest
 
-from filedge.config import CdcConfig, ColumnMapping, PipelineConfig
+from filedge.config import CdcConfig, ColumnMapping, EncryptConfig, HashConfig, PipelineConfig
 from filedge.connectors.sqlite import SQLiteConnector
 from filedge.loader import load_file
 
@@ -64,6 +66,96 @@ def test_load_file_returns_error_on_bad_row(connector, config, tmp_path):
     conn = connector._get_conn()
     count = conn.execute("SELECT COUNT(*) FROM items").fetchone()[0]
     assert count == 0
+
+
+def test_load_file_encrypts_columns_before_connector_write(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_KEY", base64.b64encode(b"e" * 32).decode("ascii"))
+    config = PipelineConfig(
+        format="csv",
+        dest_table="customers",
+        columns=[
+            ColumnMapping(
+                "ssn",
+                "ssn_ct",
+                "string",
+                encrypt=EncryptConfig("aes-256-gcm", "env:DATA_KEY"),
+            )
+        ],
+    )
+    c = SQLiteConnector(url=f"sqlite:///{tmp_path}/encrypted.db")
+    c.ensure_table(config)
+    f = tmp_path / "customers.csv"
+    f.write_text("ssn\n123-45-6789\n")
+
+    rows, error = load_file(c, config, str(f), "encryptedhash")
+
+    assert error is None
+    assert rows == 1
+    row = c._get_conn().execute("SELECT ssn_ct FROM customers").fetchone()
+    assert row[0] != "123-45-6789"
+    assert base64.b64decode(row[0])[0] == 1
+    c.close()
+
+
+def test_load_file_hashes_columns_before_connector_write(tmp_path, monkeypatch):
+    monkeypatch.setenv("JOIN_KEY", base64.b64encode(b"h" * 32).decode("ascii"))
+    config = PipelineConfig(
+        format="csv",
+        dest_table="customers",
+        columns=[
+            ColumnMapping(
+                "email",
+                "email_join",
+                "string",
+                hash=HashConfig("hmac-sha256", "env:JOIN_KEY"),
+            )
+        ],
+    )
+    c = SQLiteConnector(url=f"sqlite:///{tmp_path}/hashed.db")
+    c.ensure_table(config)
+    f = tmp_path / "customers.csv"
+    f.write_text("email\nperson@example.com\nperson@example.com\n")
+
+    rows, error = load_file(c, config, str(f), "hashedhash")
+
+    assert error is None
+    assert rows == 2
+    stored = [
+        row[0]
+        for row in c._get_conn().execute(
+            "SELECT email_join FROM customers ORDER BY _id"
+        ).fetchall()
+    ]
+    assert stored[0] == stored[1]
+    assert stored[0] != "person@example.com"
+    c.close()
+
+
+def test_load_file_fails_before_connector_write_when_key_is_missing(tmp_path):
+    config = PipelineConfig(
+        format="csv",
+        dest_table="customers",
+        columns=[
+            ColumnMapping(
+                "ssn",
+                "ssn_ct",
+                "string",
+                encrypt=EncryptConfig("aes-256-gcm", "env:MISSING_DATA_KEY"),
+            )
+        ],
+    )
+    c = SQLiteConnector(url=f"sqlite:///{tmp_path}/missing_key.db")
+    c.ensure_table(config)
+    f = tmp_path / "customers.csv"
+    f.write_text("ssn\n123-45-6789\n")
+
+    rows, error = load_file(c, config, str(f), "missingkeyhash")
+
+    assert rows == 0
+    assert error is not None
+    assert "MISSING_DATA_KEY" in error
+    assert c._get_conn().execute("SELECT COUNT(*) FROM customers").fetchone()[0] == 0
+    c.close()
 
 
 def test_load_file_streams_across_batch_boundary(connector, config, tmp_path):
