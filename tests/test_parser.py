@@ -55,3 +55,19 @@ def test_ndjson_parser_raises_on_invalid_json():
 
 def test_get_parser_ndjson():
     assert isinstance(get_parser("ndjson"), NDJSONParser)
+
+
+# --- fixed_width via factory ---
+
+def test_get_parser_fixed_width_builds_parser_from_columns():
+    from filedge.fixed_width import FixedWidthParser, LayoutColumn
+    parser = get_parser(
+        "fixed_width",
+        columns=[LayoutColumn(name="a", start=1, width=4)],
+    )
+    assert isinstance(parser, FixedWidthParser)
+
+
+def test_get_parser_fixed_width_requires_columns():
+    with pytest.raises(ValueError, match="fixed_width.*columns"):
+        get_parser("fixed_width")

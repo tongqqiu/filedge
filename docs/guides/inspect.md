@@ -154,6 +154,10 @@ filedge inspect events.ndjson
 
 For data sources you control, the cleaner fix is to have your [Fetcher](../../CONTEXT.md#fetcher) or [Queue Materializer](../../CONTEXT.md#queue-materializer) write NDJSON directly to the Watched Directory.
 
+## Fixed-width files
+
+`filedge inspect` does not support `--format fixed_width`. Fixed-width files carry no separator and no embedded schema, so a layout cannot be discovered from the file — you must declare it from the partner record-layout spec instead. See the [fixed-width guide](fixed-width.md).
+
 ## Options
 
 | Option | Default | Description |

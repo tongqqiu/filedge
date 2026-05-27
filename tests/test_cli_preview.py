@@ -91,6 +91,42 @@ def test_start_row_beyond_file_shows_no_rows(tmp_path):
     assert "(no rows)" in result.output
 
 
+_FIXED_WIDTH_CONFIG = """\
+format: fixed_width
+dest_table: transactions
+columns:
+  - source: account
+    dest: account
+    type: string
+    start: 1
+    width: 4
+  - source: amount
+    dest: amount
+    type: integer
+    start: 5
+    width: 6
+"""
+
+
+def test_preview_fixed_width_requires_config(tmp_path):
+    src = tmp_path / "transactions.fwf"
+    src.write_text("ACME000100\n")
+    result = _preview(str(src), "--format", "fixed_width")
+    assert result.exit_code != 0
+    assert "--config" in result.output
+
+
+def test_preview_fixed_width_renders_rows_with_config(tmp_path):
+    src = tmp_path / "transactions.fwf"
+    src.write_text("ACME000100\nFOOO002500\n")
+    cfg = tmp_path / "pipeline.yaml"
+    cfg.write_text(_FIXED_WIDTH_CONFIG)
+    result = _preview(str(src), "--format", "fixed_width", "--config", str(cfg))
+    assert result.exit_code == 0
+    assert "ACME" in result.output
+    assert "000100" in result.output
+
+
 def test_cloud_path_preview(tmp_path):
     pytest_skip = False
     try:

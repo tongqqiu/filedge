@@ -39,7 +39,9 @@ from filedge.validator import validate_file
 from filedge.pipeline import run_pipeline
 
 
-_FORMAT_CHOICE = click.Choice(["csv", "ndjson", "parquet"])
+_FORMAT_CHOICE = click.Choice(["csv", "ndjson", "parquet", "fixed_width"])
+
+_FIXED_WIDTH_DOCS = "docs/guides/fixed-width.md"
 
 
 def _require_format(file: str, fmt: str | None, exit_code: int) -> str:
@@ -53,6 +55,15 @@ def _require_format(file: str, fmt: str | None, exit_code: int) -> str:
         )
         sys.exit(exit_code)
     return resolved
+
+
+def _fixed_width_layout(config) -> list:
+    """Translate a fixed_width PipelineConfig into a slicer-ready layout."""
+    from filedge.fixed_width import LayoutColumn
+    return [
+        LayoutColumn(name=c.source, start=c.start, width=c.width)
+        for c in config.columns
+    ]
 
 
 @click.group()
@@ -278,6 +289,15 @@ def inspect(file, fmt, sample_rows, output_path, encoding):
     """Infer schema from a file and output a columns: block for pipeline.yaml."""
     fmt = _require_format(file, fmt, exit_code=1)
 
+    if fmt == "fixed_width":
+        click.echo(
+            "Error: filedge inspect does not support fixed_width — the layout is not "
+            "discoverable from the file. Declare it from your partner record-layout spec "
+            f"following {_FIXED_WIDTH_DOCS}.",
+            err=True,
+        )
+        sys.exit(1)
+
     try:
         if fmt == "parquet":
             columns = infer_schema_from_parquet(read_parquet_schema(file))
@@ -304,12 +324,30 @@ def inspect(file, fmt, sample_rows, output_path, encoding):
 @click.argument("file")
 @click.option("--format", "fmt", default=None, type=_FORMAT_CHOICE,
               help="File format (auto-detected from extension)")
+@click.option("--config", "config_path", default=None,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Path to pipeline.yaml — required for --format fixed_width")
 @click.option("--rows", "num_rows", default=10, show_default=True, help="Number of rows to display")
 @click.option("--start-row", "start_row", default=1, show_default=True, help="First row to display (1-indexed)")
 @click.option("--encoding", default="utf-8", show_default=True, help="File encoding (e.g. utf-8, cp500, latin-1)")
-def preview(file, fmt, num_rows, start_row, encoding):
+def preview(file, fmt, config_path, num_rows, start_row, encoding):
     """Show N rows of a file as a formatted table, optionally starting at a given row."""
     fmt = _require_format(file, fmt, exit_code=2)
+
+    parser_kwargs = {}
+    if fmt == "fixed_width":
+        if not config_path:
+            click.echo(
+                "Error: --config <pipeline.yaml> is required for --format fixed_width. "
+                f"See {_FIXED_WIDTH_DOCS}.",
+                err=True,
+            )
+            sys.exit(2)
+        try:
+            parser_kwargs["columns"] = _fixed_width_layout(load_config(config_path))
+        except Exception as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(2)
 
     try:
         with open_sample(
@@ -318,6 +356,7 @@ def preview(file, fmt, num_rows, start_row, encoding):
             encoding=encoding,
             start_row=start_row,
             num_rows=num_rows,
+            **parser_kwargs,
         ) as rows:
             materialized = list(rows)
     except Exception as e:
@@ -344,11 +383,15 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding):
     try:
         config = load_config(config_path)
         effective_encoding = encoding or config.encoding
+        parser_kwargs = {}
+        if fmt == "fixed_width":
+            parser_kwargs["columns"] = _fixed_width_layout(config)
         with open_sample(
             file,
             fmt,
             encoding=effective_encoding,
             num_rows=sample_rows,
+            **parser_kwargs,
         ) as rows:
             result = validate_file(rows, config.columns)
     except Exception as e:

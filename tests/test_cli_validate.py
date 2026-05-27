@@ -145,3 +145,31 @@ def test_file_with_failures_exits_one(tmp_path):
     result = _validate(os.path.join(FIXTURES, "sample.csv"), "--config", str(cfg))
     assert result.exit_code == 1
     assert "amount" in result.output
+
+
+_FIXED_WIDTH_VALIDATE_CONFIG = """\
+format: fixed_width
+dest_table: transactions
+columns:
+  - source: account
+    dest: account
+    type: string
+    required: true
+    start: 1
+    width: 4
+  - source: amount
+    dest: amount
+    type: integer
+    required: true
+    start: 5
+    width: 6
+"""
+
+
+def test_validate_fixed_width_happy_path(tmp_path):
+    src = tmp_path / "transactions.fwf"
+    src.write_text("ACME000100\nFOOO002500\n")
+    cfg = tmp_path / "pipeline.yaml"
+    cfg.write_text(_FIXED_WIDTH_VALIDATE_CONFIG)
+    result = _validate(str(src), "--format", "fixed_width", "--config", str(cfg))
+    assert result.exit_code == 0

@@ -63,7 +63,22 @@ _PARSERS: Dict[str, Parser] = {
 }
 
 
-def get_parser(format: str) -> Parser:
+def get_parser(format: str, **kwargs) -> Parser:
+    """Return a Parser instance for the given format.
+
+    Most formats are stateless and return a cached instance. Fixed-width is a
+    factory: it requires `columns=` (a list of `LayoutColumn`) because the
+    layout is not embedded in the file. See ADR-0013.
+    """
+    if format == "fixed_width":
+        columns = kwargs.get("columns")
+        if columns is None:
+            raise ValueError(
+                "fixed_width parser requires columns= (a sorted, validated layout)."
+            )
+        from filedge.fixed_width import FixedWidthParser
+        return FixedWidthParser(layout=columns)
     if format not in _PARSERS:
-        raise ValueError(f"Unknown format: {format!r}. Supported: {sorted(_PARSERS)}")
+        supported = sorted(list(_PARSERS) + ["fixed_width"])
+        raise ValueError(f"Unknown format: {format!r}. Supported: {supported}")
     return _PARSERS[format]

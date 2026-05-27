@@ -26,6 +26,9 @@ class ColumnMapping:
     required: bool = True
     encrypt: Optional[EncryptConfig] = None
     hash: Optional[HashConfig] = None
+    # Fixed-width layout. Both are None for every other format.
+    start: Optional[int] = None  # 1-indexed byte position
+    width: Optional[int] = None
 
 
 @dataclass
@@ -69,11 +72,16 @@ def load_config(path: str) -> PipelineConfig:
             required=c.get("required", True),
             encrypt=_parse_encrypt_config(c.get("encrypt"), c),
             hash=_parse_hash_config(c.get("hash")),
+            start=c.get("start"),
+            width=c.get("width"),
         )
         for c in data["columns"]
     ]
     for column in columns:
         validate_column_type(column.type)
+
+    if data["format"] == "fixed_width":
+        _validate_fixed_width_columns(columns, data["columns"])
 
     connector = None
     if "connector" in data:
@@ -118,6 +126,20 @@ def load_config(path: str) -> PipelineConfig:
         file_pattern=data.get("file_pattern"),
         source_manifest=_validate_source_manifest(data.get("source_manifest", "optional")),
     )
+
+
+def _validate_fixed_width_columns(
+    columns: List[ColumnMapping], raw_columns: List[Dict[str, object]]
+) -> None:
+    from filedge.fixed_width import LayoutColumn, validate_layout
+
+    for column, raw in zip(columns, raw_columns):
+        if "start" not in raw or "width" not in raw:
+            raise ValueError(
+                f"fixed_width column {column.source!r} requires both start: and width:."
+            )
+    layout = [LayoutColumn(name=c.source, start=c.start, width=c.width) for c in columns]
+    validate_layout(layout)
 
 
 def _validate_source_manifest(value: str) -> str:
