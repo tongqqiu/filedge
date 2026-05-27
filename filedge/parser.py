@@ -66,9 +66,9 @@ _PARSERS: Dict[str, Parser] = {
 def get_parser(format: str, **kwargs) -> Parser:
     """Return a Parser instance for the given format.
 
-    Most formats are stateless and return a cached instance. Fixed-width is a
-    factory: it requires `columns=` (a list of `LayoutColumn`) because the
-    layout is not embedded in the file. See ADR-0013.
+    Most formats are stateless and return a cached instance. Fixed-width and
+    Excel are factories: fixed-width requires `columns=` (the layout, see
+    ADR-0013); Excel accepts an optional `sheet=` selector (ADR-0012).
     """
     if format == "fixed_width":
         columns = kwargs.get("columns")
@@ -78,7 +78,10 @@ def get_parser(format: str, **kwargs) -> Parser:
             )
         from filedge.fixed_width import FixedWidthParser
         return FixedWidthParser(layout=columns)
+    if format == "excel":
+        from filedge.excel import ExcelParser
+        return ExcelParser(sheet=kwargs.get("sheet"))
     if format not in _PARSERS:
-        supported = sorted(list(_PARSERS) + ["fixed_width"])
+        supported = sorted(list(_PARSERS) + ["fixed_width", "excel"])
         raise ValueError(f"Unknown format: {format!r}. Supported: {supported}")
     return _PARSERS[format]

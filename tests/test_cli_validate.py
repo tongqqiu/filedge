@@ -166,6 +166,78 @@ columns:
 """
 
 
+def _build_xlsx(path, *sheets):
+    import openpyxl
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    for name, rows in sheets:
+        ws = wb.create_sheet(title=name)
+        for row in rows:
+            ws.append(row)
+    wb.save(str(path))
+
+
+_EXCEL_VALIDATE_CONFIG = """\
+format: excel
+dest_table: orders
+excel:
+  sheet: Orders
+connector:
+  type: sqlite
+  url: sqlite:///ignored.db
+columns:
+  - source: order_id
+    dest: order_id
+    type: string
+    required: true
+  - source: amount
+    dest: amount
+    type: float
+    required: true
+"""
+
+
+def test_validate_xlsx_happy_path(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "orders.xlsx"
+    _build_xlsx(
+        src,
+        ("Orders", [["order_id", "amount"], ["A-1", "9.99"], ["A-2", "14.50"]]),
+    )
+    cfg = tmp_path / "pipeline.yaml"
+    cfg.write_text(_EXCEL_VALIDATE_CONFIG)
+    result = _validate(str(src), "--config", str(cfg))
+    assert result.exit_code == 0
+
+
+def test_run_does_not_accept_sheet_flag():
+    # ADR-0012: filedge run reads sheet from pipeline.yaml; no --sheet override.
+    runner = CliRunner()
+    result = runner.invoke(cli, ["run", "--sheet", "Orders"])
+    assert result.exit_code != 0
+    assert "--sheet" in result.output or "no such option" in result.output.lower()
+
+
+def test_validate_xlsx_sheet_flag_overrides_config(tmp_path):
+    import pytest as _pytest
+    _pytest.importorskip("openpyxl")
+    src = tmp_path / "orders.xlsx"
+    _build_xlsx(
+        src,
+        ("Orders", [["order_id", "amount"], ["A-1", "9.99"]]),
+        ("Overflow", [["order_id", "amount"], ["B-1", "1.00"]]),
+    )
+    cfg = tmp_path / "pipeline.yaml"
+    cfg.write_text(_EXCEL_VALIDATE_CONFIG)
+    result = _validate(
+        str(src), "--config", str(cfg), "--sheet", "Overflow", "--json"
+    )
+    assert result.exit_code == 0
+    data = _parse_json_output(result.output)
+    assert data["rows_checked"] == 1
+
+
 def test_validate_fixed_width_happy_path(tmp_path):
     src = tmp_path / "transactions.fwf"
     src.write_text("ACME000100\nFOOO002500\n")

@@ -38,6 +38,13 @@ class ConnectorConfig:
 
 
 @dataclass
+class ExcelConfig:
+    """Excel-specific options for `format: excel` (ADR-0012)."""
+
+    sheet: object  # str | int; validated at load time
+
+
+@dataclass
 class CdcConfig:
     keys: List[str]
     operation_column: str
@@ -59,6 +66,7 @@ class PipelineConfig:
     cdc: Optional[CdcConfig] = None
     file_pattern: Optional[str] = None
     source_manifest: str = "optional"
+    excel: Optional[ExcelConfig] = None
 
 
 def load_config(path: str) -> PipelineConfig:
@@ -82,6 +90,8 @@ def load_config(path: str) -> PipelineConfig:
 
     if data["format"] == "fixed_width":
         _validate_fixed_width_columns(columns, data["columns"])
+
+    excel = _parse_excel_config(data)
 
     connector = None
     if "connector" in data:
@@ -125,6 +135,7 @@ def load_config(path: str) -> PipelineConfig:
         cdc=cdc,
         file_pattern=data.get("file_pattern"),
         source_manifest=_validate_source_manifest(data.get("source_manifest", "optional")),
+        excel=excel,
     )
 
 
@@ -140,6 +151,24 @@ def _validate_fixed_width_columns(
             )
     layout = [LayoutColumn(name=c.source, start=c.start, width=c.width) for c in columns]
     validate_layout(layout)
+
+
+def _parse_excel_config(data: Dict[str, object]) -> Optional[ExcelConfig]:
+    fmt = data["format"]
+    raw = data.get("excel")
+    if fmt == "excel":
+        if raw is None:
+            raise ValueError(
+                "format: excel requires a peer excel: block (with a sheet: subkey)."
+            )
+        if "sheet" not in raw:
+            raise ValueError("excel: block requires a sheet: subkey.")
+        return ExcelConfig(sheet=raw["sheet"])
+    if raw is not None:
+        raise ValueError(
+            "excel: block is only valid when format: excel."
+        )
+    return None
 
 
 def _validate_source_manifest(value: str) -> str:

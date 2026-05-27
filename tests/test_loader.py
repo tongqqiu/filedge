@@ -2,7 +2,14 @@ import base64
 
 import pytest
 
-from filedge.config import CdcConfig, ColumnMapping, EncryptConfig, HashConfig, PipelineConfig
+from filedge.config import (
+    CdcConfig,
+    ColumnMapping,
+    EncryptConfig,
+    ExcelConfig,
+    HashConfig,
+    PipelineConfig,
+)
 from filedge.connectors.sqlite import SQLiteConnector
 from filedge.loader import load_file
 
@@ -304,6 +311,44 @@ def test_load_file_loads_fixed_width_with_layout_from_config(tmp_path):
         "SELECT account_number, amount_cents FROM transactions ORDER BY _id"
     ).fetchall()
     assert result == [("ACME000123", 100050), ("FOOO000456", 2500)]
+    c.close()
+
+
+def test_load_file_loads_excel_using_sheet_from_config(tmp_path):
+    openpyxl = pytest.importorskip("openpyxl")
+
+    config = PipelineConfig(
+        format="excel",
+        dest_table="orders",
+        columns=[
+            ColumnMapping(source="order_id", dest="order_id", type="string", required=True),
+            ColumnMapping(source="amount", dest="amount", type="string", required=True),
+        ],
+        excel=ExcelConfig(sheet="Orders"),
+    )
+    c = SQLiteConnector(url=f"sqlite:///{tmp_path}/excel.db", batch_size=10)
+    c.ensure_table(config)
+
+    path = tmp_path / "orders.xlsx"
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    other = wb.create_sheet("Customers")
+    other.append(["order_id", "amount"])
+    other.append(["WRONG", "0"])
+    orders = wb.create_sheet("Orders")
+    orders.append(["order_id", "amount"])
+    orders.append(["A-1", "9.99"])
+    orders.append(["A-2", "14.50"])
+    wb.save(str(path))
+
+    rows, error = load_file(c, config, str(path), "xlsxhash")
+
+    assert error is None
+    assert rows == 2
+    result = c._get_conn().execute(
+        "SELECT order_id, amount FROM orders ORDER BY _id"
+    ).fetchall()
+    assert result == [("A-1", "9.99"), ("A-2", "14.50")]
     c.close()
 
 

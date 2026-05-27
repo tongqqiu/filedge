@@ -406,3 +406,104 @@ def test_load_config_non_fixed_width_format_ignores_start_width(tmp_path):
     config = load_config(str(f))
     assert config.columns[0].start is None
     assert config.columns[0].width is None
+
+
+# --- excel: block (ADR-0012) ---
+
+
+_EXCEL_YAML = """
+format: excel
+dest_table: orders
+excel:
+  sheet: Orders
+columns:
+  - source: order_id
+    dest: order_id
+    type: string
+    required: true
+"""
+
+
+def test_load_config_parses_excel_block_with_sheet(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_EXCEL_YAML)
+    config = load_config(str(f))
+    assert config.format == "excel"
+    assert config.excel is not None
+    assert config.excel.sheet == "Orders"
+
+
+def test_load_config_excel_sheet_accepts_int(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: excel
+dest_table: orders
+excel:
+  sheet: 1
+columns:
+  - source: order_id
+    dest: order_id
+    type: string
+"""
+    )
+    config = load_config(str(f))
+    assert config.excel.sheet == 1
+
+
+def test_load_config_excel_format_requires_excel_block(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: excel
+dest_table: orders
+columns:
+  - source: order_id
+    dest: order_id
+    type: string
+"""
+    )
+    with pytest.raises(ValueError, match="excel:"):
+        load_config(str(f))
+
+
+def test_load_config_excel_block_requires_sheet_subkey(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: excel
+dest_table: orders
+excel: {}
+columns:
+  - source: order_id
+    dest: order_id
+    type: string
+"""
+    )
+    with pytest.raises(ValueError, match="sheet:"):
+        load_config(str(f))
+
+
+def test_load_config_rejects_excel_block_when_format_is_not_excel(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: csv
+dest_table: orders
+excel:
+  sheet: Orders
+columns:
+  - source: order_id
+    dest: order_id
+    type: string
+"""
+    )
+    with pytest.raises(ValueError, match="excel:.*format: excel"):
+        load_config(str(f))
+
+
+def test_load_config_non_excel_format_leaves_excel_none(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML)
+    config = load_config(str(f))
+    assert config.excel is None

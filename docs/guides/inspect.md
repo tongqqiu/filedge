@@ -154,6 +154,53 @@ filedge inspect events.ndjson
 
 For data sources you control, the cleaner fix is to have your [Fetcher](../../CONTEXT.md#fetcher) or [Queue Materializer](../../CONTEXT.md#queue-materializer) write NDJSON directly to the Watched Directory.
 
+## Excel files
+
+`filedge inspect` reads `.xlsx` workbooks via [openpyxl](https://openpyxl.readthedocs.io/). Install the optional extra first:
+
+```bash
+uv sync --extra excel
+```
+
+Format is auto-detected from the `.xlsx` extension:
+
+```bash
+filedge inspect data.xlsx
+```
+
+Row 1 is treated as the header (same convention as CSV). Subsequent rows are sampled and typed exactly as they would be for an equivalent CSV — cells are coerced to strings on read, so confidence tiers behave identically.
+
+### Sheet selection
+
+The first sheet is read by default. For workbooks with multiple sheets, `inspect` prints a warning to stderr and reads the first sheet. Use `--sheet` to choose:
+
+```bash
+filedge inspect data.xlsx --sheet Orders     # by name
+filedge inspect data.xlsx --sheet 2          # by 0-based index
+```
+
+The chosen sheet is recorded in the YAML header comment so the inferred config is reproducible:
+
+```yaml
+# source: data.xlsx
+# sheet: 'Orders'
+# sample_rows: 1000
+```
+
+### Formula cache footgun
+
+`filedge` opens workbooks with `data_only=True`, which reads the **cached computed value** Excel last saved alongside each formula cell. Workbooks that were edited (e.g. by a script) but never reopened in Excel may carry stale or absent cached values — the cell appears empty or wrong even though the formula is correct.
+
+**Fix**: open the workbook in Excel and save it before running `filedge inspect`. Excel re-evaluates every formula on save.
+
+### Leading zeros
+
+Excel stores cells like `01234` as the number `1234` unless the cell is formatted as **Text** before the value is typed. Once stored as a number, the leading zero is lost — `filedge` cannot recover it.
+
+**Fix**: in Excel, select the column, set Format → Text, then re-paste the values. The cell stores the string `01234` and `filedge inspect` reads it back verbatim.
+
+`.xls` (legacy binary), `.xlsb`, and `.ods` are not supported. Re-save as `.xlsx` in Excel first.
+
 ## Fixed-width files
 
 `filedge inspect` does not support `--format fixed_width`. Fixed-width files carry no separator and no embedded schema, so a layout cannot be discovered from the file — you must declare it from the partner record-layout spec instead. See the [fixed-width guide](fixed-width.md).
@@ -162,6 +209,7 @@ For data sources you control, the cleaner fix is to have your [Fetcher](../../CO
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, `parquet`, or `excel` |
 | `--sample-rows` | 1000 | Number of rows to sample |
 | `--output` | stdout | Write the YAML block to this file instead of stdout |
+| `--sheet` | first sheet | Excel sheet name or 0-based index (excel format only) |

@@ -9,9 +9,10 @@ filedge preview <file> [options]
 | Option | Default | Description |
 |--------|---------|-------------|
 | `<file>` | required | File to preview (local path or cloud URI) |
-| `--format` | auto from extension | File format: `csv`, `ndjson`, or `parquet` |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, `parquet`, or `excel` |
 | `--rows` | 10 | Number of rows to display |
 | `--start-row` | 1 | First row to display (1-indexed) |
+| `--sheet` | first sheet | Excel sheet name or 0-based index (excel format only) |
 
 **Exit codes:** `0` on success, `2` on error.
 
@@ -93,6 +94,41 @@ filedge preview events --format parquet
     ```
 
 ---
+
+## Excel files
+
+`.xlsx` workbooks are detected automatically from the extension:
+
+```bash
+filedge preview data.xlsx
+```
+
+!!! note "Excel requires openpyxl"
+    Install the optional `excel` extra first:
+    ```bash
+    uv sync --extra excel
+    ```
+
+### Sheet selection
+
+The first sheet is read by default. Use `--sheet` to choose another by name or 0-based index:
+
+```bash
+filedge preview data.xlsx --sheet Orders
+filedge preview data.xlsx --sheet 2
+```
+
+For multi-sheet workbooks, `preview` prints a warning to stderr listing the available sheets when `--sheet` is omitted.
+
+### Formula cache footgun
+
+`filedge` opens workbooks with `data_only=True` — the cell value is whatever Excel last cached on save. Workbooks edited by a script and never reopened in Excel may carry stale formula values. Open the workbook in Excel and save to refresh.
+
+### Leading zeros
+
+Numeric-looking values stored as numbers (e.g. ZIP codes) lose their leading zeros. Format the source column as **Text** in Excel before saving.
+
+`.xls`, `.xlsb`, and `.ods` are not supported — re-save as `.xlsx`.
 
 ## Fixed-width files
 
