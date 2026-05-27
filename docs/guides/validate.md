@@ -82,6 +82,16 @@ filedge validate data.csv --config pipeline.yaml --sample-rows 100
 
 Useful for quick checks on large files. For full pre-load validation, omit `--sample-rows`.
 
+## Fixed-width files
+
+For `--format fixed_width`, `filedge validate` reads `start:` and `width:` from the same `pipeline.yaml` it validates against. The standard invocation works unchanged:
+
+```bash
+filedge validate transactions.fwf --format fixed_width --config pipeline.yaml
+```
+
+See the [fixed-width guide](fixed-width.md) for layout declaration and runtime semantics (short-line behavior, whitespace stripping, blank-line handling).
+
 ## Cloud paths
 
 Works with any [fsspec](https://filesystem-spec.readthedocs.io/en/latest/)-supported URI:

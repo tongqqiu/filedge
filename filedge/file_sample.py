@@ -16,7 +16,7 @@ _EXT_TO_FORMAT = {
 }
 
 
-SUPPORTED_FORMATS = ("csv", "ndjson", "parquet")
+SUPPORTED_FORMATS = ("csv", "ndjson", "parquet", "fixed_width")
 
 
 @dataclass(frozen=True)
@@ -48,15 +48,17 @@ def open_sample(
     encoding: str = "utf-8",
     start_row: int = 1,
     num_rows: Optional[int] = None,
+    **parser_kwargs,
 ) -> Iterator[Iterator[dict]]:
     """Open a File and yield a row stream optionally sliced to a window.
 
     Owns filesystem resolution, parser selection, file open mode, encoding, and
     the row-window slice. `start_row` is 1-indexed inclusive; `num_rows=None`
-    yields the full remaining stream.
+    yields the full remaining stream. Per-format parser configuration (e.g.
+    `columns=` for fixed_width) is forwarded to the parser factory.
     """
     fs, path = get_filesystem(file)
-    parser = get_parser(fmt)
+    parser = get_parser(fmt, **parser_kwargs)
     with open_file(path, fs=fs, mode=parser.mode, encoding=encoding) as f:
         rows = parser.parse(f)
         if start_row > 1:

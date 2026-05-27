@@ -317,3 +317,92 @@ def test_source_manifest_invalid_value_rejected(tmp_path):
     f.write_text(_MINIMAL_YAML + "\nsource_manifest: maybe\n")
     with pytest.raises(ValueError, match="source_manifest"):
         load_config(str(f))
+
+
+# --- fixed_width layout ---
+
+_FIXED_WIDTH_YAML = """
+format: fixed_width
+dest_table: transactions
+columns:
+  - source: account_number
+    dest: account_number
+    type: string
+    required: true
+    start: 1
+    width: 10
+  - source: transaction_date
+    dest: transaction_date
+    type: date
+    required: true
+    start: 11
+    width: 8
+  - source: amount
+    dest: amount_cents
+    type: integer
+    required: true
+    start: 19
+    width: 12
+"""
+
+
+def test_load_config_parses_fixed_width_layout(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_FIXED_WIDTH_YAML)
+    config = load_config(str(f))
+    assert config.format == "fixed_width"
+    assert config.columns[0].start == 1
+    assert config.columns[0].width == 10
+    assert config.columns[2].start == 19
+    assert config.columns[2].width == 12
+
+
+def test_load_config_rejects_overlapping_fixed_width_columns(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: fixed_width
+dest_table: transactions
+columns:
+  - source: account_number
+    dest: account_number
+    type: string
+    start: 1
+    width: 10
+  - source: branch_code
+    dest: branch_code
+    type: string
+    start: 8
+    width: 4
+"""
+    )
+    with pytest.raises(ValueError) as exc_info:
+        load_config(str(f))
+    msg = str(exc_info.value)
+    assert "account_number" in msg and "branch_code" in msg
+    assert "overlap" in msg
+
+
+def test_load_config_rejects_fixed_width_column_missing_start_width(tmp_path):
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(
+        """
+format: fixed_width
+dest_table: transactions
+columns:
+  - source: account_number
+    dest: account_number
+    type: string
+"""
+    )
+    with pytest.raises(ValueError, match="fixed_width.*start.*width"):
+        load_config(str(f))
+
+
+def test_load_config_non_fixed_width_format_ignores_start_width(tmp_path):
+    # CSV pipelines never gain start/width — silently absent is fine.
+    f = tmp_path / "pipeline.yaml"
+    f.write_text(_MINIMAL_YAML)
+    config = load_config(str(f))
+    assert config.columns[0].start is None
+    assert config.columns[0].width is None

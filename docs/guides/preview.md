@@ -94,6 +94,14 @@ filedge preview events --format parquet
 
 ---
 
+## Fixed-width files
+
+`filedge preview` requires `--config <pipeline.yaml>` for `--format fixed_width`, because the layout (column positions and widths) lives entirely in the config — without it there's nothing to slice. See the [fixed-width guide](fixed-width.md).
+
+```bash
+filedge preview transactions.fwf --format fixed_width --config pipeline.yaml
+```
+
 ## Cloud files
 
 Preview files on S3, GCS, or Azure Blob Storage using their native URIs:

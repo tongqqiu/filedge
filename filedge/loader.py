@@ -20,7 +20,7 @@ def load_file(
     progress: ProgressReporter | None = None,
     row_report_interval: int = 1000,
 ) -> Tuple[int, Optional[str]]:
-    parser = get_parser(config.format)
+    parser = get_parser(config.format, **_parser_kwargs(config))
     rows_loaded = [0]
     cdc = _destination_cdc_config(config)
     try:
@@ -60,6 +60,18 @@ def load_file(
         return rows_loaded[0], str(e)
     except Exception as e:
         return rows_loaded[0], f"Unexpected error: {e}"
+
+
+def _parser_kwargs(config: PipelineConfig) -> dict:
+    if config.format == "fixed_width":
+        from filedge.fixed_width import LayoutColumn
+        return {
+            "columns": [
+                LayoutColumn(name=c.source, start=c.start, width=c.width)
+                for c in config.columns
+            ]
+        }
+    return {}
 
 
 def _destination_cdc_config(config: PipelineConfig) -> CdcConfig | None:

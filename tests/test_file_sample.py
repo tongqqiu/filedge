@@ -83,6 +83,25 @@ def test_open_sample_uses_provided_encoding(tmp_path):
     assert materialized == [{"name": "Ada"}]
 
 
+def test_open_sample_reads_fixed_width_with_layout(tmp_path):
+    from filedge.fixed_width import LayoutColumn
+
+    path = tmp_path / "rows.fwf"
+    path.write_text("ACME000123\nFOOO000456\n")
+
+    layout = [
+        LayoutColumn(name="account", start=1, width=4),
+        LayoutColumn(name="number", start=5, width=6),
+    ]
+    with open_sample(str(path), "fixed_width", columns=layout) as rows:
+        materialized = list(rows)
+
+    assert materialized == [
+        {"account": "ACME", "number": "000123"},
+        {"account": "FOOO", "number": "000456"},
+    ]
+
+
 def test_read_parquet_schema_returns_arrow_schema(tmp_path):
     pa = pytest.importorskip("pyarrow")
     pq = pytest.importorskip("pyarrow.parquet")

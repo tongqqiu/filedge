@@ -268,6 +268,45 @@ def test_load_file_applies_cdc_with_renamed_key_column(tmp_path):
     c.close()
 
 
+def test_load_file_loads_fixed_width_with_layout_from_config(tmp_path):
+    config = PipelineConfig(
+        format="fixed_width",
+        dest_table="transactions",
+        columns=[
+            ColumnMapping(
+                source="account_number",
+                dest="account_number",
+                type="string",
+                required=True,
+                start=1,
+                width=10,
+            ),
+            ColumnMapping(
+                source="amount",
+                dest="amount_cents",
+                type="integer",
+                required=True,
+                start=11,
+                width=10,
+            ),
+        ],
+    )
+    c = SQLiteConnector(url=f"sqlite:///{tmp_path}/fwf.db", batch_size=10)
+    c.ensure_table(config)
+    f = tmp_path / "transactions.fwf"
+    f.write_text("ACME000123    100050\nFOOO000456    002500\n")
+
+    rows, error = load_file(c, config, str(f), "fwfhash")
+
+    assert error is None
+    assert rows == 2
+    result = c._get_conn().execute(
+        "SELECT account_number, amount_cents FROM transactions ORDER BY _id"
+    ).fetchall()
+    assert result == [("ACME000123", 100050), ("FOOO000456", 2500)]
+    c.close()
+
+
 def test_load_file_returns_error_on_unknown_cdc_operation(tmp_path):
     config = PipelineConfig(
         format="ndjson",

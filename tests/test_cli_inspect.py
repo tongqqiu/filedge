@@ -109,3 +109,13 @@ def test_inspect_non_iso_date_like_output_stays_string(tmp_path):
     parsed = yaml.safe_load(out.read_text())
     assert parsed["columns"][0]["type"] == "string"
     assert "filedge date requires YYYY-MM-DD" in result.output
+
+
+def test_inspect_fixed_width_hard_errors_with_docs_pointer(tmp_path):
+    source = tmp_path / "transactions.fwf"
+    source.write_text("ACME000123\n")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["inspect", str(source), "--format", "fixed_width"])
+    assert result.exit_code != 0
+    assert "fixed_width" in result.output or "fixed-width" in result.output
+    assert "docs/guides/fixed-width.md" in result.output
