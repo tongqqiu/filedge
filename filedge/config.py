@@ -7,11 +7,25 @@ from filedge.column_types import validate_column_type
 
 
 @dataclass
+class EncryptConfig:
+    algorithm: str
+    key: str
+
+
+@dataclass
+class HashConfig:
+    algorithm: str
+    key: str
+
+
+@dataclass
 class ColumnMapping:
     source: str
     dest: str
     type: str  # string, integer, float, date, timestamp, boolean
     required: bool = True
+    encrypt: Optional[EncryptConfig] = None
+    hash: Optional[HashConfig] = None
 
 
 @dataclass
@@ -53,6 +67,8 @@ def load_config(path: str) -> PipelineConfig:
             dest=c["dest"],
             type=c["type"],
             required=c.get("required", True),
+            encrypt=_parse_encrypt_config(c.get("encrypt"), c),
+            hash=_parse_hash_config(c.get("hash")),
         )
         for c in data["columns"]
     ]
@@ -110,3 +126,46 @@ def _validate_source_manifest(value: str) -> str:
             f"source_manifest must be one of disabled/optional/required, got {value!r}"
         )
     return value
+
+
+def _parse_encrypt_config(
+    raw: Optional[Dict[str, str]], column: Dict[str, object]
+) -> Optional[EncryptConfig]:
+    if raw is None:
+        return None
+    if column["type"] != "string":
+        raise ValueError("encrypt columns must declare type: string")
+    algorithm = _required_crypto_field(raw, "algorithm", "encrypt")
+    if algorithm != "aes-256-gcm":
+        raise ValueError(f"Unsupported encrypt algorithm: {algorithm!r}")
+    key = _required_crypto_field(raw, "key", "encrypt")
+    _validate_key_reference(key)
+    return EncryptConfig(algorithm=algorithm, key=key)
+
+
+def _parse_hash_config(raw: Optional[Dict[str, str]]) -> Optional[HashConfig]:
+    if raw is None:
+        return None
+    algorithm = _required_crypto_field(raw, "algorithm", "hash")
+    if algorithm != "hmac-sha256":
+        raise ValueError(f"Unsupported hash algorithm: {algorithm!r}")
+    key = _required_crypto_field(raw, "key", "hash")
+    _validate_key_reference(key)
+    return HashConfig(algorithm=algorithm, key=key)
+
+
+def _required_crypto_field(raw: Dict[str, str], field: str, block: str) -> str:
+    value = raw.get(field)
+    if not value:
+        raise ValueError(f"{block}: requires {field}:")
+    return value
+
+
+def _validate_key_reference(value: str) -> None:
+    if value.startswith("env:") and value.removeprefix("env:"):
+        return
+    if value.startswith("secrets:/") and value.removeprefix("secrets:"):
+        return
+    raise ValueError(
+        "Field Encryption key reference must use env:NAME or secrets:/absolute/path"
+    )

@@ -637,6 +637,7 @@ version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
+    { name = "cryptography" },
     { name = "jinja2" },
     { name = "pyyaml" },
     { name = "rich" },
@@ -688,6 +689,7 @@ s3 = [
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.1" },
+    { name = "cryptography", specifier = ">=48.0.0" },
     { name = "databricks-sql-connector", marker = "extra == 'databricks'", specifier = ">=3.0" },
     { name = "duckdb", marker = "extra == 'duckdb'", specifier = ">=1.0" },
     { name = "fsspec", marker = "extra == 'databricks'", specifier = ">=2023.0" },
