@@ -22,20 +22,14 @@ from filedge.db import (
     requeue_all_terminal_failed,
     requeue_by_hash,
 )
+from filedge.authoring import AuthoringSession
 from filedge.config import load_config
-from filedge.file_sample import (
-    FormatNotDetected,
-    open_sample,
-    read_parquet_schema,
-    resolve_format,
-)
+from filedge.file_sample import FormatNotDetected, resolve_format
 from filedge.health import HealthcheckError
-from filedge.inferrer import infer_schema, infer_schema_from_parquet
 from filedge.inspect_formatter import format_summary, format_yaml
 from filedge.preview_formatter import format_preview
 from filedge.progress import RichPipelineProgress
 from filedge.validate_formatter import format_json, format_text
-from filedge.validator import validate_file
 from filedge.pipeline import run_pipeline
 
 
@@ -65,37 +59,6 @@ def _parse_sheet_selector(value):
         return int(value)
     except ValueError:
         return value
-
-
-def _resolve_excel_sheet(file: str, selector):
-    """Resolve a sheet selector to the concrete sheet name in the workbook.
-
-    Used by `filedge inspect` so the inferred YAML records the exact sheet that
-    was read — not the placeholder `None`, which would defeat reproducibility.
-    """
-    from filedge.file_sample import read_excel_sheet_names
-
-    names = read_excel_sheet_names(file)
-    if selector is None:
-        return names[0]
-    if isinstance(selector, int):
-        if selector < 0 or selector >= len(names):
-            raise ValueError(
-                f"Sheet index {selector} out of range; workbook has {len(names)} sheet(s): {names!r}"
-            )
-        return names[selector]
-    if selector not in names:
-        raise ValueError(f"Missing sheet {selector!r}; workbook has {names!r}")
-    return selector
-
-
-def _fixed_width_layout(config) -> list:
-    """Translate a fixed_width PipelineConfig into a slicer-ready layout."""
-    from filedge.fixed_width import LayoutColumn
-    return [
-        LayoutColumn(name=c.source, start=c.start, width=c.width)
-        for c in config.columns
-    ]
 
 
 @click.group()
@@ -336,18 +299,12 @@ def inspect(file, fmt, sample_rows, output_path, encoding, sheet):
         click.echo("Error: --sheet is only valid with --format excel.", err=True)
         sys.exit(1)
 
-    parser_kwargs = {}
-    sheet_for_header: object | None = None
-    if fmt == "excel":
-        sheet_for_header = _resolve_excel_sheet(file, _parse_sheet_selector(sheet))
-        parser_kwargs["sheet"] = sheet_for_header
-
+    session = AuthoringSession(
+        file, fmt, encoding=encoding, sheet=_parse_sheet_selector(sheet)
+    )
     try:
-        if fmt == "parquet":
-            columns = infer_schema_from_parquet(read_parquet_schema(file))
-        else:
-            with open_sample(file, fmt, encoding=encoding, **parser_kwargs) as rows:
-                columns = infer_schema(rows, sample_rows=sample_rows)
+        sheet_for_header = session.sheet_name
+        columns = session.infer_schema(sample_rows=sample_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
@@ -389,7 +346,7 @@ def preview(file, fmt, config_path, num_rows, start_row, encoding, sheet):
         click.echo("Error: --sheet is only valid with --format excel.", err=True)
         sys.exit(2)
 
-    parser_kwargs = {}
+    config = None
     if fmt == "fixed_width":
         if not config_path:
             click.echo(
@@ -399,23 +356,16 @@ def preview(file, fmt, config_path, num_rows, start_row, encoding, sheet):
             )
             sys.exit(2)
         try:
-            parser_kwargs["columns"] = _fixed_width_layout(load_config(config_path))
+            config = load_config(config_path)
         except Exception as e:
             click.echo(f"Error: {e}", err=True)
             sys.exit(2)
-    if fmt == "excel":
-        parser_kwargs["sheet"] = _parse_sheet_selector(sheet)
 
+    session = AuthoringSession(
+        file, fmt, config=config, encoding=encoding, sheet=_parse_sheet_selector(sheet)
+    )
     try:
-        with open_sample(
-            file,
-            fmt,
-            encoding=encoding,
-            start_row=start_row,
-            num_rows=num_rows,
-            **parser_kwargs,
-        ) as rows:
-            materialized = list(rows)
+        materialized = session.preview(start_row=start_row, num_rows=num_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(2)
@@ -445,23 +395,14 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding, sheet):
 
     try:
         config = load_config(config_path)
-        effective_encoding = encoding or config.encoding
-        parser_kwargs = {}
-        if fmt == "fixed_width":
-            parser_kwargs["columns"] = _fixed_width_layout(config)
-        if fmt == "excel":
-            if sheet is not None:
-                parser_kwargs["sheet"] = _parse_sheet_selector(sheet)
-            elif config.excel is not None:
-                parser_kwargs["sheet"] = config.excel.sheet
-        with open_sample(
+        session = AuthoringSession(
             file,
             fmt,
-            encoding=effective_encoding,
-            num_rows=sample_rows,
-            **parser_kwargs,
-        ) as rows:
-            result = validate_file(rows, config.columns)
+            config=config,
+            encoding=encoding,
+            sheet=_parse_sheet_selector(sheet),
+        )
+        result = session.validate(sample_rows=sample_rows)
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(2)

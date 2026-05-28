@@ -142,15 +142,14 @@ def load_config(path: str) -> PipelineConfig:
 def _validate_fixed_width_columns(
     columns: List[ColumnMapping], raw_columns: List[Dict[str, object]]
 ) -> None:
-    from filedge.fixed_width import LayoutColumn, validate_layout
+    from filedge.fixed_width import layout_from_columns, validate_layout
 
     for column, raw in zip(columns, raw_columns):
         if "start" not in raw or "width" not in raw:
             raise ValueError(
                 f"fixed_width column {column.source!r} requires both start: and width:."
             )
-    layout = [LayoutColumn(name=c.source, start=c.start, width=c.width) for c in columns]
-    validate_layout(layout)
+    validate_layout(layout_from_columns(columns))
 
 
 def _parse_excel_config(data: Dict[str, object]) -> Optional[ExcelConfig]:

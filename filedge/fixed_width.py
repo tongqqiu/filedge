@@ -6,9 +6,12 @@ See ADR-0013 for the architectural decisions captured here.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterator, List
+from typing import TYPE_CHECKING, Any, Dict, Iterator, List
 
 from filedge.parser import Parser
+
+if TYPE_CHECKING:
+    from filedge.config import ColumnMapping
 
 
 @dataclass(frozen=True)
@@ -22,6 +25,16 @@ class LayoutColumn:
     name: str
     start: int
     width: int
+
+
+def layout_from_columns(columns: "List[ColumnMapping]") -> List[LayoutColumn]:
+    """Translate Pipeline Config columns into a slicer-ready Fixed-Width Layout.
+
+    The single source of truth for turning a column's `start`/`width` into a
+    `LayoutColumn`. Shared by config-load validation, the runtime loader, and
+    the Authoring Session so the three never drift.
+    """
+    return [LayoutColumn(name=c.source, start=c.start, width=c.width) for c in columns]
 
 
 class FixedWidthLayoutError(ValueError):
