@@ -6,7 +6,7 @@ import os
 
 import pytest
 
-from filedge.authoring import AuthoringSession
+from filedge.authoring import AuthoringSession, _select_sheet_name
 from filedge.config import load_config
 
 FIXTURES = os.path.join(os.path.dirname(__file__), "fixtures")
@@ -135,6 +135,16 @@ def test_explicit_sheet_overrides_config(tmp_path):
     )
     assert session.sheet_name == "Orders"
     assert session.preview() == [{"order_id": "A-1"}]
+
+
+def test_select_sheet_name_index_out_of_range():
+    with pytest.raises(ValueError, match="out of range"):
+        _select_sheet_name(["Only"], 3)
+
+
+def test_select_sheet_name_unknown_name():
+    with pytest.raises(ValueError, match="Missing sheet"):
+        _select_sheet_name(["Orders", "Customers"], "Nope")
 
 
 def test_encoding_falls_back_to_config(tmp_path):
