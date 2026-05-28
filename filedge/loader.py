@@ -6,7 +6,7 @@ from filedge.connectors import Connector
 from filedge.field_crypto import FieldCryptoEngine, FieldCryptoError
 from filedge.filesystem import open_file
 from filedge.key_resolver import KeyResolutionError, resolve_key
-from filedge.parser import get_parser
+from filedge.parser import get_parser, parser_kwargs_for
 from filedge.progress import ProgressReporter, emit_progress
 from filedge.transform import TransformError, transform_row
 
@@ -20,7 +20,7 @@ def load_file(
     progress: ProgressReporter | None = None,
     row_report_interval: int = 1000,
 ) -> Tuple[int, Optional[str]]:
-    parser = get_parser(config.format, **_parser_kwargs(config))
+    parser = get_parser(config.format, **_parser_kwargs_from_config(config))
     rows_loaded = [0]
     cdc = _destination_cdc_config(config)
     try:
@@ -62,13 +62,12 @@ def load_file(
         return rows_loaded[0], f"Unexpected error: {e}"
 
 
-def _parser_kwargs(config: PipelineConfig) -> dict:
-    if config.format == "fixed_width":
-        from filedge.fixed_width import layout_from_columns
-        return {"columns": layout_from_columns(config.columns)}
-    if config.format == "excel" and config.excel is not None:
-        return {"sheet": config.excel.sheet}
-    return {}
+def _parser_kwargs_from_config(config: PipelineConfig) -> dict:
+    return parser_kwargs_for(
+        config.format,
+        columns=config.columns,
+        sheet=config.excel.sheet if config.excel is not None else None,
+    )
 
 
 def _destination_cdc_config(config: PipelineConfig) -> CdcConfig | None:

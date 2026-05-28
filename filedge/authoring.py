@@ -21,6 +21,7 @@ from filedge.inferrer import (
     infer_schema,
     infer_schema_from_parquet,
 )
+from filedge.parser import parser_kwargs_for
 from filedge.validator import ValidationResult, validate_file
 
 
@@ -102,16 +103,11 @@ class AuthoringSession:
             yield rows
 
     def _parser_kwargs(self) -> dict:
-        if self.fmt == "fixed_width":
-            if self.config is None:
-                raise ValueError(
-                    "fixed_width requires a Pipeline Config for its layout."
-                )
-            from filedge.fixed_width import layout_from_columns
-            return {"columns": layout_from_columns(self.config.columns)}
-        if self.fmt == "excel":
-            return {"sheet": self._sheet_selector}
-        return {}
+        return parser_kwargs_for(
+            self.fmt,
+            columns=self.config.columns if self.config is not None else None,
+            sheet=self._sheet_selector,
+        )
 
 
 def _select_sheet_name(names: List[str], selector: SheetSelector) -> str:

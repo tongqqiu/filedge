@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from filedge.parser import CSVParser, NDJSONParser, get_parser
+from filedge.parser import CSVParser, NDJSONParser, get_parser, parser_kwargs_for
 
 
 def test_csv_parser_yields_dicts():
@@ -92,3 +92,38 @@ def test_get_parser_excel_defaults_sheet_to_none():
     parser = get_parser("excel")
     assert isinstance(parser, ExcelParser)
     assert parser._sheet is None
+
+
+# --- parser_kwargs_for: the Pipeline Config -> Parser binding ---
+
+
+def _column(source, *, start=None, width=None):
+    from filedge.config import ColumnMapping
+
+    return ColumnMapping(
+        source=source, dest=source, type="string", start=start, width=width
+    )
+
+
+def test_parser_kwargs_for_stateless_format_is_empty():
+    assert parser_kwargs_for("csv", columns=[_column("id")]) == {}
+    assert parser_kwargs_for("ndjson") == {}
+
+
+def test_parser_kwargs_for_fixed_width_builds_layout():
+    from filedge.fixed_width import LayoutColumn
+
+    kwargs = parser_kwargs_for(
+        "fixed_width", columns=[_column("a", start=1, width=4)]
+    )
+    assert kwargs == {"columns": [LayoutColumn(name="a", start=1, width=4)]}
+
+
+def test_parser_kwargs_for_fixed_width_without_columns_raises():
+    with pytest.raises(ValueError, match="fixed_width requires"):
+        parser_kwargs_for("fixed_width")
+
+
+def test_parser_kwargs_for_excel_passes_sheet_through():
+    assert parser_kwargs_for("excel", sheet="Orders") == {"sheet": "Orders"}
+    assert parser_kwargs_for("excel") == {"sheet": None}
