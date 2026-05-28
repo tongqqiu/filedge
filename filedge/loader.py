@@ -64,13 +64,8 @@ def load_file(
 
 def _parser_kwargs(config: PipelineConfig) -> dict:
     if config.format == "fixed_width":
-        from filedge.fixed_width import LayoutColumn
-        return {
-            "columns": [
-                LayoutColumn(name=c.source, start=c.start, width=c.width)
-                for c in config.columns
-            ]
-        }
+        from filedge.fixed_width import layout_from_columns
+        return {"columns": layout_from_columns(config.columns)}
     if config.format == "excel" and config.excel is not None:
         return {"sheet": config.excel.sheet}
     return {}

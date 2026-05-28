@@ -84,6 +84,10 @@ _Avoid_: project root config, loose pipeline files, generated output directory.
 A local operator-facing interface for Pipeline Authoring that runs beside the CLI and uses the same validation, preview, and Schema Inference behavior. It produces or reviews Pipeline Configs; it is not a hosted service and not a long-running ingestion runtime.
 _Avoid_: hosted platform, web app, server, studio.
 
+### Authoring Session
+The executable core of the Authoring Workflow: a binding of a sample File, its resolved format, and an optional Pipeline Config under which the non-mutating Authoring operations — Schema Inference, file preview, and Authoring Validation — run. The Authoring Session owns format-specific parser binding (Excel sheet selection, Fixed-Width Layout) so the Operator CLI and the Authoring UI invoke the same operations without re-implementing dispatch. It performs no Run and mutates no Audit Records. Encoding falls back from an explicit override to the Pipeline Config's encoding to UTF-8; the Excel sheet falls back from an explicit selector to the Config's `excel.sheet` to the first sheet.
+_Avoid_: authoring context, session manager, parser session.
+
 ### Authoring Validation
 Non-mutating feedback used during Pipeline Authoring to check whether a File and Pipeline Config agree before ingestion. It may preview rows, infer schema, validate file contents, and probe connector configuration shape, but it does not execute a Run or mutate Audit Records.
 _Avoid_: test run, trial run, UI run, dry ingestion.
