@@ -860,3 +860,17 @@ def test_refresh_sample_invalidates_prior_validation(tmp_path):
     reopened.refresh_sample(_file(tmp_path, "fresh.csv", "id,name\n1,Alice\n"))
     # A fresh sample is new evidence; the prior validation no longer applies.
     assert reopened.validation_report is None
+
+
+def test_refresh_sample_leaves_columns_absent_from_new_sample_untouched(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # The fresh sample drops the `name` column entirely.
+    fresh = _file(tmp_path, "fresh.csv", "id\n1\n2\n")
+    reopened.refresh_sample(fresh)
+
+    # `id` got fresh evidence; `name` (absent from the sample) keeps the sentinel.
+    assert reopened.draft.column("id").confidence == "high"
+    assert reopened.draft.column("name").confidence == "loaded"
