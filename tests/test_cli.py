@@ -517,6 +517,95 @@ def test_export_audit_creates_html_file(db_url, tmp_path):
     assert output.exists()
 
 
+# --- export-audit --pipeline (Registry resolution) ---
+
+def _write_export_pipeline_workspace(tmp_path, output_path):
+    """A workspace with one Registry entry; audit_export points at output_path."""
+    ws = tmp_path / "ws"
+    folder = ws / "orders"
+    folder.mkdir(parents=True)
+    _write_run_config(folder / "pipeline.yaml", f"sqlite:///{tmp_path}/dest.db")
+    (ws / "pipeline-registry.yaml").write_text(
+        "version: 1\n"
+        "pipelines:\n"
+        "  - id: orders\n"
+        "    folder: orders\n"
+        "    watched_directory: ./landing\n"
+        "    audit_db: env:EXPORT_PIPELINE_AUDIT\n"
+        f"    audit_export: {output_path}\n"
+    )
+    return ws
+
+
+def test_export_audit_pipeline_resolves_audit_db_and_export_destination(tmp_path, monkeypatch):
+    audit_url = f"sqlite:///{tmp_path}/audit.db"
+    db = Database(audit_url)
+    create_audit_tables(db)
+    db.close()
+    monkeypatch.setenv("EXPORT_PIPELINE_AUDIT", audit_url)
+    output = tmp_path / "site" / "index.html"
+    ws = _write_export_pipeline_workspace(tmp_path, output)
+
+    result = CliRunner().invoke(
+        cli, ["export-audit", "--pipeline", "orders", "--workspace", str(ws)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert output.exists()
+
+
+def test_export_audit_pipeline_conflicts_with_explicit_output(tmp_path):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "export-audit", "--pipeline", "orders",
+            "--output", str(tmp_path / "site" / "index.html"),
+            "--workspace", str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "not both" in result.output
+
+
+def test_export_audit_pipeline_conflicts_with_explicit_audit_db_url(tmp_path):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "export-audit", "--pipeline", "orders",
+            "--audit-db-url", f"sqlite:///{tmp_path}/x.db",
+            "--workspace", str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "not both" in result.output
+
+
+def test_export_audit_pipeline_unknown_id_lists_known_ids(tmp_path, monkeypatch):
+    monkeypatch.setenv("EXPORT_PIPELINE_AUDIT", f"sqlite:///{tmp_path}/audit.db")
+    ws = _write_export_pipeline_workspace(tmp_path, tmp_path / "site" / "index.html")
+
+    result = CliRunner().invoke(
+        cli, ["export-audit", "--pipeline", "nope", "--workspace", str(ws)]
+    )
+
+    assert result.exit_code == 1
+    assert "No Pipeline 'nope'" in result.output
+    assert "orders" in result.output
+
+
+def test_export_audit_without_pipeline_requires_audit_db_and_output(tmp_path, monkeypatch):
+    monkeypatch.delenv("FILEDGE_AUDIT_DB_URL", raising=False)
+
+    result = CliRunner().invoke(
+        cli, ["export-audit", "--audit-db-url", f"sqlite:///{tmp_path}/x.db"]
+    )
+
+    assert result.exit_code == 1
+    assert "provide --audit-db-url and --output, or --pipeline" in result.output
+
+
 def test_lineage_prints_source_metadata_for_known_hash(tmp_path, db_url):
     from filedge.source_manifest import SourceMetadata
     db = Database(db_url)
