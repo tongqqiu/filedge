@@ -877,6 +877,54 @@ def test_author_no_args_launches_browse_when_registry_exists(tmp_path, monkeypat
     assert {e.folder for e in captured["entries"]} == {"pipelines/people"}
 
 
+def test_author_no_args_browse_quit_exits_cleanly(tmp_path, monkeypatch):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+    from filedge.authoring_workflow import AuthoringWorkflow
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    sample = tmp_path / "people.csv"
+    sample.write_text("id,name\n1,Alice\n")
+    wf = AuthoringWorkflow.start(
+        file=str(sample), workspace=str(workspace), dest_table="people"
+    )
+    wf.validate()
+    for review in wf.confidence_reviews():
+        wf.acknowledge_confidence_tier(review.source)
+    wf.generate()
+
+    class FakeBrowse:
+        def __init__(self, entries):
+            self.selected_folder = None  # user quit without choosing
+
+        def run(self):
+            pass
+
+    import filedge.authoring_browse as browse_mod
+
+    monkeypatch.setattr(browse_mod, "PipelineBrowseApp", FakeBrowse)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["author", "--workspace", str(workspace)])
+    assert result.exit_code == 0
+
+
+def test_author_no_args_browse_summary_failure_is_reported(tmp_path, monkeypatch):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    # Write a malformed Registry so list_browse_entries raises.
+    (workspace / "pipeline-registry.yaml").write_text("version: 1\npipelines: not-a-list\n")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["author", "--workspace", str(workspace)])
+    assert result.exit_code == 2
+    assert "Error:" in result.output
+
+
 def test_author_no_args_new_pipeline_choice_asks_for_sample(tmp_path, monkeypatch):
     if importlib.util.find_spec("textual") is None:
         pytest.skip("textual extra not installed")

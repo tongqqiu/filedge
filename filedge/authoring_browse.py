@@ -83,17 +83,6 @@ def _summarise(workspace: str, entry: RegistryEntry) -> PipelineBrowseEntry:
             openable=False,
             message=f"Folder {entry.folder!r} is missing on disk.",
         )
-    if not os.path.isfile(config_path):
-        return PipelineBrowseEntry(
-            id=entry.id,
-            folder=entry.folder,
-            last_authored=None,
-            format=None,
-            connector_type=None,
-            openable=False,
-            message=f"Folder {entry.folder!r} lacks {CONFIG_FILENAME}.",
-        )
-
     fmt: Optional[str] = None
     connector_type: Optional[str] = None
     try:
@@ -115,11 +104,8 @@ def _summarise(workspace: str, entry: RegistryEntry) -> PipelineBrowseEntry:
 
     last_authored: Optional[str] = None
     if os.path.isfile(runbook_path):
-        try:
-            with open(runbook_path) as f:
-                last_authored = read_runbook_authored_at(f.read())
-        except OSError:
-            last_authored = None
+        with open(runbook_path) as f:
+            last_authored = read_runbook_authored_at(f.read())
 
     return PipelineBrowseEntry(
         id=entry.id,
@@ -197,11 +183,9 @@ if App is not None:  # pragma: no branch - guard for the optional extra
         def action_open(self) -> None:
             table = self.query_one("#pipelines", DataTable)
             row = table.cursor_row if table.cursor_row is not None else 0
-            if row == len(self.entries):
+            if row >= len(self.entries):
                 self.selected_folder = NEW_PIPELINE_SENTINEL
                 self.exit()
-                return
-            if row < 0 or row > len(self.entries):
                 return
             entry = self.entries[row]
             if not entry.openable:

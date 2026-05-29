@@ -131,6 +131,31 @@ def test_browse_app_new_pipeline_returns_sentinel(tmp_path):
     importlib.util.find_spec("textual") is None,
     reason="textual extra not installed",
 )
+def test_browse_app_enter_on_new_pipeline_row_returns_sentinel(tmp_path):
+    import asyncio
+
+    from filedge.authoring_browse import PipelineBrowseApp
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _author_pipeline(workspace, tmp_path, "people")
+    entries = list_browse_entries(str(workspace))
+
+    async def run():
+        app = PipelineBrowseApp(entries)
+        async with app.run_test() as pilot:
+            await pilot.press("down")  # move past the single Pipeline row to [New Pipeline]
+            await pilot.press("enter")
+        return app.selected_folder
+
+    selected = asyncio.run(run())
+    assert selected == NEW_PIPELINE_SENTINEL
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("textual") is None,
+    reason="textual extra not installed",
+)
 def test_browse_app_blocks_opening_unopenable_pipeline(tmp_path):
     import asyncio
 
