@@ -430,16 +430,18 @@ def test_draft_from_config_loads_field_encryption_hash_block():
     assert ssn.hash.key == "env:H"
 
 
-def test_draft_from_config_rejects_non_csv_format():
-    cfg = config_from_dict(
-        {
-            "format": "ndjson",
-            "dest_table": "t",
-            "connector": {"type": "sqlite"},
-            "columns": [{"source": "id", "dest": "id", "type": "integer"}],
-        }
-    )
-    with pytest.raises(ValueError, match="ndjson"):
+def test_draft_from_config_rejects_unsupported_format():
+    # No Parser ships for `avro` (ADR-0012 explicitly deprioritised it).
+    cfg_dict = {
+        "format": "avro",
+        "dest_table": "t",
+        "connector": {"type": "sqlite"},
+        "columns": [{"source": "id", "dest": "id", "type": "integer"}],
+    }
+    # config_from_dict accepts the dict (Parser dispatch happens elsewhere); the
+    # loader is the gatekeeper for the re-author flow.
+    cfg = config_from_dict(cfg_dict)
+    with pytest.raises(ValueError, match="avro"):
         draft_from_config(cfg)
 
 
@@ -544,3 +546,89 @@ def test_draft_from_config_round_trips_mixed_field_encryption_columns():
     emitted = draft_from_config(config_from_dict(src_dict)).to_config_dict()
 
     assert emitted == src_dict
+
+
+# ---------------------------------------------------------------------------
+# Non-CSV format round-trip (#177)
+# ---------------------------------------------------------------------------
+
+
+def _baseline_columns():
+    return [
+        {"source": "id", "dest": "id", "type": "integer", "required": True},
+        {"source": "name", "dest": "name", "type": "string", "required": False},
+    ]
+
+
+@pytest.mark.parametrize("fmt", ["ndjson", "parquet"])
+def test_draft_from_config_round_trips_simple_formats(fmt):
+    src_dict = {
+        "format": fmt,
+        "dest_table": "events",
+        "write_mode": "append",
+        "connector": {"type": "sqlite", "path": "audit.db"},
+        "columns": _baseline_columns(),
+    }
+    emitted = draft_from_config(config_from_dict(src_dict)).to_config_dict()
+    assert emitted == src_dict
+
+
+def test_draft_from_config_round_trips_excel_with_sheet_selector():
+    src_dict = {
+        "format": "excel",
+        "dest_table": "orders",
+        "write_mode": "append",
+        "connector": {"type": "sqlite", "path": "audit.db"},
+        "excel": {"sheet": "Orders"},
+        "columns": _baseline_columns(),
+    }
+    draft = draft_from_config(config_from_dict(src_dict))
+    assert draft.sheet == "Orders"
+    assert draft.to_config_dict() == src_dict
+
+
+def test_draft_from_config_excel_sheet_editable_on_loaded_draft():
+    src_dict = {
+        "format": "excel",
+        "dest_table": "orders",
+        "write_mode": "append",
+        "connector": {"type": "sqlite"},
+        "excel": {"sheet": "Sheet1"},
+        "columns": _baseline_columns(),
+    }
+    draft = draft_from_config(config_from_dict(src_dict))
+    draft.sheet = "Orders"
+    assert draft.to_config_dict()["excel"] == {"sheet": "Orders"}
+
+
+def test_draft_from_config_round_trips_fixed_width_layout():
+    src_dict = {
+        "format": "fixed_width",
+        "dest_table": "people",
+        "write_mode": "append",
+        "connector": {"type": "sqlite", "path": "audit.db"},
+        "columns": [
+            {"source": "id", "dest": "id", "type": "integer", "required": True, "start": 1, "width": 3},
+            {"source": "name", "dest": "name", "type": "string", "required": True, "start": 4, "width": 5},
+        ],
+    }
+    draft = draft_from_config(config_from_dict(src_dict))
+    assert draft.column("id").start == 1
+    assert draft.column("name").width == 5
+    assert draft.to_config_dict() == src_dict
+
+
+def test_draft_from_config_fixed_width_layout_validation_still_fires():
+    # Overlap is rejected at config_from_dict time, before the loader sees it.
+    with pytest.raises(ValueError, match="overlap"):
+        config_from_dict(
+            {
+                "format": "fixed_width",
+                "dest_table": "people",
+                "connector": {"type": "sqlite"},
+                "columns": [
+                    {"source": "id", "dest": "id", "type": "integer", "start": 1, "width": 3},
+                    {"source": "name", "dest": "name", "type": "string", "start": 3, "width": 5},
+                ],
+            }
+        )

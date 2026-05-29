@@ -865,20 +865,87 @@ def test_open_folder_rejects_unsupported_shape_clearly(tmp_path):
     folder = workspace / "pipelines" / "events"
     folder.mkdir(parents=True)
     (folder / "pipeline.yaml").write_text(
-        "format: ndjson\n"
+        "format: csv\n"
         "dest_table: events\n"
-        "write_mode: append\n"
+        "write_mode: truncate\n"
         "connector:\n  type: sqlite\n"
         "columns:\n  - source: id\n    dest: id\n    type: integer\n"
     )
     (folder / "RUNBOOK.md").write_text(
-        "## Sample File\n\nAuthored from sample File: `/data/events.ndjson`\n"
+        "## Sample File\n\nAuthored from sample File: `/data/events.csv`\n"
     )
 
-    with pytest.raises(ValueError, match="ndjson"):
+    with pytest.raises(ValueError, match="truncate"):
         AuthoringWorkflow.open_folder(
             folder="pipelines/events", workspace=str(workspace)
         )
+
+
+def _write_handauthored_folder(workspace, folder_rel, pipeline_yaml, sample_path):
+    folder = workspace / folder_rel
+    folder.mkdir(parents=True)
+    (folder / "pipeline.yaml").write_text(pipeline_yaml)
+    (folder / "RUNBOOK.md").write_text(
+        f"## Sample File\n\nAuthored from sample File: `{sample_path}`\n"
+    )
+    registry_path = workspace / "pipeline-registry.yaml"
+    registry_path.write_text("version: 1\npipelines: []\n")
+
+
+def test_open_folder_loads_fixed_width_layout_without_schema_inference(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _write_handauthored_folder(
+        workspace,
+        "pipelines/people",
+        "format: fixed_width\n"
+        "dest_table: people\n"
+        "write_mode: append\n"
+        "connector:\n  type: sqlite\n"
+        "columns:\n"
+        "  - source: id\n    dest: id\n    type: integer\n    start: 1\n    width: 3\n"
+        "  - source: name\n    dest: name\n    type: string\n    start: 4\n    width: 5\n",
+        sample_path="/data/people.txt",
+    )
+
+    workflow = AuthoringWorkflow.open_folder(
+        folder="pipelines/people", workspace=str(workspace)
+    )
+    assert workflow.fmt == "fixed_width"
+    by_source = {c.source: c for c in workflow.draft.columns}
+    assert by_source["id"].start == 1 and by_source["id"].width == 3
+    assert by_source["name"].start == 4 and by_source["name"].width == 5
+    # Loaded confidence sentinel means no Schema Inference tier evidence to show.
+    assert all(c.confidence == "loaded" for c in workflow.draft.columns)
+    # Re-author for fixed_width never runs Schema Inference, even on refresh.
+    with pytest.raises(ValueError, match="fixed_width"):
+        workflow.refresh_sample("/tmp/whatever.txt")
+
+
+def test_open_folder_loads_excel_sheet_selector(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _write_handauthored_folder(
+        workspace,
+        "pipelines/orders",
+        "format: excel\n"
+        "dest_table: orders\n"
+        "write_mode: append\n"
+        "connector:\n  type: sqlite\n"
+        "excel:\n  sheet: Orders\n"
+        "columns:\n  - source: id\n    dest: id\n    type: integer\n",
+        sample_path="/data/book.xlsx",
+    )
+
+    workflow = AuthoringWorkflow.open_folder(
+        folder="pipelines/orders", workspace=str(workspace)
+    )
+    assert workflow.fmt == "excel"
+    assert workflow.sheet == "Orders"
+    assert workflow.draft.sheet == "Orders"
+    # Sheet is editable through the draft; the new value rides into to_config_dict.
+    workflow.draft.sheet = "Returns"
+    assert workflow.draft.to_config_dict()["excel"] == {"sheet": "Returns"}
 
 
 # ---------------------------------------------------------------------------

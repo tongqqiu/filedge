@@ -405,23 +405,28 @@ class PipelineConfigDraft:
         return data
 
 
+SUPPORTED_LOADER_FORMATS = ("csv", "ndjson", "parquet", "excel", "fixed_width")
+
+
 def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
-    """Load an existing PipelineConfig back into an editable Draft (#172).
+    """Load an existing PipelineConfig back into an editable Draft (#172, #177).
 
     Confidence Tier is set to ``"loaded"`` on all columns to distinguish
     loaded-but-unverified columns from inference-backed ones (``"high"``,
     ``"low"``, ``"ambiguous"``). Schema Inference refresh is issue #174.
 
-    Only the minimal supported shape is accepted: CSV format, ``append`` write
-    mode, and ``sqlite`` connector. Field Encryption declarations are preserved
-    structurally (algorithm and key reference only). Unsupported shapes raise
-    ``ValueError`` naming the offending field so future slices can opt them in
-    deliberately.
+    Supported formats are CSV, NDJSON, Parquet, Excel, and Fixed-Width.
+    Format-specific fields ride along: the ``excel.sheet`` selector and the
+    Fixed-Width Layout (per-column ``start`` / ``width``) round-trip exactly.
+    Only the minimal connector and write-mode shape is accepted (``sqlite`` /
+    ``append``). Field Encryption declarations are preserved structurally
+    (algorithm and key reference only). Unsupported shapes raise ``ValueError``
+    naming the offending field so future slices can opt them in deliberately.
     """
-    if config.format != "csv":
+    if config.format not in SUPPORTED_LOADER_FORMATS:
         raise ValueError(
             f"draft_from_config does not yet support format {config.format!r}; "
-            "only 'csv' is supported in this slice."
+            f"supported formats are: {', '.join(SUPPORTED_LOADER_FORMATS)}."
         )
     connector_type = config.connector.type if config.connector else "sqlite"
     if connector_type != "sqlite":
@@ -444,6 +449,8 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
             null_count=0,
             total_seen=0,
             notes=[],
+            start=col.start,
+            width=col.width,
             encrypt=(
                 EncryptDraft(key=col.encrypt.key, algorithm=col.encrypt.algorithm)
                 if col.encrypt is not None
@@ -465,7 +472,7 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
     draft.columns = columns
     draft.fmt = config.format
     draft.write_mode = config.write_mode
-    draft.sheet = None
+    draft.sheet = config.excel.sheet if config.excel is not None else None
     draft.cdc_keys = []
     draft.cdc_sequence_by = ""
     draft.cdc_operation_column = DEFAULT_CDC_OPERATION_COLUMN

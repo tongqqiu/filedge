@@ -113,6 +113,8 @@ class AuthoringWorkflow:
             dest_table=config.dest_table,
             fmt=config.format,
             sample_rows=sample_rows,
+            encoding=config.encoding,
+            sheet=config.excel.sheet if config.excel is not None else None,
             reauthor=True,
             registry_entry=registry_entry,
         )
@@ -229,6 +231,11 @@ class AuthoringWorkflow:
         loaded columns absent from the new sample keep their prior evidence.
         """
         draft = self._require_draft()
+        if self.fmt == "fixed_width":
+            raise ValueError(
+                "Schema Inference is not available for fixed_width Folders "
+                "(ADR-0013); the loaded Fixed-Width Layout is the source of truth."
+            )
         inferred = AuthoringSession(
             sample_file, self.fmt, encoding=self.encoding, sheet=self.sheet
         ).infer_schema(sample_rows=self.sample_rows)
