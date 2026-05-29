@@ -4,7 +4,12 @@ interface from Python alone; no UI is involved."""
 
 import pytest
 
-from filedge.authoring_draft import ColumnDraft, PipelineConfigDraft
+from filedge.authoring_draft import (
+    ColumnDraft,
+    EncryptDraft,
+    HashDraft,
+    PipelineConfigDraft,
+)
 from filedge.config import config_from_dict, load_config
 
 
@@ -222,3 +227,119 @@ def test_column_draft_defaults():
     assert c.required is True
     assert c.confidence == "high"
     assert c.notes == []
+    assert c.encrypt is None
+    assert c.hash is None
+
+
+def test_set_field_encryption_round_trips_through_config(tmp_path):
+    src = _csv(tmp_path, "ssn,name\n123-45-6789,Alice\n")
+    draft = PipelineConfigDraft.from_sample(src, "people")
+    draft.edit_column("ssn", type="string")
+
+    draft.set_field_encryption(
+        "ssn",
+        encrypt=EncryptDraft(key="env:SSN_ENC_KEY"),
+        hash=HashDraft(key="env:SSN_HASH_KEY"),
+    )
+    cfg = draft.to_config()
+
+    ssn = next(c for c in cfg.columns if c.dest == "ssn")
+    assert ssn.encrypt is not None
+    assert ssn.encrypt.algorithm == "aes-256-gcm"
+    assert ssn.encrypt.key == "env:SSN_ENC_KEY"
+    assert ssn.hash is not None
+    assert ssn.hash.algorithm == "hmac-sha256"
+    assert ssn.hash.key == "env:SSN_HASH_KEY"
+
+
+def test_set_field_encryption_accepts_neither_one_or_both(tmp_path):
+    src = _csv(tmp_path, "ssn,phone,name\n1,2,Alice\n")
+    draft = PipelineConfigDraft.from_sample(src, "people")
+    draft.edit_column("ssn", type="string")
+
+    draft.set_field_encryption("ssn", encrypt=EncryptDraft(key="env:K1"))
+    draft.set_field_encryption("phone", hash=HashDraft(key="env:K2"))
+
+    assert draft.column_by_dest("ssn").encrypt is not None
+    assert draft.column_by_dest("ssn").hash is None
+    assert draft.column_by_dest("phone").encrypt is None
+    assert draft.column_by_dest("phone").hash is not None
+    assert draft.column_by_dest("name").encrypt is None
+    assert draft.column_by_dest("name").hash is None
+
+
+def test_clear_field_encryption_removes_blocks(tmp_path):
+    src = _csv(tmp_path, "ssn\n1\n")
+    draft = PipelineConfigDraft.from_sample(src, "t")
+    draft.edit_column("ssn", type="string")
+    draft.set_field_encryption(
+        "ssn",
+        encrypt=EncryptDraft(key="env:K"),
+        hash=HashDraft(key="env:H"),
+    )
+
+    draft.clear_field_encryption("ssn", encrypt=True)
+    assert draft.column_by_dest("ssn").encrypt is None
+    assert draft.column_by_dest("ssn").hash is not None
+
+    draft.clear_field_encryption("ssn", hash=True)
+    assert draft.column_by_dest("ssn").hash is None
+
+
+def test_duplicate_column_supports_two_destinations_from_one_source(tmp_path):
+    src = _csv(tmp_path, "ssn,name\n123,Alice\n")
+    draft = PipelineConfigDraft.from_sample(src, "people")
+    draft.edit_column("ssn", type="string")
+
+    draft.duplicate_column("ssn", new_dest="ssn_hash")
+    draft.set_field_encryption("ssn", encrypt=EncryptDraft(key="env:E"))
+    draft.set_field_encryption("ssn_hash", hash=HashDraft(key="env:H"))
+
+    cfg = draft.to_config()
+    ssn_dests = [c for c in cfg.columns if c.source == "ssn"]
+    assert {c.dest for c in ssn_dests} == {"ssn", "ssn_hash"}
+    enc_col = next(c for c in ssn_dests if c.dest == "ssn")
+    hash_col = next(c for c in ssn_dests if c.dest == "ssn_hash")
+    assert enc_col.encrypt is not None and enc_col.hash is None
+    assert hash_col.hash is not None and hash_col.encrypt is None
+
+
+def test_duplicate_column_rejects_existing_dest(tmp_path):
+    src = _csv(tmp_path, "ssn,name\n1,Alice\n")
+    draft = PipelineConfigDraft.from_sample(src, "people")
+    with pytest.raises(ValueError, match="already exists"):
+        draft.duplicate_column("ssn", new_dest="name")
+
+
+def test_field_encryption_shape_failure_surfaced_via_config_loader(tmp_path):
+    # Authoring Validation reuses the loader's structural check; an encrypt on
+    # a non-string column is rejected at to_config() time.
+    src = _csv(tmp_path, "id\n1\n")
+    draft = PipelineConfigDraft.from_sample(src, "t")
+    draft.set_field_encryption("id", encrypt=EncryptDraft(key="env:K"))
+    with pytest.raises(ValueError, match="type: string"):
+        draft.to_config()
+
+
+def test_field_encryption_key_reference_must_be_a_placeholder(tmp_path):
+    src = _csv(tmp_path, "ssn\n1\n")
+    draft = PipelineConfigDraft.from_sample(src, "t")
+    draft.edit_column("ssn", type="string")
+    draft.set_field_encryption("ssn", encrypt=EncryptDraft(key="literal-secret"))
+    with pytest.raises(ValueError, match="env:NAME or secrets:/"):
+        draft.to_config()
+
+
+def test_column_by_dest_raises_for_unknown_dest(tmp_path):
+    src = _csv(tmp_path, "id\n1\n")
+    draft = PipelineConfigDraft.from_sample(src, "t")
+    with pytest.raises(KeyError):
+        draft.column_by_dest("nope")
+
+
+def test_field_encryption_columns_lists_only_declared(tmp_path):
+    src = _csv(tmp_path, "ssn,name\n1,Alice\n")
+    draft = PipelineConfigDraft.from_sample(src, "people")
+    draft.edit_column("ssn", type="string")
+    draft.set_field_encryption("ssn", encrypt=EncryptDraft(key="env:K"))
+    assert [c.dest for c in draft.field_encryption_columns()] == ["ssn"]

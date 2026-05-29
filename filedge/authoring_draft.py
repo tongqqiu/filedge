@@ -29,6 +29,30 @@ DEFAULT_CDC_OPERATIONS = {
     "delete": ["d", "delete"],
 }
 
+ENCRYPT_ALGORITHM = "aes-256-gcm"
+HASH_ALGORITHM = "hmac-sha256"
+
+
+@dataclass
+class EncryptDraft:
+    """Per-column AES-256-GCM Field Encryption declaration (ADR-0014).
+
+    `key` is a Credential Placeholder reference (``env:NAME`` or
+    ``secrets:/abs/path``); the Authoring UI never collects, stores, or reads
+    the resolved key material.
+    """
+
+    key: str
+    algorithm: str = ENCRYPT_ALGORITHM
+
+
+@dataclass
+class HashDraft:
+    """Per-column HMAC-SHA256 Field Encryption hash declaration (ADR-0014)."""
+
+    key: str
+    algorithm: str = HASH_ALGORITHM
+
 
 @dataclass
 class ColumnDraft:
@@ -50,6 +74,8 @@ class ColumnDraft:
     notes: List[str] = field(default_factory=list)
     start: Optional[int] = None
     width: Optional[int] = None
+    encrypt: Optional[EncryptDraft] = None
+    hash: Optional[HashDraft] = None
 
 
 @dataclass
@@ -192,6 +218,79 @@ class PipelineConfigDraft:
             )
         self.connector_options[name] = value
 
+    def column_by_dest(self, dest: str) -> ColumnDraft:
+        """Return the column whose destination name matches, or raise."""
+        for c in self.columns:
+            if c.dest == dest:
+                return c
+        raise KeyError(f"No column with dest {dest!r} in the draft.")
+
+    def duplicate_column(self, dest: str, *, new_dest: str) -> ColumnDraft:
+        """Clone an existing column under a new destination name.
+
+        Supports the Field Encryption pattern where one source column produces
+        two destination columns (one encrypted, one hashed). Schema Inference
+        evidence is preserved; the new column starts with no encrypt/hash
+        declarations.
+        """
+        original = self.column_by_dest(dest)
+        if any(c.dest == new_dest for c in self.columns):
+            raise ValueError(f"A column with dest {new_dest!r} already exists.")
+        clone = ColumnDraft(
+            source=original.source,
+            dest=new_dest,
+            type=original.type,
+            required=original.required,
+            confidence=original.confidence,
+            null_count=original.null_count,
+            total_seen=original.total_seen,
+            notes=list(original.notes),
+            start=original.start,
+            width=original.width,
+        )
+        self.columns.append(clone)
+        return clone
+
+    def set_field_encryption(
+        self,
+        dest: str,
+        *,
+        encrypt: Optional[EncryptDraft] = None,
+        hash: Optional[HashDraft] = None,
+    ) -> ColumnDraft:
+        """Declare an `encrypt:` and/or `hash:` block on a destination column.
+
+        Each call replaces the corresponding block. Pass ``None`` to leave the
+        existing block untouched; use :meth:`clear_field_encryption` to remove
+        a block. Key material is never collected — `encrypt.key` and `hash.key`
+        are Credential Placeholder references resolved at runtime.
+        """
+        col = self.column_by_dest(dest)
+        if encrypt is not None:
+            col.encrypt = encrypt
+        if hash is not None:
+            col.hash = hash
+        return col
+
+    def clear_field_encryption(
+        self,
+        dest: str,
+        *,
+        encrypt: bool = False,
+        hash: bool = False,
+    ) -> ColumnDraft:
+        """Remove the `encrypt:` and/or `hash:` block from a destination column."""
+        col = self.column_by_dest(dest)
+        if encrypt:
+            col.encrypt = None
+        if hash:
+            col.hash = None
+        return col
+
+    def field_encryption_columns(self) -> list[ColumnDraft]:
+        """Destination columns that declare an encrypt or hash block."""
+        return [c for c in self.columns if c.encrypt is not None or c.hash is not None]
+
     def required_connector_settings_missing(self) -> list[str]:
         """Return required non-secret Connector settings that still need values."""
         descriptor = connector_descriptor(self.connector_type)
@@ -292,4 +391,14 @@ class PipelineConfigDraft:
         if self.fmt == "fixed_width":
             data["start"] = column.start
             data["width"] = column.width
+        if column.encrypt is not None:
+            data["encrypt"] = {
+                "algorithm": column.encrypt.algorithm,
+                "key": column.encrypt.key,
+            }
+        if column.hash is not None:
+            data["hash"] = {
+                "algorithm": column.hash.algorithm,
+                "key": column.hash.key,
+            }
         return data

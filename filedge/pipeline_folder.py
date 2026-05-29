@@ -64,6 +64,7 @@ def write_pipeline_folder(
     audit_export: Optional[str] = None,
     confidence_acknowledgements: Optional[list[dict]] = None,
     credential_placeholders: Optional[list[dict]] = None,
+    field_encryption_columns: Optional[list[dict]] = None,
 ) -> PipelineFolderResult:
     """Write a Pipeline Folder for `config` and register it in the workspace.
 
@@ -110,6 +111,7 @@ def write_pipeline_folder(
         audit_export=audit_export,
         confidence_acknowledgements=confidence_acknowledgements or [],
         credential_placeholders=credential_placeholders or [],
+        field_encryption_columns=field_encryption_columns or [],
     )
     with open(runbook_path, "w") as f:
         f.write(runbook)
@@ -158,6 +160,7 @@ def _render_runbook(
     audit_export: str,
     confidence_acknowledgements: list[dict],
     credential_placeholders: list[dict],
+    field_encryption_columns: list[dict],
 ) -> str:
     """Render the non-secret Authoring Runbook Markdown for one Pipeline."""
     config_rel = f"{folder_rel}/{CONFIG_FILENAME}"
@@ -176,6 +179,9 @@ def _render_runbook(
         confidence_acknowledgements
     )
     credential_section = _render_credential_placeholders(credential_placeholders)
+    field_encryption_section = _render_field_encryption_columns(
+        field_encryption_columns
+    )
     return f"""# Authoring Runbook: {pipeline_id}
 
 A non-secret companion note produced during Pipeline Authoring. It records how
@@ -208,6 +214,10 @@ Folder, so this folder accumulates no source data or PII.
 
 {credential_section}
 
+## Field Encryption
+
+{field_encryption_section}
+
 ## Validation Scope assumptions
 
 Authoring Validation covered Parser readability, Column Tolerance, Strict Mode,
@@ -234,6 +244,38 @@ def _render_confidence_acknowledgements(acknowledgements: list[dict]) -> str:
             f"accepted `{item.get('confidence', '')}` Confidence Tier. "
             f"Evidence: {item.get('evidence', '')}"
         )
+    return "\n".join(lines)
+
+
+def _render_field_encryption_columns(columns: list[dict]) -> str:
+    """Render declared Field Encryption columns; key material is never read.
+
+    Each `key` value is a Credential Placeholder reference (``env:NAME`` /
+    ``secrets:/abs/path``), not the resolved secret, so the Runbook stays
+    non-secret by construction.
+    """
+    if not columns:
+        return "No Field Encryption columns declared."
+    lines = []
+    for item in columns:
+        source = item.get("source", "")
+        dest = item.get("dest", "")
+        parts = [f"- Source `{source}` -> destination `{dest}`"]
+        encrypt = item.get("encrypt")
+        if encrypt:
+            parts.append(
+                f"encrypt `{encrypt.get('algorithm', '')}` "
+                f"using key reference `{encrypt.get('key', '')}` "
+                "(key material not read)"
+            )
+        hash_block = item.get("hash")
+        if hash_block:
+            parts.append(
+                f"hash `{hash_block.get('algorithm', '')}` "
+                f"using key reference `{hash_block.get('key', '')}` "
+                "(key material not read)"
+            )
+        lines.append("; ".join(parts))
     return "\n".join(lines)
 
 

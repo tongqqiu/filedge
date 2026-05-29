@@ -452,6 +452,129 @@ def test_authoring_workflow_rejects_fixed_width_layout_for_other_formats(tmp_pat
         )
 
 
+def test_authoring_workflow_declares_field_encryption_on_destination_columns(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "ssn,name\n123-45-6789,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.draft.edit_column("ssn", type="string")
+    workflow.set_field_encryption(
+        "ssn",
+        encrypt_key="env:SSN_ENC_KEY",
+        hash_key="env:SSN_HASH_KEY",
+    )
+    _acknowledge_all(workflow)
+
+    result = workflow.generate()
+    config = load_config(result.config_path)
+    runbook = open(result.runbook_path).read()
+
+    ssn = next(c for c in config.columns if c.dest == "ssn")
+    assert ssn.encrypt.algorithm == "aes-256-gcm"
+    assert ssn.encrypt.key == "env:SSN_ENC_KEY"
+    assert ssn.hash.algorithm == "hmac-sha256"
+    assert ssn.hash.key == "env:SSN_HASH_KEY"
+    assert "Source `ssn` -> destination `ssn`" in runbook
+    assert "encrypt `aes-256-gcm`" in runbook
+    assert "hash `hmac-sha256`" in runbook
+    assert "env:SSN_ENC_KEY" in runbook
+
+
+def test_authoring_workflow_supports_two_destinations_one_source(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "ssn,name\n1,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.draft.edit_column("ssn", type="string")
+    workflow.duplicate_column("ssn", new_dest="ssn_hash")
+    workflow.set_field_encryption("ssn", encrypt_key="env:SSN_ENC_KEY")
+    workflow.set_field_encryption("ssn_hash", hash_key="env:SSN_HASH_KEY")
+    _acknowledge_all(workflow)
+
+    result = workflow.generate()
+    config = load_config(result.config_path)
+
+    ssn_columns = [c for c in config.columns if c.source == "ssn"]
+    assert {c.dest for c in ssn_columns} == {"ssn", "ssn_hash"}
+
+
+def test_authoring_workflow_blocks_generation_on_field_encryption_shape_failure(
+    tmp_path,
+):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    # encrypt is structurally only valid on type: string
+    workflow.set_field_encryption("id", encrypt_key="env:K")
+    _acknowledge_all(workflow)
+
+    with pytest.raises(ValueError, match="type: string"):
+        workflow.validate()
+
+
+def test_authoring_workflow_never_leaks_field_encryption_key_material(
+    tmp_path, monkeypatch
+):
+    secret = "super-secret-aes-256-key-material"
+    monkeypatch.setenv("SSN_ENC_KEY", secret)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "ssn,name\n123,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.draft.edit_column("ssn", type="string")
+    workflow.set_field_encryption("ssn", encrypt_key="env:SSN_ENC_KEY")
+    _acknowledge_all(workflow)
+
+    result = workflow.generate()
+
+    for path in (result.config_path, result.runbook_path, result.registry_path):
+        assert secret not in open(path).read()
+
+
+def test_authoring_workflow_field_encryption_declarations_lists_columns(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "ssn,name\n1,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.draft.edit_column("ssn", type="string")
+    workflow.set_field_encryption(
+        "ssn",
+        encrypt_key="env:K",
+        hash_key="env:H",
+    )
+
+    declarations = workflow.field_encryption_declarations()
+    assert declarations == [
+        {
+            "source": "ssn",
+            "dest": "ssn",
+            "encrypt": {"algorithm": "aes-256-gcm", "key": "env:K"},
+            "hash": {"algorithm": "hmac-sha256", "key": "env:H"},
+        }
+    ]
+
+
 def test_authoring_workflow_requires_draft_for_validation_and_generation(tmp_path):
     workflow = AuthoringWorkflow(
         file=str(tmp_path / "missing.txt"),

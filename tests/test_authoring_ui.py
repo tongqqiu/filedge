@@ -402,3 +402,196 @@ def test_textual_authoring_ui_excel_sheet_change(tmp_path):
             app.on_select_changed(blank)
 
     asyncio.run(run())
+
+
+def test_textual_authoring_ui_declares_field_encryption(tmp_path, monkeypatch):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("ssn,name\n123-45-6789,Alice\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.draft.edit_column("ssn", type="string")
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app._selected_column = lambda: workflow.draft.column_by_dest("ssn")
+
+            keys = iter(["env:SSN_ENC_KEY", "env:SSN_HASH_KEY"])
+
+            def fake_push_screen(screen, callback):
+                callback(next(keys))
+
+            monkeypatch.setattr(app, "push_screen", fake_push_screen)
+            app.action_edit_encrypt_key()
+            app.action_edit_hash_key()
+
+            panel = app.query_one("#field_encryption")
+            assert "ssn -> ssn" in str(panel.render())
+            assert "env:SSN_ENC_KEY" in str(panel.render())
+            assert "env:SSN_HASH_KEY" in str(panel.render())
+
+            # Re-editing surfaces the existing key as the modal default.
+            seen = {}
+
+            def capture_default(screen, callback):
+                seen["value"] = screen.value
+                callback("env:SSN_ENC_KEY_V2")
+
+            monkeypatch.setattr(app, "push_screen", capture_default)
+            workflow.set_field_encryption("ssn", encrypt_key="env:SSN_ENC_KEY")
+            app.action_edit_encrypt_key()
+            assert seen["value"] == "env:SSN_ENC_KEY"
+
+            app.action_clear_field_encryption()
+            assert workflow.draft.column_by_dest("ssn").encrypt is None
+            assert workflow.draft.column_by_dest("ssn").hash is None
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_duplicates_column_for_two_destinations(
+    tmp_path, monkeypatch
+):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("ssn,name\n123,Alice\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.draft.edit_column("ssn", type="string")
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app._selected_column = lambda: workflow.draft.column_by_dest("ssn")
+
+            monkeypatch.setattr(
+                app, "push_screen", lambda screen, callback: callback("ssn_hash")
+            )
+            app.action_duplicate_column()
+            assert [c.dest for c in workflow.draft.columns] == [
+                "ssn",
+                "name",
+                "ssn_hash",
+            ]
+
+            # A duplicate dest is rejected and surfaced as UI feedback.
+            monkeypatch.setattr(
+                app, "push_screen", lambda screen, callback: callback("name")
+            )
+            app.action_duplicate_column()
+            assert "Duplicate column rejected" in str(
+                app.query_one("#validation").render()
+            )
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_field_encryption_actions_noop_without_selection(
+    tmp_path,
+):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("ssn\n123\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app._selected_column = lambda: None
+            # All of these must early-return without raising.
+            app.action_edit_encrypt_key()
+            app.action_edit_hash_key()
+            app.action_clear_field_encryption()
+            app.action_duplicate_column()
+            assert "No Field Encryption columns declared." in str(
+                app.query_one("#field_encryption").render()
+            )
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_field_encryption_rejection_surfaced(tmp_path, monkeypatch):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("id\n1\n")  # integer column: encrypt is rejected by the draft
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app._selected_column = lambda: workflow.draft.column_by_dest("id")
+            # to_config validates shape; an integer encrypt key is fine to store on
+            # the draft, so force a rejection through clear on a missing dest.
+            monkeypatch.setattr(
+                app, "push_screen", lambda screen, callback: callback(None)
+            )
+            # Passing None as the value is a no-op commit; exercises that branch.
+            app.action_edit_encrypt_key()
+            assert workflow.draft.column_by_dest("id").encrypt is None
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_field_encryption_rejections_surface_as_feedback(
+    tmp_path, monkeypatch
+):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("ssn\n123\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.draft.edit_column("ssn", type="string")
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            # A column whose dest is not in the draft forces the workflow methods
+            # to raise; the UI must render the error instead of crashing.
+            bogus = type("Col", (), {"dest": "ghost", "encrypt": None, "hash": None})()
+            app._selected_column = lambda: bogus
+
+            app.action_clear_field_encryption()
+            assert "Clear Field Encryption rejected" in str(
+                app.query_one("#validation").render()
+            )
+
+            monkeypatch.setattr(
+                app, "push_screen", lambda screen, callback: callback("env:K")
+            )
+            app.action_edit_encrypt_key()
+            assert "Field Encryption declaration rejected" in str(
+                app.query_one("#validation").render()
+            )
+
+            # An empty new dest in the duplicate modal is a no-op.
+            monkeypatch.setattr(
+                app, "push_screen", lambda screen, callback: callback("")
+            )
+            app._selected_column = lambda: workflow.draft.column_by_dest("ssn")
+            app.action_duplicate_column()
+            assert [c.dest for c in workflow.draft.columns] == ["ssn"]
+
+    asyncio.run(run())

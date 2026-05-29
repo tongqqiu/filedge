@@ -64,6 +64,10 @@ class AuthoringApp(App):
         Binding("b", "edit_cdc_business_keys", "Business Key", priority=True),
         Binding("e", "edit_cdc_sequence", "Sequence", priority=True),
         Binding("o", "edit_connector_setting", "Connector Setting", priority=True),
+        Binding("E", "edit_encrypt_key", "Encrypt Key", priority=True),
+        Binding("H", "edit_hash_key", "Hash Key", priority=True),
+        Binding("X", "clear_field_encryption", "Clear Encryption", priority=True),
+        Binding("D", "duplicate_column", "Duplicate Column", priority=True),
         Binding("a", "ack_confidence", "Acknowledge", priority=True),
         Binding("v", "validate", "Validate", priority=True),
         Binding("g", "generate", "Generate", priority=True),
@@ -97,6 +101,7 @@ class AuthoringApp(App):
                 )
                 yield DataTable(id="connector_settings")
                 yield Static("", id="credentials")
+                yield Static("", id="field_encryption")
                 yield Static("", id="confidence")
                 if self.workflow.fmt == "excel":
                     yield Select(
@@ -114,6 +119,7 @@ class AuthoringApp(App):
         self._populate_cdc_settings()
         self._populate_connector()
         self._populate_confidence()
+        self._populate_field_encryption()
         self._populate_preview()
         self.query_one("#schema", DataTable).focus()
 
@@ -261,6 +267,84 @@ class AuthoringApp(App):
             )
             return
         self._populate_confidence()
+
+    def action_edit_encrypt_key(self) -> None:
+        self._edit_field_encryption_key("encrypt")
+
+    def action_edit_hash_key(self) -> None:
+        self._edit_field_encryption_key("hash")
+
+    def action_clear_field_encryption(self) -> None:
+        column = self._selected_column()
+        if column is None:
+            return
+        try:
+            self.workflow.clear_field_encryption(
+                column.dest, encrypt=True, hash=True
+            )
+        except Exception as e:  # noqa: BLE001 - rendered as UI feedback
+            self.query_one("#validation", Static).update(
+                f"Clear Field Encryption rejected: {e}"
+            )
+            return
+        self._populate_schema()
+        self._populate_field_encryption()
+
+    def action_duplicate_column(self) -> None:
+        column = self._selected_column()
+        if column is None:
+            return
+
+        def commit(value: str | None) -> None:
+            if not value:
+                return
+            try:
+                self.workflow.duplicate_column(column.dest, new_dest=value)
+            except Exception as e:  # noqa: BLE001 - rendered as UI feedback
+                self.query_one("#validation", Static).update(
+                    f"Duplicate column rejected: {e}"
+                )
+                return
+            self._populate_schema()
+            self._populate_field_encryption()
+
+        return self.push_screen(
+            EditValueScreen(
+                f"New destination column name (clones `{column.dest}`)",
+                f"{column.dest}_copy",
+            ),
+            commit,
+        )
+
+    def _edit_field_encryption_key(self, kind: str) -> None:
+        column = self._selected_column()
+        if column is None:
+            return
+        current = (
+            (column.encrypt.key if column.encrypt else "")
+            if kind == "encrypt"
+            else (column.hash.key if column.hash else "")
+        )
+        label = (
+            "Field Encryption key reference (env:NAME or secrets:/abs/path)\n"
+            "Key material is never collected by the Authoring UI."
+        )
+
+        def commit(value: str | None) -> None:
+            if value is None:
+                return
+            kwargs = {"encrypt_key": value} if kind == "encrypt" else {"hash_key": value}
+            try:
+                self.workflow.set_field_encryption(column.dest, **kwargs)
+            except Exception as e:  # noqa: BLE001 - rendered as UI feedback
+                self.query_one("#validation", Static).update(
+                    f"Field Encryption declaration rejected: {e}"
+                )
+                return
+            self._populate_schema()
+            self._populate_field_encryption()
+
+        return self.push_screen(EditValueScreen(label, current), commit)
 
     def action_generate(self) -> None:
         try:
@@ -415,6 +499,28 @@ class AuthoringApp(App):
                 f"({state}); {review.evidence}"
             )
         self.query_one("#confidence", Static).update("\n".join(lines))
+
+    def _populate_field_encryption(self) -> None:
+        panel = self.query_one("#field_encryption", Static)
+        declarations = self.workflow.field_encryption_declarations()
+        if not declarations:
+            panel.update("No Field Encryption columns declared.")
+            return
+        lines = ["Field Encryption (key material not collected)"]
+        for item in declarations:
+            parts = [f"- {item['source']} -> {item['dest']}"]
+            if item.get("encrypt"):
+                parts.append(
+                    f"encrypt {item['encrypt']['algorithm']} "
+                    f"key={item['encrypt']['key']}"
+                )
+            if item.get("hash"):
+                parts.append(
+                    f"hash {item['hash']['algorithm']} "
+                    f"key={item['hash']['key']}"
+                )
+            lines.append("; ".join(parts))
+        panel.update("\n".join(lines))
 
     def _populate_preview(self) -> None:
         table = self.query_one("#preview", DataTable)
