@@ -416,7 +416,9 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding, sheet):
 
 
 @cli.command()
-@click.argument("sample_file")
+@click.argument("sample_file", required=False)
+@click.option("--pipeline", "pipeline", default=None,
+              help="Re-author an existing Pipeline Folder (workspace-relative path).")
 @click.option("--format", "fmt", default=None, type=_FORMAT_CHOICE,
               help="File format (auto-detected from extension)")
 @click.option("--sample-rows", default=1000, show_default=True, help="Number of rows to sample")
@@ -430,8 +432,12 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding, sheet):
 @click.option("--encoding", default=None, help="File encoding override")
 @click.option("--sheet", default=None,
               help="Excel sheet name or 0-based index. Default: first sheet.")
-def author(sample_file, fmt, sample_rows, dest_table, out, workspace, encoding, sheet):
-    """Launch the local Authoring UI for a sample File."""
+def author(sample_file, pipeline, fmt, sample_rows, dest_table, out, workspace, encoding, sheet):
+    """Launch the local Authoring UI.
+
+    Pass a SAMPLE_FILE to author a new Pipeline from scratch, or `--pipeline
+    <folder>` to re-open an existing Pipeline Folder and revise its config.
+    """
     try:
         from filedge.authoring_ui import AuthoringApp
         from filedge.authoring_workflow import AuthoringWorkflow
@@ -439,24 +445,40 @@ def author(sample_file, fmt, sample_rows, dest_table, out, workspace, encoding, 
         click.echo(str(e), err=True)
         sys.exit(1)
 
-    if sheet is not None and fmt is not None and fmt != "excel":
-        click.echo("Error: --sheet is only valid with --format excel.", err=True)
+    if pipeline is not None and sample_file is not None:
+        click.echo(
+            "Error: pass either a SAMPLE_FILE or --pipeline, not both.", err=True
+        )
+        sys.exit(2)
+    if pipeline is None and sample_file is None:
+        click.echo("Error: pass a SAMPLE_FILE or --pipeline <folder>.", err=True)
         sys.exit(2)
 
-    if dest_table is None:
-        dest_table = os.path.splitext(os.path.basename(sample_file))[0]
-
     try:
-        workflow = AuthoringWorkflow.start(
-            file=sample_file,
-            workspace=workspace,
-            dest_table=dest_table,
-            fmt=fmt,
-            sample_rows=sample_rows,
-            encoding=encoding,
-            sheet=_parse_sheet_selector(sheet),
-            out=out,
-        )
+        if pipeline is not None:
+            workflow = AuthoringWorkflow.open_folder(
+                folder=pipeline,
+                workspace=workspace,
+                sample_rows=sample_rows,
+            )
+        else:
+            if sheet is not None and fmt is not None and fmt != "excel":
+                click.echo(
+                    "Error: --sheet is only valid with --format excel.", err=True
+                )
+                sys.exit(2)
+            if dest_table is None:
+                dest_table = os.path.splitext(os.path.basename(sample_file))[0]
+            workflow = AuthoringWorkflow.start(
+                file=sample_file,
+                workspace=workspace,
+                dest_table=dest_table,
+                fmt=fmt,
+                sample_rows=sample_rows,
+                encoding=encoding,
+                sheet=_parse_sheet_selector(sheet),
+                out=out,
+            )
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(2)

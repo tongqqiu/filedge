@@ -756,3 +756,137 @@ def test_requeue_by_filename_preserves_source_metadata_cli(db_url):
     assert record.state == "PENDING"
     assert record.source_type == "api"
     assert record.manifest_payload == '{"foo":1}'
+
+
+def test_author_pipeline_flag_opens_existing_folder(tmp_path, monkeypatch):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+
+    # Author a Folder from scratch so there is something to re-open.
+    from filedge.authoring_workflow import AuthoringWorkflow
+
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    sample = tmp_path / "people.csv"
+    sample.write_text("id,name\n1,Alice\n")
+    wf = AuthoringWorkflow.start(
+        file=str(sample), workspace=str(workspace), dest_table="people"
+    )
+    wf.validate()
+    for review in wf.confidence_reviews():
+        wf.acknowledge_confidence_tier(review.source)
+    wf.generate()
+
+    # Capture the workflow the TUI would receive, without launching the TUI.
+    captured = {}
+
+    class FakeApp:
+        def __init__(self, workflow):
+            captured["workflow"] = workflow
+
+        def run(self):
+            captured["ran"] = True
+
+    import filedge.authoring_ui as ui
+
+    monkeypatch.setattr(ui, "AuthoringApp", FakeApp)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["author", "--pipeline", "pipelines/people", "--workspace", str(workspace)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["ran"] is True
+    assert captured["workflow"].reauthor is True
+    assert {c.source for c in captured["workflow"].draft.columns} == {"id", "name"}
+
+
+def test_author_rejects_both_sample_and_pipeline(tmp_path):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+    sample = tmp_path / "s.csv"
+    sample.write_text("id\n1\n")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["author", str(sample), "--pipeline", "pipelines/x"]
+    )
+    assert result.exit_code == 2
+    assert "not both" in result.output
+
+
+def test_author_requires_sample_or_pipeline(tmp_path):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["author"])
+    assert result.exit_code == 2
+    assert "SAMPLE_FILE or --pipeline" in result.output
+
+
+def test_author_from_scratch_launches_tui(tmp_path, monkeypatch):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    sample = tmp_path / "people.csv"
+    sample.write_text("id,name\n1,Alice\n")
+
+    captured = {}
+
+    class FakeApp:
+        def __init__(self, workflow):
+            captured["workflow"] = workflow
+
+        def run(self):
+            captured["ran"] = True
+
+    import filedge.authoring_ui as ui
+
+    monkeypatch.setattr(ui, "AuthoringApp", FakeApp)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["author", str(sample), "--workspace", str(workspace)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["ran"] is True
+    # dest_table defaults to the sample File stem; from-scratch is not re-author.
+    assert captured["workflow"].dest_table == "people"
+    assert captured["workflow"].reauthor is False
+
+
+def test_author_pipeline_reports_clear_error_for_unknown_folder(tmp_path, monkeypatch):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+
+    # Never launch a TUI even if construction unexpectedly succeeds.
+    import filedge.authoring_ui as ui
+
+    monkeypatch.setattr(ui, "AuthoringApp", lambda wf: type("A", (), {"run": lambda s: None})())
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["author", "--pipeline", "pipelines/missing", "--workspace", str(workspace)],
+    )
+
+    assert result.exit_code == 2
+    assert "Error:" in result.output
+
+
+def test_author_rejects_sheet_without_excel_format(tmp_path):
+    if importlib.util.find_spec("textual") is None:
+        pytest.skip("textual extra not installed")
+    sample = tmp_path / "s.csv"
+    sample.write_text("id\n1\n")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["author", str(sample), "--format", "csv", "--sheet", "Orders"]
+    )
+    assert result.exit_code == 2
+    assert "--sheet is only valid with --format excel" in result.output
