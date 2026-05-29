@@ -139,6 +139,28 @@ class AuthoringWorkflow:
         self.preview_rows = self._session().preview(num_rows=5)
         self.confidence_acknowledgements.clear()
 
+    def write_modes(self) -> list[str]:
+        """Return Write Modes available during Pipeline Authoring."""
+        return ["append", "truncate", "cdc"]
+
+    def choose_write_mode(self, write_mode: str) -> None:
+        """Select append, truncate, or cdc Write Mode."""
+        self._require_draft().choose_write_mode(write_mode)
+        self.validation_report = None
+
+    def set_cdc_settings(
+        self,
+        *,
+        business_keys: list[str] | None = None,
+        sequence_by: str | None = None,
+    ) -> None:
+        """Record CDC File business key and sequence column settings."""
+        self._require_draft().set_cdc_settings(
+            business_keys=business_keys,
+            sequence_by=sequence_by,
+        )
+        self.validation_report = None
+
     def confidence_reviews(self) -> list[ConfidenceTierReview]:
         """List risky Confidence Tiers and whether each was acknowledged."""
         if self.draft is None:

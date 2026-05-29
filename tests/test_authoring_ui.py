@@ -73,6 +73,77 @@ def test_textual_authoring_ui_blocks_generation_until_confidence_ack(tmp_path):
     asyncio.run(run())
 
 
+def test_textual_authoring_ui_selects_cdc_and_edits_cdc_settings(
+    tmp_path, monkeypatch
+):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("id,op,updated_at,name\n1,insert,10,Alice\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            event = type(
+                "Event",
+                (),
+                {
+                    "select": type("SelectRef", (), {"id": "write_mode"})(),
+                    "value": "cdc",
+                },
+            )()
+            app.on_select_changed(event)
+            cdc_panel = app.query_one("#cdc_settings")
+            assert "CDC business key column(s): (missing)" in str(cdc_panel.render())
+
+            values = iter(["id", "updated_at"])
+
+            def fake_push_screen(screen, callback):
+                callback(next(values))
+
+            monkeypatch.setattr(app, "push_screen", fake_push_screen)
+            app.action_edit_cdc_business_keys()
+            app.action_edit_cdc_sequence()
+
+            assert "CDC business key column(s): id" in str(cdc_panel.render())
+            assert "CDC sequence column: updated_at" in str(cdc_panel.render())
+
+        assert workflow.draft.write_mode == "cdc"
+        assert workflow.draft.cdc_keys == ["id"]
+        assert workflow.draft.cdc_sequence_by == "updated_at"
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_surfaces_write_mode_validation_failures(tmp_path):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("id,op,updated_at,name\n1,insert,10,Alice\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.choose_write_mode("cdc")
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app.action_validate()
+            validation = str(app.query_one("#validation").render())
+            assert "Write Mode failures" in validation
+            assert "business key" in validation
+            assert "sequence column" in validation
+
+    asyncio.run(run())
+
+
 def test_edit_value_screen_submits_and_cancels(monkeypatch):
     screen = EditValueScreen("Destination", "name")
     dismissed = []

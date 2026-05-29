@@ -1,6 +1,10 @@
 """Textual shell for the Authoring UI."""
 
-from filedge.authoring_validation import SCOPE_COLUMN_TOLERANCE, SCOPE_STRICT_MODE
+from filedge.authoring_validation import (
+    SCOPE_COLUMN_TOLERANCE,
+    SCOPE_STRICT_MODE,
+    SCOPE_WRITE_MODE,
+)
 from filedge.authoring_workflow import AuthoringWorkflow
 
 try:
@@ -57,6 +61,8 @@ class AuthoringApp(App):
         Binding("d", "edit_dest", "Dest", priority=True),
         Binding("t", "edit_type", "Type", priority=True),
         Binding("r", "toggle_required", "Required", priority=True),
+        Binding("b", "edit_cdc_business_keys", "Business Key", priority=True),
+        Binding("e", "edit_cdc_sequence", "Sequence", priority=True),
         Binding("a", "ack_confidence", "Acknowledge", priority=True),
         Binding("v", "validate", "Validate", priority=True),
         Binding("g", "generate", "Generate", priority=True),
@@ -73,6 +79,14 @@ class AuthoringApp(App):
             yield DataTable(id="schema")
             with Vertical(id="side"):
                 yield Static(self._summary(), id="summary")
+                yield Select(
+                    [(mode, mode) for mode in self.workflow.write_modes()],
+                    value=self.workflow.draft.write_mode
+                    if self.workflow.draft is not None
+                    else "append",
+                    id="write_mode",
+                )
+                yield Static("", id="cdc_settings")
                 yield Static("", id="confidence")
                 if self.workflow.fmt == "excel":
                     yield Select(
@@ -87,6 +101,7 @@ class AuthoringApp(App):
 
     def on_mount(self) -> None:
         self._populate_schema()
+        self._populate_cdc_settings()
         self._populate_confidence()
         self._populate_preview()
         self.query_one("#schema", DataTable).focus()
@@ -96,8 +111,18 @@ class AuthoringApp(App):
             self.workflow.choose_sheet(event.value)
             self.query_one("#summary", Static).update(self._summary())
             self._populate_schema()
+            self._populate_cdc_settings()
             self._populate_confidence()
             self._populate_preview()
+        elif event.select.id == "write_mode" and event.value is not Select.BLANK:
+            try:
+                self.workflow.choose_write_mode(str(event.value))
+            except Exception as e:  # noqa: BLE001 - rendered as UI feedback
+                self.query_one("#validation", Static).update(
+                    f"Write Mode selection rejected: {e}"
+                )
+                return
+            self._populate_cdc_settings()
 
     def action_validate(self) -> None:
         report = self.workflow.validate()
@@ -107,6 +132,11 @@ class AuthoringApp(App):
             f for f in report.findings_in(SCOPE_COLUMN_TOLERANCE) if not f.ok
         ]
         strict_mode = [f for f in report.findings_in(SCOPE_STRICT_MODE) if not f.ok]
+        write_mode = [f for f in report.findings_in(SCOPE_WRITE_MODE) if not f.ok]
+        if write_mode:
+            lines.append("")
+            lines.append("Write Mode failures")
+            lines.extend(f"- {f.message}" for f in write_mode)
         if column_tolerance:
             lines.append("")
             lines.append("Column Tolerance failures")
@@ -146,6 +176,35 @@ class AuthoringApp(App):
         self.workflow.draft.edit_column(column.source, required=not column.required)
         self._populate_schema()
         self._populate_confidence()
+
+    def action_edit_cdc_business_keys(self) -> None:
+        if self.workflow.draft is None or self.workflow.draft.write_mode != "cdc":
+            return
+
+        def commit(value: str | None) -> None:
+            if value is None:
+                return
+            keys = [part.strip() for part in value.split(",")]
+            self.workflow.set_cdc_settings(business_keys=keys)
+            self._populate_cdc_settings()
+
+        value = ", ".join(self.workflow.draft.cdc_keys)
+        return self.push_screen(EditValueScreen("CDC business key column(s)", value), commit)
+
+    def action_edit_cdc_sequence(self) -> None:
+        if self.workflow.draft is None or self.workflow.draft.write_mode != "cdc":
+            return
+
+        def commit(value: str | None) -> None:
+            if value is None:
+                return
+            self.workflow.set_cdc_settings(sequence_by=value)
+            self._populate_cdc_settings()
+
+        return self.push_screen(
+            EditValueScreen("CDC sequence column", self.workflow.draft.cdc_sequence_by),
+            commit,
+        )
 
     def action_ack_confidence(self) -> None:
         column = self._selected_column()
@@ -215,6 +274,23 @@ class AuthoringApp(App):
             f"Sample File: {self.workflow.file}\n"
             f"Format: {self.workflow.fmt}\n"
             f"Destination: {self.workflow.dest_table}"
+        )
+
+    def _populate_cdc_settings(self) -> None:
+        panel = self.query_one("#cdc_settings", Static)
+        draft = self.workflow.draft
+        if draft is None:
+            panel.update("Write Mode: manual")
+            return
+        if draft.write_mode != "cdc":
+            panel.update(f"Write Mode: {draft.write_mode}")
+            return
+        keys = ", ".join(draft.cdc_keys) if draft.cdc_keys else "(missing)"
+        sequence = draft.cdc_sequence_by or "(missing)"
+        panel.update(
+            "Write Mode: cdc\n"
+            f"CDC business key column(s): {keys}\n"
+            f"CDC sequence column: {sequence}"
         )
 
     def _populate_schema(self) -> None:

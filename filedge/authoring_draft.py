@@ -23,6 +23,13 @@ from filedge.config import PipelineConfig, config_from_dict
 # A placeholder Destination Connector, enough for config loading to pass. The
 # Connector picker (#152) replaces it with a real type and non-secret settings.
 _PLACEHOLDER_CONNECTOR = {"type": "sqlite", "url": "sqlite:///REPLACE_ME.db"}
+WRITE_MODES = ("append", "truncate", "cdc")
+DEFAULT_CDC_OPERATION_COLUMN = "op"
+DEFAULT_CDC_OPERATIONS = {
+    "insert": ["c", "insert"],
+    "update": ["u", "update"],
+    "delete": ["d", "delete"],
+}
 
 
 @dataclass
@@ -56,6 +63,9 @@ class PipelineConfigDraft:
     fmt: str = "csv"
     write_mode: str = "append"
     sheet: Optional[object] = None
+    cdc_keys: List[str] = field(default_factory=list)
+    cdc_sequence_by: str = ""
+    cdc_operation_column: str = DEFAULT_CDC_OPERATION_COLUMN
 
     @classmethod
     def from_sample(
@@ -185,6 +195,26 @@ class PipelineConfigDraft:
         self.columns.append(col)
         return col
 
+    def choose_write_mode(self, write_mode: str) -> None:
+        """Select the Write Mode for generated Pipeline Config."""
+        if write_mode not in WRITE_MODES:
+            raise ValueError(
+                f"Write Mode must be one of {', '.join(WRITE_MODES)}, got {write_mode!r}."
+            )
+        self.write_mode = write_mode
+
+    def set_cdc_settings(
+        self,
+        *,
+        business_keys: Optional[List[str]] = None,
+        sequence_by: Optional[str] = None,
+    ) -> None:
+        """Set CDC-specific Write Mode fields captured by the Authoring UI."""
+        if business_keys is not None:
+            self.cdc_keys = [key for key in business_keys if key]
+        if sequence_by is not None:
+            self.cdc_sequence_by = sequence_by
+
     def to_config_dict(self) -> dict:
         """Emit a Pipeline Config mapping for this draft."""
         data = {
@@ -196,6 +226,16 @@ class PipelineConfigDraft:
         }
         if self.fmt == "excel":
             data["excel"] = {"sheet": self.sheet}
+        if self.write_mode == "cdc":
+            data["cdc"] = {
+                "keys": list(self.cdc_keys),
+                "operation_column": self.cdc_operation_column,
+                "sequence_by": self.cdc_sequence_by,
+                "operations": {
+                    key: list(values)
+                    for key, values in DEFAULT_CDC_OPERATIONS.items()
+                },
+            }
         return data
 
     def to_config(self) -> PipelineConfig:
