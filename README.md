@@ -43,6 +43,7 @@ uv sync --extra dev --extra postgres         # + PostgreSQL
 uv sync --extra dev --extra bigquery         # + BigQuery
 uv sync --extra dev --extra databricks       # + Databricks
 uv sync --extra dev --extra duckdb           # + DuckDB
+uv sync --extra dev --extra authoring        # + Authoring UI
 ```
 
 Declare a pipeline:
@@ -77,6 +78,8 @@ filedge status --audit-db-url sqlite:///filedge.db
 
 Don't know the schema yet? `filedge inspect data.csv` samples the file and prints a `columns:` block with confidence tiers ready to paste.
 
+Prefer to author interactively? `filedge author data.csv` launches a local terminal UI that runs schema inference, lets you review columns, write modes, connectors, and field encryption, validates the result, and writes a ready-to-run pipeline folder. See the [author guide](docs/guides/author.md).
+
 ## Connectors
 
 The destination is configured via a `connector:` block in `pipeline.yaml`. Built-ins:
@@ -109,7 +112,7 @@ The audit DB and the destination are separate systems. A crash between connector
 
 ## More
 
-- Guides: [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [audit export](docs/guides/audit-export.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md) · [source manifests](docs/guides/source-manifests.md)
+- Guides: [author](docs/guides/author.md) · [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [audit export](docs/guides/audit-export.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md) · [source manifests](docs/guides/source-manifests.md)
 - Domain model: [CONTEXT.md](CONTEXT.md)
 - Architecture decisions:
   - [ADR-0001: Single-transaction commit](docs/adr/0001-single-transaction-commit.md)
@@ -123,6 +126,12 @@ The audit DB and the destination are separate systems. A crash between connector
   - [ADR-0009: Warehouse CDC applied-file markers](docs/adr/0009-warehouse-cdc-applied-file-markers.md)
   - [ADR-0010: Audit export static site](docs/adr/0010-audit-export-static-site.md)
   - [ADR-0011: Source manifest and lineage](docs/adr/0011-source-manifest-and-lineage.md)
+  - [ADR-0012: Excel format support](docs/adr/0012-excel-format-support.md)
+  - [ADR-0013: Fixed-width format support](docs/adr/0013-fixed-width-format-support.md)
+  - [ADR-0014: Column-level field encryption](docs/adr/0014-column-level-field-encryption.md)
+  - [ADR-0015: Control and Audit Platform starts with local Pipeline Authoring](docs/adr/0015-control-and-audit-platform-starts-with-local-pipeline-authoring.md)
+  - [ADR-0016: Authoring UI — Textual TUI](docs/adr/0016-authoring-ui-textual-tui.md)
+  - [ADR-0017: Pipeline Folder and Pipeline Registry layout](docs/adr/0017-pipeline-folder-and-registry-layout.md)
 
 ## License
 

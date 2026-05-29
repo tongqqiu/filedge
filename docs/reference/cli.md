@@ -31,6 +31,31 @@ See the [Inspect guide](../guides/inspect.md) for full details.
 
 ---
 
+## `filedge author`
+
+Launch the local Authoring UI for a sample file: review the inferred schema, choose write mode, connector, and field encryption, validate, and generate a Pipeline Folder. Requires the `authoring` extra (`uv sync --extra authoring`).
+
+```bash
+filedge author <sample-file> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `<sample-file>` | required | Sample file to author from (local path or cloud URI) |
+| `--format` | auto from extension | File format: `csv`, `ndjson`, `parquet`, `excel`, or `fixed_width` |
+| `--sample-rows` | 1000 | Number of rows to sample for schema inference |
+| `--dest-table` | sample file stem | Destination table name |
+| `--out` | from `--dest-table` | Pipeline Folder id/name override |
+| `--workspace` | `.` | Workspace root for the Pipeline Folder and Pipeline Registry |
+| `--encoding` | auto | File encoding override |
+| `--sheet` | first sheet | Excel sheet name or 0-based index (excel format only) |
+
+**Exit codes:** `0` on success, `1` if the `authoring` extra is not installed, `2` on error (bad file path, unrecognised format).
+
+See the [Author guide](../guides/author.md) for full details.
+
+---
+
 ## `filedge preview`
 
 Display rows of a file as a formatted table.
