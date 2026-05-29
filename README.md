@@ -78,7 +78,7 @@ filedge status --audit-db-url sqlite:///filedge.db
 
 Don't know the schema yet? `filedge inspect data.csv` samples the file and prints a `columns:` block with confidence tiers ready to paste.
 
-Prefer to author interactively? `filedge author data.csv` launches a local terminal UI that runs schema inference, lets you review columns, write modes, connectors, and field encryption, validates the result, and writes a ready-to-run pipeline folder. See the [author guide](docs/guides/author.md).
+Prefer to author interactively? `filedge author data.csv` launches a local terminal UI that runs schema inference, lets you review columns, write modes, connectors, and field encryption, validates the result, and writes a ready-to-run pipeline folder. To revise a pipeline later, `filedge author --pipeline pipelines/<id>` re-opens it in place — or run `filedge author` with no arguments to browse and pick from the registry. See the [author guide](docs/guides/author.md).
 
 ## Connectors
 

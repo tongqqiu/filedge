@@ -72,6 +72,14 @@ _Avoid_: pipeline builder, workflow designer, job designer.
 The first complete Pipeline Authoring path: start from a sample File, run Schema Inference, review columns, choose Pipeline Config settings, run Authoring Validation, and produce a `pipeline.yaml`. The Authoring Workflow starts from a File rather than a blank form because the File is the atomic unit of Filedge ingestion.
 _Avoid_: setup wizard, onboarding flow, dashboard workflow.
 
+### Re-Author
+The Authoring Workflow path that opens an already-generated Pipeline Folder instead of starting from a blank schema: load its `pipeline.yaml` back into a Pipeline Config Draft, edit it in the same screens as the from-scratch flow, and save back in place — `pipeline.yaml` rewritten and the Authoring Runbook regenerated with a new timestamp, the Pipeline Registry entry left untouched. Re-Author may run against the Runbook's original sample File or a freshly chosen one (which refreshes Confidence Tiers and surfaces Authoring Validation Drift); it round-trips every format, Connector, Write Mode, and Field Encryption declaration the from-scratch flow can produce. Like all Pipeline Authoring it performs no Run, opens no Audit DB, and contacts no Destination.
+_Avoid_: edit mode, pipeline migration, config sync.
+
+### Authoring Validation Drift
+Reviewer feedback raised during Re-Author when the loaded Pipeline Config disagrees with the freshly chosen sample File — a declared column absent from the File, or a `required` column carrying null/empty values in sampled rows. Drift is advisory and does not change the Authoring Validation outcome or relax Strict Mode; it surfaces what changed so the Authoring User can decide whether to revise the Config before saving back.
+_Avoid_: validation failure, schema error, breaking change.
+
 ### Pipeline Registry
 A local or project-level catalog of Filedge Pipelines used by the Control and Audit Platform to find Pipeline Configs, Watched Directories, Audit DB connection placeholders, and Audit Export destinations. A Pipeline Registry is created with the first authored Pipeline so the Authoring UI has one consistent workspace model; it does not combine Audit DBs or change the rule that one Audit DB maps to exactly one Pipeline.
 _Avoid_: shared audit database, global pipeline database, pipeline catalog.

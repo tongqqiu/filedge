@@ -33,15 +33,20 @@ See the [Inspect guide](../guides/inspect.md) for full details.
 
 ## `filedge author`
 
-Launch the local Authoring UI for a sample file: review the inferred schema, choose write mode, connector, and field encryption, validate, and generate a Pipeline Folder. Requires the `authoring` extra (`uv sync --extra authoring`).
+Launch the local Authoring UI: review the inferred schema, choose write mode, connector, and field encryption, validate, and generate a Pipeline Folder. Requires the `authoring` extra (`uv sync --extra authoring`).
+
+Pass a `<sample-file>` to author from scratch, or `--pipeline <folder>` to re-open an existing Pipeline Folder and revise its config in place. With neither argument, the UI opens a browse-and-pick screen of registered Pipelines when a Pipeline Registry exists in the workspace, and otherwise asks for a sample file or `--pipeline`.
 
 ```bash
 filedge author <sample-file> [options]
+filedge author --pipeline <folder> [options]
+filedge author [--workspace <dir>]            # browse the Pipeline Registry
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `<sample-file>` | required | Sample file to author from (local path or cloud URI) |
+| `<sample-file>` | — | Sample file to author from (local path or cloud URI). Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | Re-author an existing Pipeline Folder (workspace-relative path). Mutually exclusive with `<sample-file>` |
 | `--format` | auto from extension | File format: `csv`, `ndjson`, `parquet`, `excel`, or `fixed_width` |
 | `--sample-rows` | 1000 | Number of rows to sample for schema inference |
 | `--dest-table` | sample file stem | Destination table name |
@@ -50,7 +55,7 @@ filedge author <sample-file> [options]
 | `--encoding` | auto | File encoding override |
 | `--sheet` | first sheet | Excel sheet name or 0-based index (excel format only) |
 
-**Exit codes:** `0` on success, `1` if the `authoring` extra is not installed, `2` on error (bad file path, unrecognised format).
+**Exit codes:** `0` on success, `1` if the `authoring` extra is not installed, `2` on error (bad file path, unrecognised format, both `<sample-file>` and `--pipeline` given, or neither with no Registry to browse).
 
 See the [Author guide](../guides/author.md) for full details.
 
