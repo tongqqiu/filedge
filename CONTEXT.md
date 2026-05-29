@@ -88,6 +88,10 @@ _Avoid_: hosted platform, web app, server, studio.
 The executable core of the Authoring Workflow: a binding of a sample File, its resolved format, and an optional Pipeline Config under which the non-mutating Authoring operations — Schema Inference, file preview, and Authoring Validation — run. The Authoring Session owns format-specific parser binding (Excel sheet selection, Fixed-Width Layout) so the Operator CLI and the Authoring UI invoke the same operations without re-implementing dispatch. It performs no Run and mutates no Audit Records. Encoding falls back from an explicit override to the Pipeline Config's encoding to UTF-8; the Excel sheet falls back from an explicit selector to the Config's `excel.sheet` to the first sheet.
 _Avoid_: authoring context, session manager, parser session.
 
+### Pipeline Config Draft
+The editable, in-memory form of a Pipeline Config produced during the Authoring Workflow before any artifact is written. Built from Schema Inference over a sample File, it exposes per-column source name, destination name, Column Type, and required flag — carrying each column's Confidence Tier and inference evidence as read-only hints — and emits a Pipeline Config that round-trips through the same config loading the Operator CLI uses. A Pipeline Config Draft holds no secrets, runs no Run, and writes nothing to disk; persisting it is the Pipeline Folder writer's job.
+_Avoid_: pipeline builder, schema editor, form model.
+
 ### Authoring Validation
 Non-mutating feedback used during Pipeline Authoring to check whether a File and Pipeline Config agree before ingestion. It may preview rows, infer schema, validate file contents, and probe connector configuration shape, but it does not execute a Run or mutate Audit Records.
 _Avoid_: test run, trial run, UI run, dry ingestion.

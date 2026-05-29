@@ -72,6 +72,18 @@ class PipelineConfig:
 def load_config(path: str) -> PipelineConfig:
     with open(path) as f:
         data = yaml.safe_load(f)
+    return config_from_dict(data)
+
+
+def config_from_dict(data: dict) -> PipelineConfig:
+    """Build a `PipelineConfig` from an already-parsed config mapping.
+
+    The dict-in entry point shared by `load_config` (which reads YAML from disk)
+    and the Authoring Workflow, where a Pipeline Config Draft emits a config
+    mapping that must round-trip through the same validation rules without a
+    temporary file. All loading and validation lives here; `load_config` only
+    owns reading the file.
+    """
     columns = [
         ColumnMapping(
             source=c["source"],
