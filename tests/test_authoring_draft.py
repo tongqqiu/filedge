@@ -84,6 +84,29 @@ def test_to_config_round_trips_via_config_from_dict(tmp_path):
     assert by_source["name"].required is False
 
 
+def test_write_mode_and_cdc_settings_round_trip(tmp_path):
+    src = _csv(tmp_path, "id,op,updated_at\n1,insert,2026-01-01T00:00:00Z\n")
+    draft = PipelineConfigDraft.from_sample(src, "people")
+
+    draft.choose_write_mode("cdc")
+    draft.set_cdc_settings(business_keys=["id"], sequence_by="updated_at")
+    cfg = draft.to_config()
+
+    assert cfg.write_mode == "cdc"
+    assert cfg.cdc.keys == ["id"]
+    assert cfg.cdc.operation_column == "op"
+    assert cfg.cdc.sequence_by == "updated_at"
+    assert cfg.cdc.operations["delete"] == ["d", "delete"]
+
+
+def test_write_mode_rejects_unknown_mode(tmp_path):
+    src = _csv(tmp_path, "id\n1\n")
+    draft = PipelineConfigDraft.from_sample(src, "people")
+
+    with pytest.raises(ValueError, match="Write Mode"):
+        draft.choose_write_mode("merge")
+
+
 def test_to_config_dict_round_trips_through_file_loader(tmp_path):
     import yaml
 

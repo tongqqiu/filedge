@@ -127,9 +127,9 @@ def config_from_dict(data: dict) -> PipelineConfig:
     if cdc is not None:
         declared_sources = {column.source for column in columns}
         for key in cdc.keys:
-            if key not in declared_sources:
+            if key and key not in declared_sources:
                 raise ValueError(f"CDC key column {key!r} must be declared in columns")
-        if cdc.sequence_by not in declared_sources:
+        if cdc.sequence_by and cdc.sequence_by not in declared_sources:
             raise ValueError(
                 f"CDC sequence column {cdc.sequence_by!r} must be declared in columns"
             )

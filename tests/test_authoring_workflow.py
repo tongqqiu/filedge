@@ -5,6 +5,7 @@ import os
 import pytest
 
 from filedge.authoring_draft import ColumnDraft
+from filedge.authoring_validation import SCOPE_WRITE_MODE
 from filedge.authoring_workflow import AuthoringWorkflow
 from filedge.config import load_config
 from filedge.pipeline_registry import load_registry
@@ -250,6 +251,55 @@ def test_authoring_workflow_records_confidence_acknowledgements_in_runbook(tmp_p
     assert "Source `name` -> destination `name`" in runbook
     assert "accepted `ambiguous` Confidence Tier" in runbook
     assert "null_count=0" in runbook
+
+
+def test_authoring_workflow_blocks_cdc_generation_until_settings_are_valid(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,op,updated_at,name\n1,insert,10,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+
+    workflow.choose_write_mode("cdc")
+    workflow.acknowledge_confidence_tier("op")
+    workflow.acknowledge_confidence_tier("name")
+
+    report = workflow.validate()
+    failures = [f.message for f in report.findings_in(SCOPE_WRITE_MODE) if not f.ok]
+
+    assert not report.ok
+    assert any("business key" in message for message in failures)
+    assert any("sequence column" in message for message in failures)
+    with pytest.raises(ValueError, match="green"):
+        workflow.generate()
+
+
+def test_authoring_workflow_generates_cdc_pipeline_yaml(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,op,updated_at,name\n1,insert,10,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+
+    workflow.choose_write_mode("cdc")
+    workflow.set_cdc_settings(business_keys=["id"], sequence_by="updated_at")
+    workflow.acknowledge_confidence_tier("op")
+    workflow.acknowledge_confidence_tier("name")
+
+    result = workflow.generate()
+    config = load_config(result.config_path)
+    runbook = open(result.runbook_path).read()
+
+    assert config.write_mode == "cdc"
+    assert config.cdc.keys == ["id"]
+    assert config.cdc.sequence_by == "updated_at"
+    assert "- Write Mode: `cdc`" in runbook
 
 
 def test_authoring_workflow_generates_chosen_connector_and_credentials(tmp_path):
