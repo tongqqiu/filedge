@@ -43,6 +43,36 @@ class PipelineFolderResult:
     config_path: str  # absolute path to pipeline.yaml
     runbook_path: str  # absolute path to RUNBOOK.md
     registry_path: str  # absolute path to pipeline-registry.yaml
+    watched_directory: str  # Registry-recorded Watched Directory
+    audit_db: str  # Audit DB connection placeholder (never a literal value)
+    audit_export: str  # Registry-recorded Audit Export destination
+
+
+def operator_handoff_commands(
+    *,
+    sample_file: str,
+    config_path: str,
+    watched_directory: str,
+    audit_db: str,
+    audit_export: str,
+) -> list[str]:
+    """Render the post-generation Operator CLI handoff command list.
+
+    The single source of truth for the validate / healthcheck / run /
+    export-audit handoff. Both the Authoring Runbook and the Authoring UI's
+    `suggested_commands` render this list, so the command set and the Audit DB
+    shell-reference rule cannot drift between them. `audit_db` is a placeholder
+    (``env:NAME`` / ``secrets:/abs/path``); its resolved value is never read.
+    """
+    audit_ref = _audit_db_shell_ref(audit_db)
+    return [
+        f"filedge validate {sample_file} --config {config_path}",
+        f"filedge healthcheck --config {config_path} --audit-db-url {audit_ref}",
+        f"filedge run --dir {watched_directory} --config {config_path} "
+        f"--audit-db-url {audit_ref}",
+        f"filedge export-audit --audit-db-url {audit_ref} "
+        f"--output {audit_export}/index.html",
+    ]
 
 
 def slugify_pipeline_id(name: str) -> str:
@@ -133,6 +163,9 @@ def write_pipeline_folder(
         config_path=config_path,
         runbook_path=runbook_path,
         registry_path=registry_path(workspace),
+        watched_directory=watched_directory,
+        audit_db=audit_db,
+        audit_export=audit_export,
     )
 
 
@@ -164,16 +197,14 @@ def _render_runbook(
 ) -> str:
     """Render the non-secret Authoring Runbook Markdown for one Pipeline."""
     config_rel = f"{folder_rel}/{CONFIG_FILENAME}"
-    audit_ref = _audit_db_shell_ref(audit_db)
     commands = "\n".join(
-        [
-            f"filedge validate {sample_file} --config {config_rel}",
-            f"filedge healthcheck --config {config_rel} --audit-db-url {audit_ref}",
-            f"filedge run --dir {watched_directory} --config {config_rel} "
-            f"--audit-db-url {audit_ref}",
-            f"filedge export-audit --audit-db-url {audit_ref} "
-            f"--output {audit_export}/index.html",
-        ]
+        operator_handoff_commands(
+            sample_file=sample_file,
+            config_path=config_rel,
+            watched_directory=watched_directory,
+            audit_db=audit_db,
+            audit_export=audit_export,
+        )
     )
     confidence_section = _render_confidence_acknowledgements(
         confidence_acknowledgements

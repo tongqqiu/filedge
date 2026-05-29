@@ -584,8 +584,46 @@ def test_authoring_workflow_requires_draft_for_validation_and_generation(tmp_pat
     )
 
     assert workflow.suggested_commands() == []
-    assert workflow._audit_db_ref() == ""
     with pytest.raises(ValueError, match="Pipeline Config Draft"):
         workflow.validate()
     with pytest.raises(ValueError, match="Pipeline Config Draft"):
         workflow.generate()
+
+
+def test_authoring_workflow_edit_column_invalidates_validation(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n2,Bob\n")
+    workflow = AuthoringWorkflow.start(
+        file=src, workspace=str(workspace), dest_table="people"
+    )
+
+    assert workflow.validate().ok
+    assert workflow.validation_report is not None
+
+    # Editing a column through the Workflow seam invalidates the cached report,
+    # so a later generate() cannot ride a stale-green validation.
+    workflow.edit_column("id", dest="identifier")
+    assert workflow.validation_report is None
+    assert workflow.draft.column_by_dest("identifier").source == "id"
+
+
+def test_authoring_workflow_suggested_commands_match_runbook(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src, workspace=str(workspace), dest_table="people"
+    )
+    workflow.validate()
+    _acknowledge_all(workflow)
+    result = workflow.generate()
+
+    # One source of truth: every suggested command appears verbatim in the
+    # Authoring Runbook, including the quoted Audit DB shell reference.
+    runbook = open(result.runbook_path).read()
+    commands = workflow.suggested_commands()
+    assert commands  # non-empty after generation
+    for command in commands:
+        assert command in runbook
+    assert any('--audit-db-url "$PEOPLE_AUDIT_DB_URL"' in cmd for cmd in commands)
