@@ -16,6 +16,20 @@ from filedge.file_sample import FormatNotDetected, resolve_format, read_excel_sh
 from filedge.pipeline_folder import PipelineFolderResult, write_pipeline_folder
 
 
+RISKY_CONFIDENCE_TIERS = {"low", "ambiguous"}
+
+
+@dataclass(frozen=True)
+class ConfidenceTierReview:
+    """One low/ambiguous Confidence Tier decision surfaced for review."""
+
+    source: str
+    dest: str
+    confidence: str
+    evidence: str
+    acknowledged: bool = False
+
+
 @dataclass
 class AuthoringWorkflow:
     """One in-memory Authoring Workflow for a single sample File."""
@@ -33,6 +47,7 @@ class AuthoringWorkflow:
     generated: Optional[PipelineFolderResult] = None
     preview_rows: list[dict] = field(default_factory=list)
     excel_sheets: list[str] = field(default_factory=list)
+    confidence_acknowledgements: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def start(
@@ -122,6 +137,43 @@ class AuthoringWorkflow:
             self.dest_table, columns
         )
         self.preview_rows = self._session().preview(num_rows=5)
+        self.confidence_acknowledgements.clear()
+
+    def confidence_reviews(self) -> list[ConfidenceTierReview]:
+        """List risky Confidence Tiers and whether each was acknowledged."""
+        if self.draft is None:
+            return []
+        return [
+            ConfidenceTierReview(
+                source=c.source,
+                dest=c.dest,
+                confidence=c.confidence,
+                evidence=_confidence_evidence(c),
+                acknowledged=c.source in self.confidence_acknowledgements,
+            )
+            for c in self.draft.columns
+            if c.confidence in RISKY_CONFIDENCE_TIERS
+        ]
+
+    def acknowledge_confidence_tier(self, source: str) -> ConfidenceTierReview:
+        """Record reviewer acknowledgement for one risky Confidence Tier."""
+        for review in self.confidence_reviews():
+            if review.source == source:
+                self.confidence_acknowledgements[source] = review.evidence
+                return ConfidenceTierReview(
+                    source=review.source,
+                    dest=review.dest,
+                    confidence=review.confidence,
+                    evidence=review.evidence,
+                    acknowledged=True,
+                )
+        raise ValueError(
+            f"No low or ambiguous Confidence Tier column named {source!r}."
+        )
+
+    def unacknowledged_confidence_reviews(self) -> list[ConfidenceTierReview]:
+        """Risky Confidence Tier decisions still blocking artifact generation."""
+        return [r for r in self.confidence_reviews() if not r.acknowledged]
 
     def validate(self) -> AuthoringValidationReport:
         """Run Authoring Validation for the current draft."""
@@ -138,6 +190,13 @@ class AuthoringWorkflow:
     def generate(self) -> PipelineFolderResult:
         """Write the Pipeline Folder and update the Pipeline Registry."""
         draft = self._require_draft()
+        unacknowledged = self.unacknowledged_confidence_reviews()
+        if unacknowledged:
+            columns = ", ".join(r.source for r in unacknowledged)
+            raise ValueError(
+                "Every low or ambiguous Confidence Tier must be acknowledged "
+                f"before generation: {columns}."
+            )
         report = self.validation_report or self.validate()
         if not report.ok:
             raise ValueError("Authoring Validation must be green before generation.")
@@ -146,6 +205,16 @@ class AuthoringWorkflow:
             draft.to_config_dict(),
             sample_file=self.file,
             out=self.out,
+            confidence_acknowledgements=[
+                {
+                    "source": r.source,
+                    "dest": r.dest,
+                    "confidence": r.confidence,
+                    "evidence": r.evidence,
+                }
+                for r in self.confidence_reviews()
+                if r.acknowledged
+            ],
         )
         return self.generated
 
@@ -184,3 +253,13 @@ class AuthoringWorkflow:
             return ""
         env_name = self.generated.pipeline_id.upper().replace("-", "_")
         return f"${{{env_name}_AUDIT_DB_URL}}"
+
+
+def _confidence_evidence(column: ColumnDraft) -> str:
+    parts = [
+        f"null_count={column.null_count}",
+        f"total_seen={column.total_seen}",
+    ]
+    if column.notes:
+        parts.append("notes=" + "; ".join(column.notes))
+    return ", ".join(parts)

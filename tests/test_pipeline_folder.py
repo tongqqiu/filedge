@@ -104,6 +104,31 @@ def test_runbook_records_sample_path_and_suggested_commands(tmp_path):
     assert "env:ORDERS_AUDIT_DB_URL" in runbook
 
 
+def test_runbook_records_confidence_tier_acknowledgements(tmp_path):
+    workspace = str(tmp_path / "ws")
+    os.makedirs(workspace)
+    sample, config = _draft_config(tmp_path, "orders")
+
+    result = write_pipeline_folder(
+        workspace,
+        config,
+        sample_file=sample,
+        confidence_acknowledgements=[
+            {
+                "source": "name",
+                "dest": "customer_name",
+                "confidence": "ambiguous",
+                "evidence": "null_count=0, total_seen=2",
+            }
+        ],
+    )
+    runbook = open(result.runbook_path).read()
+
+    assert "Source `name` -> destination `customer_name`" in runbook
+    assert "accepted `ambiguous` Confidence Tier" in runbook
+    assert "null_count=0, total_seen=2" in runbook
+
+
 def test_out_override_sets_the_pipeline_id(tmp_path):
     workspace = str(tmp_path / "ws")
     os.makedirs(workspace)

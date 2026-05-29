@@ -15,6 +15,11 @@ def _file(tmp_path, name, body):
     return str(p)
 
 
+def _acknowledge_all(workflow):
+    for review in workflow.confidence_reviews():
+        workflow.acknowledge_confidence_tier(review.source)
+
+
 def test_authoring_workflow_happy_path_generates_artifacts(tmp_path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
@@ -36,6 +41,7 @@ def test_authoring_workflow_happy_path_generates_artifacts(tmp_path):
     report = workflow.validate()
     assert report.ok
 
+    _acknowledge_all(workflow)
     result = workflow.generate()
     assert os.path.isfile(result.config_path)
     assert os.path.isfile(result.runbook_path)
@@ -57,6 +63,7 @@ def test_authoring_workflow_blocks_generation_when_validation_is_red(tmp_path):
     report = workflow.validate()
 
     assert not report.ok
+    _acknowledge_all(workflow)
     with pytest.raises(ValueError, match="green"):
         workflow.generate()
 
@@ -82,6 +89,7 @@ def test_authoring_workflow_does_not_run_ingestion_or_touch_audit_db(
         workspace=str(workspace),
         dest_table="people",
     )
+    _acknowledge_all(workflow)
     workflow.generate()
 
 
@@ -97,6 +105,7 @@ def test_authoring_workflow_does_not_store_secret_material(tmp_path, monkeypatch
         workspace=str(workspace),
         dest_table="people",
     )
+    _acknowledge_all(workflow)
     result = workflow.generate()
 
     assert secret not in open(result.runbook_path).read()
@@ -142,6 +151,10 @@ def test_authoring_workflow_auto_detects_ndjson(tmp_path):
         "nested object" in note
         for note in workflow.draft.column("payload").notes
     )
+    payload_review = next(
+        r for r in workflow.confidence_reviews() if r.source == "payload"
+    )
+    assert "notes=nested object" in payload_review.evidence
 
 
 def test_authoring_workflow_supports_parquet_schema(tmp_path):
@@ -190,6 +203,66 @@ def test_authoring_workflow_supports_excel_sheet_picker(tmp_path):
     workflow.choose_sheet("Customers")
 
     assert [c.source for c in workflow.draft.columns] == ["customer_id"]
+
+
+def test_authoring_workflow_blocks_generation_until_confidence_tiers_acknowledged(
+    tmp_path,
+):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n2,Bob\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+
+    reviews = workflow.confidence_reviews()
+
+    assert [r.source for r in reviews] == ["name"]
+    assert reviews[0].confidence == "ambiguous"
+    assert "null_count=0" in reviews[0].evidence
+    assert workflow.unacknowledged_confidence_reviews() == reviews
+    with pytest.raises(ValueError, match="Confidence Tier"):
+        workflow.generate()
+
+    acknowledged = workflow.acknowledge_confidence_tier("name")
+
+    assert acknowledged.acknowledged is True
+    assert workflow.unacknowledged_confidence_reviews() == []
+
+
+def test_authoring_workflow_records_confidence_acknowledgements_in_runbook(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n2,Bob\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.acknowledge_confidence_tier("name")
+
+    result = workflow.generate()
+    runbook = open(result.runbook_path).read()
+
+    assert "Source `name` -> destination `name`" in runbook
+    assert "accepted `ambiguous` Confidence Tier" in runbook
+    assert "null_count=0" in runbook
+
+
+def test_authoring_workflow_rejects_non_risky_confidence_acknowledgement(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id\n1\n2\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+
+    with pytest.raises(ValueError, match="Confidence Tier"):
+        workflow.acknowledge_confidence_tier("id")
 
 
 def test_authoring_workflow_rejects_unknown_format_extension(tmp_path):

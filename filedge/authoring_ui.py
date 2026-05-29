@@ -1,5 +1,6 @@
 """Textual shell for the Authoring UI."""
 
+from filedge.authoring_validation import SCOPE_COLUMN_TOLERANCE, SCOPE_STRICT_MODE
 from filedge.authoring_workflow import AuthoringWorkflow
 
 try:
@@ -56,6 +57,7 @@ class AuthoringApp(App):
         Binding("d", "edit_dest", "Dest", priority=True),
         Binding("t", "edit_type", "Type", priority=True),
         Binding("r", "toggle_required", "Required", priority=True),
+        Binding("a", "ack_confidence", "Acknowledge", priority=True),
         Binding("v", "validate", "Validate", priority=True),
         Binding("g", "generate", "Generate", priority=True),
         ("q", "quit", "Quit"),
@@ -71,6 +73,7 @@ class AuthoringApp(App):
             yield DataTable(id="schema")
             with Vertical(id="side"):
                 yield Static(self._summary(), id="summary")
+                yield Static("", id="confidence")
                 if self.workflow.fmt == "excel":
                     yield Select(
                         [(name, name) for name in self.workflow.excel_sheets],
@@ -84,6 +87,7 @@ class AuthoringApp(App):
 
     def on_mount(self) -> None:
         self._populate_schema()
+        self._populate_confidence()
         self._populate_preview()
         self.query_one("#schema", DataTable).focus()
 
@@ -92,12 +96,37 @@ class AuthoringApp(App):
             self.workflow.choose_sheet(event.value)
             self.query_one("#summary", Static).update(self._summary())
             self._populate_schema()
+            self._populate_confidence()
             self._populate_preview()
 
     def action_validate(self) -> None:
         report = self.workflow.validate()
         status = "green" if report.ok else "red"
         lines = [f"Authoring Validation: {status} ({report.rows_checked} row(s))"]
+        column_tolerance = [
+            f for f in report.findings_in(SCOPE_COLUMN_TOLERANCE) if not f.ok
+        ]
+        strict_mode = [f for f in report.findings_in(SCOPE_STRICT_MODE) if not f.ok]
+        if column_tolerance:
+            lines.append("")
+            lines.append("Column Tolerance failures")
+            lines.extend(
+                f"- required column `{f.column}`: {f.message}"
+                for f in column_tolerance
+            )
+        if strict_mode:
+            lines.append("")
+            lines.append("Strict Mode failures")
+            lines.extend(
+                (
+                    f"- row {f.row_number}, column `{f.column}`: {f.message}"
+                    if f.row_number is not None
+                    else f"- column `{f.column}`: {f.message}"
+                )
+                for f in strict_mode
+            )
+        lines.append("")
+        lines.append("Validation Scope findings")
         lines.extend(f"- {f.scope}: {f.message}" for f in report.findings)
         self.query_one("#validation", Static).update("\n".join(lines))
 
@@ -116,6 +145,20 @@ class AuthoringApp(App):
             return
         self.workflow.draft.edit_column(column.source, required=not column.required)
         self._populate_schema()
+        self._populate_confidence()
+
+    def action_ack_confidence(self) -> None:
+        column = self._selected_column()
+        if column is None:
+            return
+        try:
+            self.workflow.acknowledge_confidence_tier(column.source)
+        except Exception as e:  # noqa: BLE001 - rendered as UI feedback
+            self.query_one("#validation", Static).update(
+                f"Confidence Tier acknowledgement rejected: {e}"
+            )
+            return
+        self._populate_confidence()
 
     def action_generate(self) -> None:
         try:
@@ -153,6 +196,7 @@ class AuthoringApp(App):
                 self.query_one("#validation", Static).update(f"Edit rejected: {e}")
                 return
             self._populate_schema()
+            self._populate_confidence()
 
         return self.push_screen(EditValueScreen(label, str(getattr(column, field))), commit)
 
@@ -198,6 +242,22 @@ class AuthoringApp(App):
                 col.confidence,
                 "; ".join(col.notes),
             )
+
+    def _populate_confidence(self) -> None:
+        reviews = self.workflow.confidence_reviews()
+        if not reviews:
+            self.query_one("#confidence", Static).update(
+                "No low or ambiguous Confidence Tier columns."
+            )
+            return
+        lines = ["Confidence Tier review"]
+        for review in reviews:
+            state = "acknowledged" if review.acknowledged else "needs acknowledgement"
+            lines.append(
+                f"- {review.source} -> {review.dest}: {review.confidence} "
+                f"({state}); {review.evidence}"
+            )
+        self.query_one("#confidence", Static).update("\n".join(lines))
 
     def _populate_preview(self) -> None:
         table = self.query_one("#preview", DataTable)

@@ -27,6 +27,7 @@ def _csv_workflow(tmp_path):
 def test_textual_authoring_ui_happy_path(tmp_path):
     async def run():
         workflow = _csv_workflow(tmp_path)
+        workflow.acknowledge_confidence_tier("name")
         app = AuthoringApp(workflow)
 
         async with app.run_test() as pilot:
@@ -36,6 +37,38 @@ def test_textual_authoring_ui_happy_path(tmp_path):
             assert "filedge healthcheck" in str(next_panel.render())
 
         assert os.path.isfile(workflow.generated.config_path)
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_lists_and_acknowledges_confidence_tiers(tmp_path):
+    async def run():
+        workflow = _csv_workflow(tmp_path)
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            confidence = app.query_one("#confidence")
+            assert "name -> name: ambiguous" in str(confidence.render())
+            assert "needs acknowledgement" in str(confidence.render())
+
+            app._selected_column = lambda: workflow.draft.column("name")
+            app.action_ack_confidence()
+
+            assert workflow.confidence_reviews()[0].acknowledged is True
+            assert "acknowledged" in str(confidence.render())
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_blocks_generation_until_confidence_ack(tmp_path):
+    async def run():
+        workflow = _csv_workflow(tmp_path)
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app.action_generate()
+            validation = app.query_one("#validation")
+            assert "Confidence Tier" in str(validation.render())
 
     asyncio.run(run())
 
@@ -116,6 +149,46 @@ def test_textual_authoring_ui_edit_source_and_rejects_invalid_type(
     asyncio.run(run())
 
 
+def test_textual_authoring_ui_rejects_ack_for_non_risky_column(tmp_path):
+    async def run():
+        workflow = _csv_workflow(tmp_path)
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app._selected_column = lambda: workflow.draft.column("id")
+            app.action_ack_confidence()
+            validation = app.query_one("#validation")
+            assert "acknowledgement rejected" in str(validation.render())
+
+    asyncio.run(run())
+
+
+def test_textual_authoring_ui_prominently_surfaces_validation_failures(tmp_path):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("id,name\nnot-an-int,Alice\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.draft.edit_column("id", type="integer")
+        workflow.draft.edit_column("name", new_source="missing_name")
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app.action_validate()
+            validation = str(app.query_one("#validation").render())
+            assert "Column Tolerance failures" in validation
+            assert "required column `missing_name`" in validation
+            assert "Strict Mode failures" in validation
+            assert "row 1, column `id`" in validation
+
+    asyncio.run(run())
+
+
 def test_textual_authoring_ui_noops_without_selected_column(tmp_path):
     async def run():
         workflow = AuthoringWorkflow(
@@ -129,6 +202,7 @@ def test_textual_authoring_ui_noops_without_selected_column(tmp_path):
         async with app.run_test():
             app.action_edit_dest()
             app.action_toggle_required()
+            app.action_ack_confidence()
             app.action_generate()
             validation = app.query_one("#validation")
             assert "Pipeline Config Draft" in str(validation.render())
