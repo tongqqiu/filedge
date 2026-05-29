@@ -19,10 +19,7 @@ from typing import List, Optional
 from filedge.authoring import AuthoringSession
 from filedge.column_types import validate_column_type
 from filedge.config import PipelineConfig, config_from_dict
-
-# A placeholder Destination Connector, enough for config loading to pass. The
-# Connector picker (#152) replaces it with a real type and non-secret settings.
-_PLACEHOLDER_CONNECTOR = {"type": "sqlite", "url": "sqlite:///REPLACE_ME.db"}
+from filedge.connectors import connector_descriptor
 
 
 @dataclass
@@ -56,6 +53,12 @@ class PipelineConfigDraft:
     fmt: str = "csv"
     write_mode: str = "append"
     sheet: Optional[object] = None
+    connector_type: str = "sqlite"
+    connector_options: dict[str, str] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.connector_options:
+            self.choose_connector(self.connector_type)
 
     @classmethod
     def from_sample(
@@ -158,6 +161,35 @@ class PipelineConfigDraft:
             col.width = width
         return col
 
+    def choose_connector(self, connector_type: str) -> None:
+        """Select a Connector Registry type and seed its non-secret defaults."""
+        descriptor = connector_descriptor(connector_type)
+        self.connector_type = descriptor.type
+        self.connector_options = {
+            setting.name: setting.default
+            for setting in descriptor.settings
+            if setting.default
+        }
+
+    def set_connector_setting(self, name: str, value: str) -> None:
+        """Set one non-secret connector setting exposed by the Registry."""
+        descriptor = connector_descriptor(self.connector_type)
+        known = {setting.name for setting in descriptor.settings}
+        if name not in known:
+            raise ValueError(
+                f"Connector {self.connector_type!r} has no setting named {name!r}."
+            )
+        self.connector_options[name] = value
+
+    def required_connector_settings_missing(self) -> list[str]:
+        """Return required non-secret Connector settings that still need values."""
+        descriptor = connector_descriptor(self.connector_type)
+        return [
+            setting.name
+            for setting in descriptor.settings
+            if setting.required and not self.connector_options.get(setting.name)
+        ]
+
     def add_fixed_width_column(
         self,
         *,
@@ -191,7 +223,14 @@ class PipelineConfigDraft:
             "format": self.fmt,
             "dest_table": self.dest_table,
             "write_mode": self.write_mode,
-            "connector": dict(_PLACEHOLDER_CONNECTOR),
+            "connector": {
+                "type": self.connector_type,
+                **{
+                    key: value
+                    for key, value in self.connector_options.items()
+                    if value != ""
+                },
+            },
             "columns": [self._column_config(c) for c in self.columns],
         }
         if self.fmt == "excel":

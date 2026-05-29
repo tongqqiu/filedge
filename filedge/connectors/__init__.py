@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Iterator
 
 from filedge.config import CdcConfig, PipelineConfig
@@ -68,6 +69,87 @@ _INSTALL_HINTS = {
     "databricks": "pip install filedge[databricks]",
     "duckdb": "pip install filedge[duckdb]",
 }
+
+
+@dataclass(frozen=True)
+class ConnectorSetting:
+    """One non-secret connector setting safe to write to pipeline.yaml."""
+
+    name: str
+    required: bool = True
+    default: str = ""
+
+
+@dataclass(frozen=True)
+class CredentialPlaceholder:
+    """One runtime environment variable a Connector expects for credentials."""
+
+    env_var: str
+    purpose: str
+
+
+@dataclass(frozen=True)
+class ConnectorDescriptor:
+    """Authoring-safe metadata for a Connector Registry entry."""
+
+    type: str
+    settings: tuple[ConnectorSetting, ...] = ()
+    credential_placeholders: tuple[CredentialPlaceholder, ...] = ()
+
+
+_DESCRIPTORS = {
+    "sqlite": ConnectorDescriptor(
+        type="sqlite",
+        settings=(ConnectorSetting("url", default="sqlite:///REPLACE_ME.db"),),
+    ),
+    "postgres": ConnectorDescriptor(
+        type="postgres",
+        credential_placeholders=(
+            CredentialPlaceholder("DATABASE_URL", "PostgreSQL connection URL"),
+        ),
+    ),
+    "bigquery": ConnectorDescriptor(
+        type="bigquery",
+        settings=(ConnectorSetting("project"), ConnectorSetting("dataset")),
+        credential_placeholders=(
+            CredentialPlaceholder(
+                "GOOGLE_APPLICATION_CREDENTIALS",
+                "BigQuery Application Default Credentials",
+            ),
+        ),
+    ),
+    "databricks": ConnectorDescriptor(
+        type="databricks",
+        settings=(
+            ConnectorSetting("server_hostname"),
+            ConnectorSetting("http_path"),
+            ConnectorSetting("catalog"),
+            ConnectorSetting("schema"),
+        ),
+        credential_placeholders=(
+            CredentialPlaceholder("DATABRICKS_TOKEN", "Databricks access token"),
+        ),
+    ),
+    "duckdb": ConnectorDescriptor(
+        type="duckdb",
+        settings=(ConnectorSetting("path", default="./analytics.duckdb"),),
+    ),
+}
+
+
+def available_connector_types() -> list[str]:
+    """Return Connector Registry types in stable UI order without importing SDKs."""
+    return sorted(_REGISTRY)
+
+
+def connector_descriptor(connector_type: str) -> ConnectorDescriptor:
+    """Return authoring-safe metadata for one Connector Registry entry."""
+    if connector_type not in _REGISTRY:
+        raise ValueError(
+            f"Unknown connector type '{connector_type}'. "
+            f"Known types: {', '.join(available_connector_types())}"
+        )
+    return _DESCRIPTORS[connector_type]
 
 
 def _load_class(dotted_path: str, connector_type: str):
