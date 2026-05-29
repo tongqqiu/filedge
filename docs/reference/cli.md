@@ -293,12 +293,15 @@ Generate a self-contained, read-only HTML audit site from the Audit DB.
 
 ```bash
 filedge export-audit --audit-db-url <url> --output <path> [options]
+filedge export-audit --pipeline <id> [--workspace <path>] [options]
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
-| `--output` | — | required | Output path for the generated `index.html` |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
+| `--output` | — | required | Output path for the generated `index.html`. Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | — | Resolve both the Audit DB and the Audit Export destination from this Pipeline Registry id instead of `--audit-db-url`/`--output` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
 | `--title` | — | none | Pipeline label shown in the site header |
 | `--dest-table` | — | none | Destination table name for lineage SQL snippets |
 

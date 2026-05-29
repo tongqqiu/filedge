@@ -119,6 +119,28 @@ def _operator_run_context(ctx, pipeline_id, workspace, watched_dir, config_path,
     return watched_dir, config_path, audit_db_url
 
 
+def _operator_export_context(ctx, pipeline_id, workspace, audit_db_url, output) -> tuple[str, str]:
+    """Pick the Audit DB URL and Audit Export destination for `export-audit`.
+
+    `--pipeline` supplies both the Audit DB and the Audit Export destination,
+    and is mutually exclusive with an explicitly passed `--audit-db-url` or
+    `--output`; either both flags are given, or `--pipeline` is.
+    """
+    if pipeline_id and (_explicit(ctx, "audit_db_url") or _explicit(ctx, "output")):
+        click.echo(
+            "Error: pass either --pipeline or --audit-db-url/--output, not both.",
+            err=True,
+        )
+        sys.exit(1)
+    if pipeline_id:
+        resolved = _resolve_pipeline_or_exit(workspace, pipeline_id)
+        return resolved.audit_db_url, resolved.audit_export
+    if not audit_db_url or not output:
+        click.echo("Error: provide --audit-db-url and --output, or --pipeline.", err=True)
+        sys.exit(1)
+    return audit_db_url, output
+
+
 def _parse_sheet_selector(value):
     """`--sheet` accepts either an integer (0-based index) or a sheet name."""
     if value is None:
@@ -941,14 +963,25 @@ def _lineage_payload(record, run_id, created_at, updated_at, dest_table):
     }
 
 @cli.command("export-audit")
-@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
-@click.option("--output", required=True, help="Output path for index.html")
+@click.option("--pipeline", "pipeline_id", default=None,
+              help="Resolve the Audit DB and Audit Export destination from this "
+                   "Pipeline Registry id instead of --audit-db-url/--output.")
+@click.option("--workspace", default=".", show_default=True,
+              type=click.Path(file_okay=False),
+              help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
+@click.option("--audit-db-url", default=None, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--output", default=None, help="Output path for index.html")
 @click.option("--title", default=None, help="Pipeline label shown in the site header")
 @click.option("--dest-table", default=None, help="Destination table name for lineage SQL")
-def export_audit_cmd(audit_db_url, output, title, dest_table):
+@click.pass_context
+def export_audit_cmd(ctx, pipeline_id, workspace, audit_db_url, output, title, dest_table):
     """Generate a read-only static HTML Audit Export from the Audit DB."""
     from filedge.db import Database, create_audit_tables
     from filedge.exporter import export_audit
+
+    audit_db_url, output = _operator_export_context(
+        ctx, pipeline_id, workspace, audit_db_url, output
+    )
 
     db = Database(audit_db_url)
     try:
