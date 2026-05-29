@@ -14,10 +14,9 @@ File by path (never copies it), names the Audit DB connection placeholder
 / `run` / `export-audit` commands. No environment variable is ever read, so no
 secret can bleed into an authored artifact.
 
-This slice is narrow (#148): CSV / append-mode / placeholder Connector. Field
-Encryption, CDC settings, and the Connector picker arrive in later slices, and
-the Runbook's Confidence Tier and Credential Placeholder sections are
-placeholders until the UI that captures those decisions ships.
+This writer stays non-secret: Connector settings may be written to
+`pipeline.yaml`, but Credential Placeholders only name runtime environment
+variables. Secret values are never read or exported.
 """
 
 import os
@@ -64,6 +63,7 @@ def write_pipeline_folder(
     audit_db: Optional[str] = None,
     audit_export: Optional[str] = None,
     confidence_acknowledgements: Optional[list[dict]] = None,
+    credential_placeholders: Optional[list[dict]] = None,
 ) -> PipelineFolderResult:
     """Write a Pipeline Folder for `config` and register it in the workspace.
 
@@ -109,6 +109,7 @@ def write_pipeline_folder(
         audit_db=audit_db,
         audit_export=audit_export,
         confidence_acknowledgements=confidence_acknowledgements or [],
+        credential_placeholders=credential_placeholders or [],
     )
     with open(runbook_path, "w") as f:
         f.write(runbook)
@@ -156,6 +157,7 @@ def _render_runbook(
     audit_db: str,
     audit_export: str,
     confidence_acknowledgements: list[dict],
+    credential_placeholders: list[dict],
 ) -> str:
     """Render the non-secret Authoring Runbook Markdown for one Pipeline."""
     config_rel = f"{folder_rel}/{CONFIG_FILENAME}"
@@ -173,6 +175,7 @@ def _render_runbook(
     confidence_section = _render_confidence_acknowledgements(
         confidence_acknowledgements
     )
+    credential_section = _render_credential_placeholders(credential_placeholders)
     return f"""# Authoring Runbook: {pipeline_id}
 
 A non-secret companion note produced during Pipeline Authoring. It records how
@@ -203,8 +206,7 @@ Folder, so this folder accumulates no source data or PII.
 
 ## Credential Placeholders
 
-None recorded. The Connector picker ships in a later slice; until then this
-Pipeline uses a placeholder Connector and the Audit DB placeholder above.
+{credential_section}
 
 ## Validation Scope assumptions
 
@@ -231,5 +233,17 @@ def _render_confidence_acknowledgements(acknowledgements: list[dict]) -> str:
             f"Source `{item.get('source', '')}` -> destination `{item.get('dest', '')}`: "
             f"accepted `{item.get('confidence', '')}` Confidence Tier. "
             f"Evidence: {item.get('evidence', '')}"
+        )
+    return "\n".join(lines)
+
+
+def _render_credential_placeholders(placeholders: list[dict]) -> str:
+    if not placeholders:
+        return "No Connector Credential Placeholders recorded."
+    lines = []
+    for item in placeholders:
+        lines.append(
+            "- "
+            f"`{item.get('env_var', '')}`: {item.get('purpose', '')}"
         )
     return "\n".join(lines)

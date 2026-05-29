@@ -1,7 +1,11 @@
 import pytest
 
 from filedge.config import ConnectorConfig, PipelineConfig, ColumnMapping
-from filedge.connectors import get_connector
+from filedge.connectors import (
+    available_connector_types,
+    connector_descriptor,
+    get_connector,
+)
 
 
 @pytest.fixture
@@ -56,3 +60,23 @@ def test_registry_raises_import_error_with_hint_for_missing_databricks_sdk(
 def test_registry_raises_on_missing_connector_block(base_config):
     with pytest.raises(ValueError, match="connector: block"):
         get_connector(base_config)
+
+
+def test_registry_exposes_authoring_metadata_without_loading_optional_sdks():
+    assert available_connector_types() == [
+        "bigquery",
+        "databricks",
+        "duckdb",
+        "postgres",
+        "sqlite",
+    ]
+
+    bigquery = connector_descriptor("bigquery")
+    assert [setting.name for setting in bigquery.settings] == ["project", "dataset"]
+    assert [p.env_var for p in bigquery.credential_placeholders] == [
+        "GOOGLE_APPLICATION_CREDENTIALS"
+    ]
+
+    postgres = connector_descriptor("postgres")
+    assert postgres.settings == ()
+    assert [p.env_var for p in postgres.credential_placeholders] == ["DATABASE_URL"]

@@ -57,6 +57,7 @@ class AuthoringApp(App):
         Binding("d", "edit_dest", "Dest", priority=True),
         Binding("t", "edit_type", "Type", priority=True),
         Binding("r", "toggle_required", "Required", priority=True),
+        Binding("o", "edit_connector_setting", "Connector Setting", priority=True),
         Binding("a", "ack_confidence", "Acknowledge", priority=True),
         Binding("v", "validate", "Validate", priority=True),
         Binding("g", "generate", "Generate", priority=True),
@@ -73,6 +74,15 @@ class AuthoringApp(App):
             yield DataTable(id="schema")
             with Vertical(id="side"):
                 yield Static(self._summary(), id="summary")
+                yield Select(
+                    [(name, name) for name in self.workflow.connector_types()],
+                    value=self.workflow.draft.connector_type
+                    if self.workflow.draft is not None
+                    else "sqlite",
+                    id="connector",
+                )
+                yield DataTable(id="connector_settings")
+                yield Static("", id="credentials")
                 yield Static("", id="confidence")
                 if self.workflow.fmt == "excel":
                     yield Select(
@@ -87,6 +97,7 @@ class AuthoringApp(App):
 
     def on_mount(self) -> None:
         self._populate_schema()
+        self._populate_connector()
         self._populate_confidence()
         self._populate_preview()
         self.query_one("#schema", DataTable).focus()
@@ -96,8 +107,18 @@ class AuthoringApp(App):
             self.workflow.choose_sheet(event.value)
             self.query_one("#summary", Static).update(self._summary())
             self._populate_schema()
+            self._populate_connector()
             self._populate_confidence()
             self._populate_preview()
+        elif event.select.id == "connector" and event.value is not Select.BLANK:
+            try:
+                self.workflow.choose_connector(str(event.value))
+            except Exception as e:  # noqa: BLE001 - rendered as UI feedback
+                self.query_one("#validation", Static).update(
+                    f"Connector selection rejected: {e}"
+                )
+                return
+            self._populate_connector()
 
     def action_validate(self) -> None:
         report = self.workflow.validate()
@@ -146,6 +167,26 @@ class AuthoringApp(App):
         self.workflow.draft.edit_column(column.source, required=not column.required)
         self._populate_schema()
         self._populate_confidence()
+
+    def action_edit_connector_setting(self) -> None:
+        setting = self._selected_connector_setting()
+        if setting is None or self.workflow.draft is None:
+            return
+        value = self.workflow.draft.connector_options.get(setting.name, "")
+
+        def commit(new_value: str | None) -> None:
+            if new_value is None:
+                return
+            try:
+                self.workflow.set_connector_setting(setting.name, new_value)
+            except Exception as e:  # noqa: BLE001 - rendered as UI feedback
+                self.query_one("#validation", Static).update(
+                    f"Connector setting rejected: {e}"
+                )
+                return
+            self._populate_connector()
+
+        return self.push_screen(EditValueScreen(setting.name, value), commit)
 
     def action_ack_confidence(self) -> None:
         column = self._selected_column()
@@ -209,6 +250,16 @@ class AuthoringApp(App):
             return None
         return self.workflow.draft.columns[row]
 
+    def _selected_connector_setting(self):
+        if self.workflow.draft is None:
+            return None
+        settings = self.workflow.connector_descriptor().settings
+        table = self.query_one("#connector_settings", DataTable)
+        row = table.cursor_row if table.cursor_row is not None else 0
+        if row < 0 or row >= len(settings):
+            return None
+        return settings[row]
+
     def _summary(self) -> str:
         return (
             "Authoring Workflow\n"
@@ -242,6 +293,34 @@ class AuthoringApp(App):
                 col.confidence,
                 "; ".join(col.notes),
             )
+
+    def _populate_connector(self) -> None:
+        settings = self.query_one("#connector_settings", DataTable)
+        settings.clear(columns=True)
+        settings.add_columns("setting", "required", "value")
+        credentials = self.query_one("#credentials", Static)
+        if self.workflow.draft is None:
+            settings.add_row("Connector", "manual", "Create a Pipeline Config Draft.")
+            credentials.update("No Credential Placeholders.")
+            return
+        descriptor = self.workflow.connector_descriptor()
+        if descriptor.settings:
+            for setting in descriptor.settings:
+                settings.add_row(
+                    setting.name,
+                    "yes" if setting.required else "no",
+                    self.workflow.draft.connector_options.get(setting.name, ""),
+                )
+        else:
+            settings.add_row("No required non-secret settings.", "", "")
+        placeholders = descriptor.credential_placeholders
+        if not placeholders:
+            credentials.update("No Connector Credential Placeholders.")
+            return
+        credentials.update(
+            "Credential Placeholders\n"
+            + "\n".join(f"- {p.env_var}: {p.purpose}" for p in placeholders)
+        )
 
     def _populate_confidence(self) -> None:
         reviews = self.workflow.confidence_reviews()
