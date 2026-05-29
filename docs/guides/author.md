@@ -26,6 +26,8 @@ filedge author layout.dat --format fixed_width
 
 The destination table defaults to the sample File's stem (`orders.csv` → `orders`); override it with `--dest-table`.
 
+To revise a Pipeline you already authored, point the UI at its [Pipeline Folder](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#pipeline-folder) instead of a sample File — see [Re-author an existing Pipeline](#re-author-an-existing-pipeline) below.
+
 ## The Authoring Workflow
 
 The [Authoring Workflow](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#authoring-workflow) starts from a sample File rather than a blank form, because the File is the atomic unit of Filedge ingestion:
@@ -102,6 +104,40 @@ and creates or updates `pipeline-registry.yaml` at the workspace root.
 - **`RUNBOOK.md`** is a non-secret note recording the sample File (by path, never copied), accepted Confidence Tiers, Credential Placeholders, declared Field Encryption columns (key *references* only), validation assumptions, and the suggested next commands. No environment variable is ever read, so no secret can bleed into an artifact.
 - **`pipeline-registry.yaml`** indexes each Pipeline's Folder, Watched Directory, Audit DB connection placeholder, and Audit Export destination. It keeps Audit DBs separate — one [Audit DB](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#audit-db) maps to exactly one Pipeline. See [ADR-0017](../adr/0017-pipeline-folder-and-registry-layout.md).
 
+## Re-author an existing Pipeline
+
+Authoring is not one-shot. To revise a Pipeline you already generated, re-open its Pipeline Folder instead of starting from a sample File:
+
+```bash
+filedge author --pipeline pipelines/orders
+```
+
+This loads the Folder's `pipeline.yaml` back into an editable [Pipeline Config Draft](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#pipeline-config-draft) and hydrates the same screens as the from-scratch flow — column list, Write Mode, Connector, and Field Encryption all pre-populated. You edit exactly as before. On generate (`g`), the existing `pipeline.yaml` is **rewritten in place** and the Authoring Runbook is regenerated with a new timestamp; the Pipeline Registry entry (Watched Directory, Audit DB placeholder, Audit Export) is preserved. Change one column's type, save, and the Folder diff shows exactly that change plus the Runbook timestamp — no incidental churn.
+
+Re-author round-trips the full surface of the from-scratch flow:
+
+- **Every format** — CSV, NDJSON, Parquet, Excel, and fixed-width Folders all re-open. Fixed-width loads its [Fixed-Width Layout](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#fixed-width-layout) from the saved config rather than re-inferring.
+- **Every Connector and Write Mode** — non-`sqlite` Connectors and non-`append` Write Modes (`truncate`, `cdc` with its business key / sequence settings) are loaded back intact.
+- **Field Encryption** — `encrypt:` and `hash:` blocks round-trip as key *references* only; key material is never read, exactly as in from-scratch authoring.
+
+Like all Pipeline Authoring, re-author performs no Run, opens no Audit DB, and never contacts the Destination.
+
+### Browse and pick from the Registry
+
+Run `filedge author` with **no arguments** in a workspace that already has a [Pipeline Registry](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#pipeline-registry) and the UI opens a browse-and-pick screen instead of erroring:
+
+```bash
+filedge author --workspace .
+```
+
+The screen lists each registered Pipeline with its Folder, last-author timestamp, format, and Connector type. Select one to drop straight into the re-author flow (identical to passing `--pipeline <folder>`), or choose **New Pipeline** to start from scratch (which then prompts you to re-run with a sample File). A Pipeline whose Folder is missing on disk is still listed — marked unopenable with the reason — rather than silently hidden, so a deleted Folder is visible information, not a gap. When no Registry exists, `filedge author` with no arguments behaves as before and asks for a sample File or `--pipeline`.
+
+### Re-author against a fresh sample File
+
+By default re-author validates against the sample File recorded in the Runbook, when it is still present on disk. You can instead point Authoring Validation at a **new** sample — for example a more recent extract — to refresh each column's [Confidence Tier](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#confidence-tier) and inference evidence. The refresh updates only the read-only hints (confidence, null counts, notes); it never overwrites your authored `type`, `dest`, or `required` choices.
+
+When the loaded Config and the fresh sample disagree, Authoring Validation reports **[Authoring Validation Drift](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#authoring-validation-drift)** alongside the schema rows — a declared column now absent from the File, or a `required` column carrying null/empty values in sampled rows. Drift is **advisory**: it does not flip a green result to red or relax [Strict Mode](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#strict-mode). It tells you what changed so you can decide whether to revise the Config before saving back.
+
 ## Next steps
 
 After generation the UI prints the Operator CLI handoff. The Authoring UI hands off to the CLI; it does not run, schedule, or deploy anything:
@@ -124,8 +160,11 @@ The Authoring UI supports every format the Parser does:
 
 ## Options
 
+`filedge author` takes either a `SAMPLE_FILE` (from-scratch) or `--pipeline <folder>` (re-author), not both. With neither, it opens the Registry browse screen when a Pipeline Registry exists, otherwise asks for one.
+
 | Option | Default | Description |
 |--------|---------|-------------|
+| `--pipeline` | — | Re-author an existing Pipeline Folder (workspace-relative path) instead of authoring from a sample File |
 | `--format` | auto from extension | `csv`, `ndjson`, `parquet`, `excel`, or `fixed_width` |
 | `--sample-rows` | 1000 | Number of rows to sample for Schema Inference |
 | `--dest-table` | sample File stem | Destination table name |

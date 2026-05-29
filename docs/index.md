@@ -22,7 +22,7 @@ Core CLI commands, each useful on its own:
 
 | Command | What it does |
 |---------|-------------|
-| `filedge author <file>` | Launch the local Authoring UI to build a pipeline from a sample file |
+| `filedge author <file>` | Launch the local Authoring UI to build a pipeline from a sample file (or `--pipeline <folder>` to re-author an existing one) |
 | `filedge inspect <file>` | Sample a file and generate a `pipeline.yaml` columns block |
 | `filedge preview <file>` | Display rows as a table — jump to any row with `--start-row` |
 | `filedge validate <file>` | Dry-run a file against a config — no data written |
