@@ -762,3 +762,101 @@ def test_open_folder_rejects_unsupported_shape_clearly(tmp_path):
         AuthoringWorkflow.open_folder(
             folder="pipelines/events", workspace=str(workspace)
         )
+
+
+# ---------------------------------------------------------------------------
+# Fresh sample + Confidence Tier refresh on re-author (#174)
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_sample_fills_confidence_tier_on_loaded_columns(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # Loaded columns start with the "loaded" sentinel — no inference evidence yet.
+    assert all(c.confidence == "loaded" for c in reopened.draft.columns)
+
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n1,Alice\n2,Bob\n3,Carol\n")
+    reopened.refresh_sample(fresh)
+
+    by_source = {c.source: c for c in reopened.draft.columns}
+    # The "loaded" sentinel is replaced by a real inference tier from the sample.
+    assert by_source["id"].confidence == "high"
+    assert by_source["name"].confidence != "loaded"
+    assert by_source["id"].total_seen == 3
+
+
+def test_refresh_sample_never_overwrites_authored_fields(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # Author chose: id is a string, renamed to identifier, optional.
+    reopened.edit_column("id", dest="identifier", type="string", required=False)
+
+    # A fresh sample where id looks like an integer must NOT flip the type back.
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n10,Alice\n20,Bob\n")
+    reopened.refresh_sample(fresh)
+
+    id_col = reopened.draft.column("id")
+    assert id_col.type == "string"       # authored field preserved
+    assert id_col.dest == "identifier"   # authored field preserved
+    assert id_col.required is False      # authored field preserved
+    assert id_col.confidence != "loaded" # evidence still refreshed
+
+
+def test_refresh_sample_can_downgrade_a_tier_when_new_data_has_nulls(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # A fresh sample where `id` has a null row -> integer tier drops to low.
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n1,Alice\n,Bob\n3,Carol\n")
+    reopened.refresh_sample(fresh)
+
+    id_col = reopened.draft.column("id")
+    assert id_col.confidence == "low"
+    assert id_col.null_count == 1
+
+
+def test_refresh_sample_records_new_sample_in_regenerated_runbook(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n1,Alice\n2,Bob\n")
+    reopened.refresh_sample(fresh)
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    runbook = open(result.runbook_path).read()
+    assert fresh in runbook
+    assert src not in runbook
+
+
+def test_default_sample_file_uses_runbook_sample_when_present_else_none(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # The original sample still exists on disk.
+    assert reopened.default_sample_file() == src
+
+    # If the recorded sample is gone, the picker has no default.
+    os.remove(src)
+    assert reopened.default_sample_file() is None
+
+
+def test_refresh_sample_invalidates_prior_validation(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.validate()
+    assert reopened.validation_report is not None
+
+    reopened.refresh_sample(_file(tmp_path, "fresh.csv", "id,name\n1,Alice\n"))
+    # A fresh sample is new evidence; the prior validation no longer applies.
+    assert reopened.validation_report is None

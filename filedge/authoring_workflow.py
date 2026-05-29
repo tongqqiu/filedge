@@ -207,6 +207,44 @@ class AuthoringWorkflow:
         self.generated = None
         self.confidence_acknowledgements = {}
 
+    def default_sample_file(self) -> Optional[str]:
+        """The Runbook-recorded sample File when it still exists on disk (#174).
+
+        The re-author sample picker defaults to this; it returns ``None`` when
+        the original sample is gone so the caller knows to prompt instead.
+        """
+        if self.file and os.path.isfile(self.file):
+            return self.file
+        return None
+
+    def refresh_sample(self, sample_file: str) -> None:
+        """Re-run Schema Inference against a fresh sample and refresh the
+        Confidence Tier and inference evidence on loaded columns (#174).
+
+        Only the read-only evidence (confidence, null_count, total_seen, notes)
+        is updated, matched by source name. The authored fields — type, dest,
+        required — are never overwritten by the refresh. Setting the sample File
+        means a later :meth:`generate` records the new sample in the regenerated
+        Authoring Runbook. Inferred columns absent from the draft are ignored;
+        loaded columns absent from the new sample keep their prior evidence.
+        """
+        draft = self._require_draft()
+        inferred = AuthoringSession(
+            sample_file, self.fmt, encoding=self.encoding, sheet=self.sheet
+        ).infer_schema(sample_rows=self.sample_rows)
+        by_source = {c.name: c for c in inferred}
+        for column in draft.columns:
+            evidence = by_source.get(column.source)
+            if evidence is None:
+                continue
+            column.confidence = evidence.confidence
+            column.null_count = evidence.null_count
+            column.total_seen = evidence.total_seen
+            column.notes = list(evidence.notes)
+        self.file = sample_file
+        self.preview_rows = self._session().preview(num_rows=5)
+        self._mutated()
+
     def set_fixed_width_layout(self, columns: list[ColumnDraft]) -> None:
         """Populate the manual Fixed-Width Layout entry surface."""
         if self.fmt != "fixed_width":
