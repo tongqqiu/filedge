@@ -205,11 +205,14 @@ Show a summary of file states in the audit database.
 
 ```bash
 filedge status --audit-db-url <url> [--json]
+filedge status --pipeline <id> [--workspace <path>] [--json]
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
 | `--json` | — | off | Output as JSON |
 
 Example output:

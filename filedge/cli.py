@@ -25,6 +25,13 @@ from filedge.db import (
 from filedge.authoring import AuthoringSession
 from filedge.config import load_config
 from filedge.file_sample import FormatNotDetected, resolve_format
+from filedge.pipeline_registry import RegistryError
+from filedge.pipeline_resolution import (
+    PipelineNotFound,
+    ResolvedPipeline,
+    resolve_pipeline,
+)
+from filedge.reference import ReferenceError
 from filedge.health import HealthcheckError
 from filedge.inspect_formatter import format_summary, format_yaml
 from filedge.preview_formatter import format_preview
@@ -49,6 +56,41 @@ def _require_format(file: str, fmt: str | None, exit_code: int) -> str:
         )
         sys.exit(exit_code)
     return resolved
+
+
+def _explicit(ctx, name) -> bool:
+    """True when an option's value came from the command line, not env/default.
+
+    Lets `--pipeline` coexist with a `FILEDGE_AUDIT_DB_URL` in the environment:
+    only an *explicitly typed* `--audit-db-url` conflicts with `--pipeline`.
+    """
+    return ctx.get_parameter_source(name) == click.core.ParameterSource.COMMANDLINE
+
+
+def _resolve_pipeline_or_exit(workspace, pipeline_id) -> ResolvedPipeline:
+    """Resolve a Pipeline id against the Registry, or print the error and exit."""
+    try:
+        return resolve_pipeline(workspace, pipeline_id)
+    except (PipelineNotFound, RegistryError, ReferenceError, FileNotFoundError) as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
+def _operator_audit_db_url(ctx, pipeline_id, workspace, audit_db_url) -> str:
+    """Pick the Audit DB URL from an explicit flag or a `--pipeline` id.
+
+    `--pipeline` and an explicitly passed `--audit-db-url` are mutually
+    exclusive; exactly one source must supply the Audit DB.
+    """
+    if pipeline_id and _explicit(ctx, "audit_db_url"):
+        click.echo("Error: pass either --pipeline or --audit-db-url, not both.", err=True)
+        sys.exit(1)
+    if pipeline_id:
+        return _resolve_pipeline_or_exit(workspace, pipeline_id).audit_db_url
+    if not audit_db_url:
+        click.echo("Error: provide --audit-db-url or --pipeline.", err=True)
+        sys.exit(1)
+    return audit_db_url
 
 
 def _parse_sheet_selector(value):
@@ -249,10 +291,17 @@ def compact(watched_dir, output, max_files, compress, delete_source):
 
 
 @cli.command()
-@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--pipeline", "pipeline_id", default=None,
+              help="Resolve the Audit DB from this Pipeline Registry id instead of --audit-db-url.")
+@click.option("--workspace", default=".", show_default=True,
+              type=click.Path(file_okay=False),
+              help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
+@click.option("--audit-db-url", default=None, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def status(audit_db_url, output_json):
+@click.pass_context
+def status(ctx, pipeline_id, workspace, audit_db_url, output_json):
     """Show pipeline status summary."""
+    audit_db_url = _operator_audit_db_url(ctx, pipeline_id, workspace, audit_db_url)
     db = Database(audit_db_url)
     create_audit_tables(db)
     summary = status_summary(db)

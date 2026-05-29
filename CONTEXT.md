@@ -81,7 +81,7 @@ Reviewer feedback raised during Re-Author when the loaded Pipeline Config disagr
 _Avoid_: validation failure, schema error, breaking change.
 
 ### Pipeline Registry
-A local or project-level catalog of Filedge Pipelines used by the Control and Audit Platform to find Pipeline Configs, Watched Directories, Audit DB connection placeholders, and Audit Export destinations. A Pipeline Registry is created with the first authored Pipeline so the Authoring UI has one consistent workspace model; it does not combine Audit DBs or change the rule that one Audit DB maps to exactly one Pipeline.
+A local or project-level catalog of Filedge Pipelines used by the Control and Audit Platform to find Pipeline Configs, Watched Directories, Audit DB connection placeholders, and Audit Export destinations. A Pipeline Registry is created with the first authored Pipeline so the Authoring UI has one consistent workspace model; it does not combine Audit DBs or change the rule that one Audit DB maps to exactly one Pipeline. Operator CLI commands also read the Registry: `--pipeline <id> --workspace <path>` resolves a Pipeline's Pipeline Config, Watched Directory, and Audit DB (its `audit_db` placeholder resolved to a connection string only at command time) in place of the explicit `--config`/`--dir`/`--audit-db-url` flags. Operator resolution loads the Registry strictly — a duplicate id, a shared `audit_db`, or a missing Folder fails the command — unlike the Authoring browse screen, which tolerates a missing Folder to grey out its row.
 _Avoid_: shared audit database, global pipeline database, pipeline catalog.
 
 ### Pipeline Folder
