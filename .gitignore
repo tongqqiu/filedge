@@ -8,3 +8,8 @@ venv/
 *.db
 .env
 site/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
