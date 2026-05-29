@@ -4,7 +4,6 @@ import importlib.util
 import shutil
 
 import pytest
-import yaml
 
 from filedge.authoring_browse import (
     NEW_PIPELINE_SENTINEL,
