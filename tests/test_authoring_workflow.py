@@ -3,6 +3,7 @@
 import os
 
 import pytest
+import yaml
 
 from filedge.authoring_draft import ColumnDraft
 from filedge.authoring_validation import SCOPE_WRITE_MODE
@@ -575,6 +576,30 @@ def test_authoring_workflow_field_encryption_declarations_lists_columns(tmp_path
     ]
 
 
+def test_authoring_workflow_field_encryption_placeholders_list_key_references(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "ssn,email\n1,a@example.com\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.draft.edit_column("ssn", type="string")
+    workflow.draft.edit_column("email", type="string")
+    workflow.set_field_encryption("ssn", encrypt_key="env:SSN_ENC_KEY")
+    workflow.set_field_encryption("email", hash_key="env:EMAIL_HASH_KEY")
+
+    placeholders = {p.env_var: p.purpose for p in workflow.credential_placeholders()}
+
+    assert placeholders["SSN_ENC_KEY"] == (
+        "Field Encryption encrypt key for destination ssn"
+    )
+    assert placeholders["EMAIL_HASH_KEY"] == (
+        "Field Encryption hash key for destination email"
+    )
+
+
 def test_authoring_workflow_requires_draft_for_validation_and_generation(tmp_path):
     workflow = AuthoringWorkflow(
         file=str(tmp_path / "missing.txt"),
@@ -740,6 +765,98 @@ def test_reauthor_save_back_refreshes_runbook_timestamp(tmp_path):
     assert "Authored at: " in runbook_after
     # Both still name the same sample File.
     assert src in runbook_after
+
+
+def test_reauthor_field_encryption_round_trips_and_regenerates_runbook(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(
+        tmp_path,
+        "people.csv",
+        "id,ssn,email,phone\n1,123-45-6789,a@example.com,555-0000\n",
+    )
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.draft.edit_column("ssn", dest="ssn_ciphertext", type="string")
+    workflow.draft.edit_column("email", dest="email_token", type="string")
+    workflow.draft.edit_column("phone", dest="phone_protected", type="string")
+    workflow.set_field_encryption("ssn_ciphertext", encrypt_key="env:SSN_ENC_KEY")
+    workflow.set_field_encryption("email_token", hash_key="env:EMAIL_HASH_KEY")
+    workflow.set_field_encryption(
+        "phone_protected",
+        encrypt_key="env:PHONE_ENC_KEY",
+        hash_key="env:PHONE_HASH_KEY",
+    )
+    _acknowledge_all(workflow)
+    result = workflow.generate()
+    before_yaml = yaml.safe_load(open(result.config_path).read())
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=str(workspace)
+    )
+    assert reopened.draft.column_by_dest("ssn_ciphertext").encrypt.key == (
+        "env:SSN_ENC_KEY"
+    )
+    assert reopened.draft.column_by_dest("email_token").hash.key == (
+        "env:EMAIL_HASH_KEY"
+    )
+    phone = reopened.draft.column_by_dest("phone_protected")
+    assert phone.encrypt.key == "env:PHONE_ENC_KEY"
+    assert phone.hash.key == "env:PHONE_HASH_KEY"
+
+    reopened.validate()
+    reopened.generate()
+
+    after_yaml = yaml.safe_load(open(result.config_path).read())
+    runbook = open(result.runbook_path).read()
+    assert after_yaml == before_yaml
+    for placeholder in (
+        "SSN_ENC_KEY",
+        "EMAIL_HASH_KEY",
+        "PHONE_ENC_KEY",
+        "PHONE_HASH_KEY",
+    ):
+        assert placeholder in runbook
+
+
+def test_reauthor_field_encryption_never_writes_key_material(tmp_path, monkeypatch):
+    secrets = {
+        "SSN_ENC_KEY": "secret-ssn-key-material",
+        "EMAIL_HASH_KEY": "secret-email-key-material",
+    }
+    for name, value in secrets.items():
+        monkeypatch.setenv(name, value)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "ssn,email\n123,a@example.com\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.draft.edit_column("ssn", type="string")
+    workflow.draft.edit_column("email", type="string")
+    workflow.set_field_encryption("ssn", encrypt_key="env:SSN_ENC_KEY")
+    workflow.set_field_encryption("email", hash_key="env:EMAIL_HASH_KEY")
+    _acknowledge_all(workflow)
+    result = workflow.generate()
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=str(workspace)
+    )
+    reopened.edit_column("email", required=False)
+    reopened.validate()
+    reopened.generate()
+
+    folder_abs = os.path.join(str(workspace), result.folder)
+    for root, _, files in os.walk(folder_abs):
+        for filename in files:
+            text = open(os.path.join(root, filename)).read()
+            for secret in secrets.values():
+                assert secret not in text
 
 
 def test_open_folder_rejects_unsupported_shape_clearly(tmp_path):

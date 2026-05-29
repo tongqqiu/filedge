@@ -482,6 +482,51 @@ def test_textual_authoring_ui_declares_field_encryption(tmp_path, monkeypatch):
     asyncio.run(run())
 
 
+def test_textual_authoring_ui_surfaces_loaded_field_encryption(tmp_path, monkeypatch):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("ssn,name\n123-45-6789,Alice\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.draft.edit_column("ssn", type="string")
+        workflow.set_field_encryption("ssn", encrypt_key="env:SSN_ENC_KEY")
+        for review in workflow.confidence_reviews():
+            workflow.acknowledge_confidence_tier(review.source)
+        result = workflow.generate()
+        reopened = AuthoringWorkflow.open_folder(
+            folder=result.folder,
+            workspace=str(workspace),
+        )
+        app = AuthoringApp(reopened)
+
+        async with app.run_test():
+            panel = app.query_one("#field_encryption")
+            assert "ssn -> ssn" in str(panel.render())
+            assert "env:SSN_ENC_KEY" in str(panel.render())
+
+            app._selected_column = lambda: reopened.draft.column_by_dest("ssn")
+            seen = {}
+
+            def capture_default(screen, callback):
+                seen["value"] = screen.value
+                callback("env:SSN_ENC_KEY_V2")
+
+            monkeypatch.setattr(app, "push_screen", capture_default)
+            app.action_edit_encrypt_key()
+
+            assert seen["value"] == "env:SSN_ENC_KEY"
+            assert reopened.draft.column_by_dest("ssn").encrypt.key == (
+                "env:SSN_ENC_KEY_V2"
+            )
+
+    asyncio.run(run())
+
+
 def test_textual_authoring_ui_duplicates_column_for_two_destinations(
     tmp_path, monkeypatch
 ):
