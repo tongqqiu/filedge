@@ -24,7 +24,11 @@ from filedge.connectors import (
     connector_descriptor,
 )
 from filedge.file_sample import FormatNotDetected, resolve_format, read_excel_sheet_names
-from filedge.pipeline_folder import PipelineFolderResult, write_pipeline_folder
+from filedge.pipeline_folder import (
+    PipelineFolderResult,
+    operator_handoff_commands,
+    write_pipeline_folder,
+)
 
 
 RISKY_CONFIDENCE_TIERS = {"low", "ambiguous"}
@@ -111,7 +115,24 @@ class AuthoringWorkflow:
         return workflow
 
     def choose_format(self, fmt: str) -> None:
-        """Apply an explicit format override and rebuild the draft."""
+        """Apply an explicit format override and re-seed the draft."""
+        self._reseed(fmt=fmt, sheet=self.sheet if fmt == "excel" else None)
+
+    def choose_sheet(self, sheet: object) -> None:
+        """Select an Excel sheet and re-seed the draft from that worksheet."""
+        if self.fmt != "excel":
+            raise ValueError("A sheet picker is only valid for excel sample Files.")
+        self._reseed(fmt="excel", sheet=sheet)
+
+    def _reseed(self, *, fmt: str, sheet: object) -> None:
+        """Rebuild the draft from the sample File under a new format/sheet.
+
+        Identity fields (file, workspace, dest_table, sample_rows, encoding, out)
+        are unchanged. Everything derived from the sample File is reset: the
+        resolved format, the draft, the preview, the Excel sheet list, the
+        validation report, any generated artifacts, and the Confidence Tier
+        acknowledgements — re-seeding a different format invalidates prior review.
+        """
         rebuilt = self.start(
             file=self.file,
             workspace=self.workspace,
@@ -119,26 +140,17 @@ class AuthoringWorkflow:
             fmt=fmt,
             sample_rows=self.sample_rows,
             encoding=self.encoding,
-            sheet=self.sheet if fmt == "excel" else None,
-            out=self.out,
-        )
-        self.__dict__.update(rebuilt.__dict__)
-
-    def choose_sheet(self, sheet: object) -> None:
-        """Select an Excel sheet and rebuild the draft from that worksheet."""
-        if self.fmt != "excel":
-            raise ValueError("A sheet picker is only valid for excel sample Files.")
-        rebuilt = self.start(
-            file=self.file,
-            workspace=self.workspace,
-            dest_table=self.dest_table,
-            fmt="excel",
-            sample_rows=self.sample_rows,
-            encoding=self.encoding,
             sheet=sheet,
             out=self.out,
         )
-        self.__dict__.update(rebuilt.__dict__)
+        self.fmt = rebuilt.fmt
+        self.sheet = rebuilt.sheet
+        self.excel_sheets = rebuilt.excel_sheets
+        self.draft = rebuilt.draft
+        self.preview_rows = rebuilt.preview_rows
+        self.validation_report = None
+        self.generated = None
+        self.confidence_acknowledgements = {}
 
     def set_fixed_width_layout(self, columns: list[ColumnDraft]) -> None:
         """Populate the manual Fixed-Width Layout entry surface."""
@@ -154,10 +166,39 @@ class AuthoringWorkflow:
         """Return Write Modes available during Pipeline Authoring."""
         return ["append", "truncate", "cdc"]
 
+    def edit_column(
+        self,
+        source: str,
+        *,
+        new_source: Optional[str] = None,
+        dest: Optional[str] = None,
+        type: Optional[str] = None,
+        required: Optional[bool] = None,
+        start: Optional[int] = None,
+        width: Optional[int] = None,
+    ) -> ColumnDraft:
+        """Edit one draft column's authored fields through the Workflow seam.
+
+        Every draft mutation funnels through the Workflow so the
+        validation-staleness invariant holds in one place; the Authoring UI must
+        not reach past this seam into the draft.
+        """
+        column = self._require_draft().edit_column(
+            source,
+            new_source=new_source,
+            dest=dest,
+            type=type,
+            required=required,
+            start=start,
+            width=width,
+        )
+        self._mutated()
+        return column
+
     def choose_write_mode(self, write_mode: str) -> None:
         """Select append, truncate, or cdc Write Mode."""
         self._require_draft().choose_write_mode(write_mode)
-        self.validation_report = None
+        self._mutated()
 
     def set_cdc_settings(
         self,
@@ -170,7 +211,7 @@ class AuthoringWorkflow:
             business_keys=business_keys,
             sequence_by=sequence_by,
         )
-        self.validation_report = None
+        self._mutated()
 
     def connector_types(self) -> list[str]:
         """Return Connector Registry types available to the Authoring UI."""
@@ -184,13 +225,13 @@ class AuthoringWorkflow:
         """Select a Connector and seed its non-secret settings."""
         draft = self._require_draft()
         draft.choose_connector(connector_type)
-        self.validation_report = None
+        self._mutated()
         return connector_descriptor(draft.connector_type)
 
     def set_connector_setting(self, name: str, value: str) -> None:
         """Record one required non-secret Connector setting."""
         self._require_draft().set_connector_setting(name, value)
-        self.validation_report = None
+        self._mutated()
 
     def set_field_encryption(
         self,
@@ -209,7 +250,7 @@ class AuthoringWorkflow:
         encrypt = EncryptDraft(key=encrypt_key) if encrypt_key else None
         hash_block = HashDraft(key=hash_key) if hash_key else None
         draft.set_field_encryption(dest, encrypt=encrypt, hash=hash_block)
-        self.validation_report = None
+        self._mutated()
 
     def clear_field_encryption(
         self,
@@ -222,12 +263,12 @@ class AuthoringWorkflow:
         self._require_draft().clear_field_encryption(
             dest, encrypt=encrypt, hash=hash
         )
-        self.validation_report = None
+        self._mutated()
 
     def duplicate_column(self, dest: str, *, new_dest: str) -> ColumnDraft:
         """Clone a column under a new dest so one source maps to two destinations."""
         cloned = self._require_draft().duplicate_column(dest, new_dest=new_dest)
-        self.validation_report = None
+        self._mutated()
         return cloned
 
     def field_encryption_declarations(self) -> list[dict]:
@@ -352,19 +393,21 @@ class AuthoringWorkflow:
         return self.generated
 
     def suggested_commands(self) -> list[str]:
-        """Return the post-generation Operator CLI handoff commands."""
+        """Return the post-generation Operator CLI handoff commands.
+
+        Renders the same handoff the Authoring Runbook records, from the values
+        the Pipeline Folder writer actually persisted — one source of truth for
+        the command set and the Audit DB shell reference.
+        """
         if self.generated is None:
             return []
-        config = f"{self.generated.folder}/pipeline.yaml"
-        audit_db = self._audit_db_ref()
-        return [
-            f"filedge validate {self.file} --config {config}",
-            f"filedge healthcheck --config {config} --audit-db-url {audit_db}",
-            f"filedge run --dir ./landing/{self.generated.pipeline_id} "
-            f"--config {config} --audit-db-url {audit_db}",
-            f"filedge export-audit --audit-db-url {audit_db} "
-            f"--output ./audit-exports/{self.generated.pipeline_id}/index.html",
-        ]
+        return operator_handoff_commands(
+            sample_file=self.file,
+            config_path=f"{self.generated.folder}/pipeline.yaml",
+            watched_directory=self.generated.watched_directory,
+            audit_db=self.generated.audit_db,
+            audit_export=self.generated.audit_export,
+        )
 
     def _session(self) -> AuthoringSession:
         draft = self.draft
@@ -376,16 +419,19 @@ class AuthoringWorkflow:
             sheet=self.sheet,
         )
 
+    def _mutated(self) -> None:
+        """Mark the draft changed since the last Authoring Validation.
+
+        Every Workflow mutator funnels through here, so the rule "an edit
+        invalidates validation" lives in one place instead of being repeated —
+        and forgettable — at each mutation site.
+        """
+        self.validation_report = None
+
     def _require_draft(self) -> PipelineConfigDraft:
         if self.draft is None:
             raise ValueError("Authoring Workflow needs a Pipeline Config Draft.")
         return self.draft
-
-    def _audit_db_ref(self) -> str:
-        if self.generated is None:
-            return ""
-        env_name = self.generated.pipeline_id.upper().replace("-", "_")
-        return f"${{{env_name}_AUDIT_DB_URL}}"
 
 
 def _confidence_evidence(column: ColumnDraft) -> str:

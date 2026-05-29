@@ -200,7 +200,7 @@ class AuthoringApp(App):
         column = self._selected_column()
         if column is None or self.workflow.draft is None:
             return
-        self.workflow.draft.edit_column(column.source, required=not column.required)
+        self.workflow.edit_column(column.source, required=not column.required)
         self._populate_schema()
         self._populate_confidence()
 
@@ -373,11 +373,11 @@ class AuthoringApp(App):
                 if self.workflow.draft is None:
                     return
                 if field == "source":
-                    self.workflow.draft.edit_column(column.source, new_source=value)
+                    self.workflow.edit_column(column.source, new_source=value)
                 elif field == "dest":
-                    self.workflow.draft.edit_column(column.source, dest=value)
+                    self.workflow.edit_column(column.source, dest=value)
                 elif field == "type":
-                    self.workflow.draft.edit_column(column.source, type=value)
+                    self.workflow.edit_column(column.source, type=value)
             except Exception as e:  # noqa: BLE001 - rendered as UI feedback
                 self.query_one("#validation", Static).update(f"Edit rejected: {e}")
                 return
