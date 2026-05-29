@@ -264,3 +264,69 @@ def test_add_entry_rejects_shared_audit_db_before_writing(tmp_path):
         )
     after = open(os.path.join(workspace, REGISTRY_FILENAME)).read()
     assert before == after
+
+
+def test_registry_rejects_non_mapping_document():
+    with pytest.raises(RegistryError, match="must be a mapping"):
+        parse_registry(["not", "a", "mapping"])
+
+
+def test_registry_rejects_non_list_pipelines():
+    with pytest.raises(RegistryError, match="pipelines"):
+        parse_registry({"version": 1, "pipelines": "nope"})
+
+
+def test_registry_rejects_non_mapping_entry():
+    with pytest.raises(RegistryError, match="entry must be a mapping"):
+        parse_registry({"version": 1, "pipelines": ["nope"]})
+
+
+def test_registry_accepts_secrets_placeholder_audit_db():
+    entry = {
+        "id": "orders",
+        "folder": "pipelines/orders",
+        "watched_directory": "./landing/orders",
+        "audit_db": "secrets:/run/secrets/orders-audit-db",
+        "audit_export": "./x",
+    }
+    registry = parse_registry({"version": 1, "pipelines": [entry]})
+    assert registry.entries[0].audit_db == "secrets:/run/secrets/orders-audit-db"
+
+
+def test_registry_rejects_folder_without_pipeline_yaml_on_load(tmp_path):
+    workspace = str(tmp_path)
+    os.makedirs(os.path.join(workspace, "pipelines", "orders"))  # folder, no yaml
+    registry = PipelineRegistry(
+        entries=[
+            RegistryEntry(
+                id="orders",
+                folder="pipelines/orders",
+                watched_directory="./landing/orders",
+                audit_db="env:ORDERS",
+                audit_export="./x",
+            )
+        ]
+    )
+    (tmp_path / REGISTRY_FILENAME).write_text(yaml.safe_dump(registry.to_dict()))
+    with pytest.raises(RegistryError, match="lacks pipeline.yaml"):
+        load_registry(workspace)
+
+
+def test_load_registry_raises_when_absent(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        load_registry(str(tmp_path))
+
+
+def test_secrets_audit_db_renders_in_runbook_without_value(tmp_path):
+    workspace = str(tmp_path / "ws")
+    os.makedirs(workspace)
+    sample, config = _draft_config(tmp_path, "orders")
+
+    result = write_pipeline_folder(
+        workspace,
+        config,
+        sample_file=sample,
+        audit_db="secrets:/run/secrets/orders-audit-db",
+    )
+    runbook = open(result.runbook_path).read()
+    assert "secrets:/run/secrets/orders-audit-db" in runbook
