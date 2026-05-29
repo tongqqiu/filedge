@@ -32,6 +32,9 @@ SCOPE_STRICT_MODE = "strict_mode"
 SCOPE_FIELD_ENCRYPTION = "field_encryption"
 SCOPE_WRITE_MODE = "write_mode"
 
+DRIFT_REQUIRED_BUT_NULL = "required-but-null"
+DRIFT_DECLARED_BUT_ABSENT = "declared-but-absent"
+
 
 @dataclass
 class ValidationFinding:
@@ -50,10 +53,20 @@ class ValidationFinding:
 
 
 @dataclass
+class DriftEntry:
+    """One schema/sample disagreement found during re-author validation."""
+
+    category: str
+    column: str
+    reason: str
+
+
+@dataclass
 class AuthoringValidationReport:
     """The structured result of one Authoring Validation pass."""
 
     findings: List[ValidationFinding] = field(default_factory=list)
+    drift: List[DriftEntry] = field(default_factory=list)
     rows_checked: int = 0
 
     @property
@@ -135,6 +148,9 @@ def validate_authoring(
     )
 
     report.findings.extend(_column_tolerance_findings(config, head))
+
+    sample_rows_data = session.preview(num_rows=sample_rows)
+    report.drift.extend(_drift_entries(config, sample_rows_data))
 
     # Strict Mode: run the same validation the loader uses, turning each rejected
     # row into a finding carrying row-level context.
@@ -346,3 +362,57 @@ def _column_tolerance_findings(
             )
         )
     return findings
+
+
+def _drift_entries(config: PipelineConfig, rows: List[dict]) -> List[DriftEntry]:
+    """Return structured re-author drift without changing validation outcome.
+
+    Drift is reviewer feedback about disagreement between the loaded Pipeline
+    Config and the freshly chosen sample File. It does not relax or replace
+    Strict Mode; callers that save drafts can decide separately whether ordinary
+    validation failures block that workflow.
+    """
+    if not rows:
+        return []
+
+    present = set(rows[0].keys())
+    drift: List[DriftEntry] = []
+
+    for column in config.columns:
+        if column.source not in present:
+            drift.append(
+                DriftEntry(
+                    category=DRIFT_DECLARED_BUT_ABSENT,
+                    column=column.source,
+                    reason=(
+                        f"Declared column {column.source!r} is absent from the "
+                        "sample File."
+                    ),
+                )
+            )
+            continue
+
+        if not column.required:
+            continue
+
+        empty_rows = [
+            index
+            for index, row in enumerate(rows, start=1)
+            if row.get(column.source) is None or row.get(column.source) == ""
+        ]
+        if empty_rows:
+            row_label = ", ".join(str(i) for i in empty_rows[:5])
+            if len(empty_rows) > 5:
+                row_label += f", +{len(empty_rows) - 5} more"
+            drift.append(
+                DriftEntry(
+                    category=DRIFT_REQUIRED_BUT_NULL,
+                    column=column.source,
+                    reason=(
+                        f"Required column {column.source!r} has null/empty "
+                        f"value(s) in sampled row(s): {row_label}."
+                    ),
+                )
+            )
+
+    return drift
