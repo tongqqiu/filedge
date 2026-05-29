@@ -330,6 +330,13 @@ def test_field_encryption_key_reference_must_be_a_placeholder(tmp_path):
         draft.to_config()
 
 
+def test_column_by_dest_raises_for_unknown_dest(tmp_path):
+    src = _csv(tmp_path, "id\n1\n")
+    draft = PipelineConfigDraft.from_sample(src, "t")
+    with pytest.raises(KeyError):
+        draft.column_by_dest("nope")
+
+
 def test_field_encryption_columns_lists_only_declared(tmp_path):
     src = _csv(tmp_path, "ssn,name\n1,Alice\n")
     draft = PipelineConfigDraft.from_sample(src, "people")
