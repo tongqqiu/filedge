@@ -40,7 +40,7 @@ uv lock
 
 ## 3. Update the changelog
 
-Add a new `## [0.x.y] - YYYY-MM-DD` section to [`CHANGELOG.md`](../CHANGELOG.md)
+Add a new `## [0.x.y] - YYYY-MM-DD` section to [`CHANGELOG.md`](https://github.com/tongqqiu/filedge/blob/main/CHANGELOG.md)
 with curated **Highlights** plus `Added` / `Changed` / `Fixed` / `Documentation`
 subsections as needed. This section is the release notes: the release workflow
 extracts it verbatim as the GitHub Release body and appends the auto-generated
