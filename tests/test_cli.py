@@ -1,4 +1,5 @@
 import json
+import importlib.util
 
 import pytest
 from click.testing import CliRunner
@@ -13,6 +14,19 @@ from filedge.db import (
     mark_committed,
     mark_failed,
 )
+
+
+def test_author_command_reports_missing_optional_extra(tmp_path):
+    if importlib.util.find_spec("textual") is not None:
+        pytest.skip("textual is installed in this environment")
+    sample = tmp_path / "sample.csv"
+    sample.write_text("id\n1\n")
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["author", str(sample)])
+
+    assert result.exit_code == 1
+    assert "pip install filedge[authoring]" in result.output
 
 
 @pytest.fixture

@@ -416,6 +416,55 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding, sheet):
 
 
 @cli.command()
+@click.argument("sample_file")
+@click.option("--format", "fmt", default=None, type=_FORMAT_CHOICE,
+              help="File format (auto-detected from extension)")
+@click.option("--sample-rows", default=1000, show_default=True, help="Number of rows to sample")
+@click.option("--dest-table", default=None,
+              help="Destination table name. Defaults to the sample File stem.")
+@click.option("--out", default=None,
+              help="Pipeline Folder id/name override")
+@click.option("--workspace", default=".",
+              type=click.Path(file_okay=False, dir_okay=True),
+              help="Workspace root for Pipeline Folder and Pipeline Registry")
+@click.option("--encoding", default=None, help="File encoding override")
+@click.option("--sheet", default=None,
+              help="Excel sheet name or 0-based index. Default: first sheet.")
+def author(sample_file, fmt, sample_rows, dest_table, out, workspace, encoding, sheet):
+    """Launch the local Authoring UI for a sample File."""
+    try:
+        from filedge.authoring_ui import AuthoringApp
+        from filedge.authoring_workflow import AuthoringWorkflow
+    except ImportError as e:
+        click.echo(str(e), err=True)
+        sys.exit(1)
+
+    if sheet is not None and fmt is not None and fmt != "excel":
+        click.echo("Error: --sheet is only valid with --format excel.", err=True)
+        sys.exit(2)
+
+    if dest_table is None:
+        dest_table = os.path.splitext(os.path.basename(sample_file))[0]
+
+    try:
+        workflow = AuthoringWorkflow.start(
+            file=sample_file,
+            workspace=workspace,
+            dest_table=dest_table,
+            fmt=fmt,
+            sample_rows=sample_rows,
+            encoding=encoding,
+            sheet=_parse_sheet_selector(sheet),
+            out=out,
+        )
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(2)
+
+    AuthoringApp(workflow).run()
+
+
+@cli.command()
 @click.option(
     "--shell",
     type=click.Choice(["zsh", "bash"]),
