@@ -35,6 +35,22 @@ CONFIG_FILENAME = "pipeline.yaml"
 RUNBOOK_FILENAME = "RUNBOOK.md"
 
 _RUNBOOK_SAMPLE_PREFIX = "Authored from sample File: "
+_RUNBOOK_AUTHORED_AT_PREFIX = "Authored at: "
+
+
+def read_runbook_authored_at(runbook_text: str) -> Optional[str]:
+    """Recover the ``Authored at`` ISO timestamp recorded in an Authoring Runbook.
+
+    The Pipeline Registry browse screen (#179) uses this to surface a last-author
+    timestamp per Pipeline. The renderer writes the stamp under ``## Sample File``;
+    this is its inverse. Returns ``None`` when the line is absent or empty.
+    """
+    for line in runbook_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(_RUNBOOK_AUTHORED_AT_PREFIX):
+            value = stripped[len(_RUNBOOK_AUTHORED_AT_PREFIX):].strip()
+            return value.strip("`") or None
+    return None
 
 
 def read_runbook_sample_file(runbook_text: str) -> Optional[str]:

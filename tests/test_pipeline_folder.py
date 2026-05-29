@@ -10,6 +10,7 @@ import yaml
 from filedge.authoring_draft import PipelineConfigDraft
 from filedge.config import load_config
 from filedge.pipeline_folder import (
+    read_runbook_authored_at,
     read_runbook_sample_file,
     slugify_pipeline_id,
     write_pipeline_folder,
@@ -415,3 +416,13 @@ def test_read_runbook_sample_file_round_trips_and_handles_absence():
     runbook = "## Sample File\n\nAuthored from sample File: `/data/people.csv`\n"
     assert read_runbook_sample_file(runbook) == "/data/people.csv"
     assert read_runbook_sample_file("no sample line here") is None
+
+
+def test_read_runbook_authored_at_round_trips_and_handles_absence():
+    runbook = (
+        "## Sample File\n\n"
+        "Authored at: `2026-05-29T08:15:00`\n\n"
+        "Authored from sample File: `/data/people.csv`\n"
+    )
+    assert read_runbook_authored_at(runbook) == "2026-05-29T08:15:00"
+    assert read_runbook_authored_at("no timestamp here") is None

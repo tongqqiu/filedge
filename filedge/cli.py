@@ -451,8 +451,39 @@ def author(sample_file, pipeline, fmt, sample_rows, dest_table, out, workspace, 
         )
         sys.exit(2)
     if pipeline is None and sample_file is None:
-        click.echo("Error: pass a SAMPLE_FILE or --pipeline <folder>.", err=True)
-        sys.exit(2)
+        from filedge.pipeline_registry import registry_exists
+
+        if not registry_exists(workspace):
+            click.echo(
+                "Error: pass a SAMPLE_FILE or --pipeline <folder>.", err=True
+            )
+            sys.exit(2)
+        # Pipeline Registry browse-and-pick (#179) — the only place the CLI
+        # routes the User into the browse screen.
+        from filedge.authoring_browse import (
+            NEW_PIPELINE_SENTINEL,
+            PipelineBrowseApp,
+            list_browse_entries,
+        )
+
+        try:
+            entries = list_browse_entries(workspace)
+        except Exception as e:
+            click.echo(f"Error: {e}", err=True)
+            sys.exit(2)
+        browse = PipelineBrowseApp(entries)
+        browse.run()
+        choice = browse.selected_folder
+        if choice is None:
+            return
+        if choice == NEW_PIPELINE_SENTINEL:
+            click.echo(
+                "Error: from-scratch authoring needs a SAMPLE_FILE. "
+                "Re-run: filedge author <SAMPLE_FILE>.",
+                err=True,
+            )
+            sys.exit(2)
+        pipeline = choice
 
     try:
         if pipeline is not None:
