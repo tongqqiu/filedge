@@ -50,7 +50,7 @@ jobs:
       - run: uv publish
 
   github-release:
-    needs: [build, publish]  # only announce a release once PyPI publish succeeds
+    needs: build  # independent of publish, so re-tagging a published version still releases
     runs-on: ubuntu-latest
     permissions:
       contents: write  # required to create the GitHub Release
