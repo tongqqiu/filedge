@@ -134,19 +134,24 @@ Ingest files from a watched directory with retry-safe commits and a full audit t
 
 ```bash
 filedge run --dir <path> --config <path> --audit-db-url <url> [--progress|--no-progress]
+filedge run --pipeline <id> [--workspace <path>] [--progress|--no-progress]
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
-| `--dir` | — | required | Watched directory path (local or cloud URI) |
-| `--config` | — | required | Path to `pipeline.yaml` |
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--pipeline` | — | — | Resolve `--dir`/`--config`/`--audit-db-url` from this Pipeline Registry id. Mutually exclusive with those three flags |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
+| `--dir` | — | required* | Watched directory path (local or cloud URI). Mutually exclusive with `--pipeline` |
+| `--config` | — | required* | Path to `pipeline.yaml`. Mutually exclusive with `--pipeline` |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required* | Audit database URL. Mutually exclusive with `--pipeline` |
 | `--progress / --no-progress` | — | auto | Show live progress bars; defaults to on for interactive terminals |
 | `--json` | — | off | Write the Run summary as JSON |
 | `--log-format` | — | auto | `text` on a TTY, `json` otherwise |
 | `--log-level` | — | `INFO` | Log level |
 | `--otel-traces / --no-otel-traces` | `FILEDGE_OTEL_TRACES` | off | Enable OpenTelemetry tracing |
 | `--otel-logs / --no-otel-logs` | `FILEDGE_OTEL_LOGS` | off | Enable the OpenTelemetry log bridge |
+
+\* Provide either `--pipeline` or all three of `--dir`/`--config`/`--audit-db-url`, not both.
 
 **Exit codes:** `0` on success, `1` on error.
 
@@ -181,6 +186,7 @@ Move terminal `FAILED` files back to `PENDING` so the next run can retry them.
 ```bash
 filedge requeue <filename> --audit-db-url <url>
 filedge requeue --all-terminal-failed --yes --audit-db-url <url>
+filedge requeue <filename> --pipeline <id> [--workspace <path>]
 ```
 
 | Option | Env var | Default | Description |
@@ -191,7 +197,9 @@ filedge requeue --all-terminal-failed --yes --audit-db-url <url>
 | `--dry-run` | — | off | List bulk requeue candidates without changing state |
 | `--yes` | — | off | Confirm bulk requeue |
 | `--retry-cap` | — | `3` | Retry cap used to identify terminal failures |
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
 
 **Exit codes:** `0` on success, `1` on error or missing bulk confirmation.
 
@@ -259,12 +267,15 @@ Show the full audit record and source-manifest metadata for one file.
 
 ```bash
 filedge lineage <content-hash-or-filename> --audit-db-url <url> [--json]
+filedge lineage <content-hash-or-filename> --pipeline <id> [--workspace <path>] [--json]
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
 | `<content-hash-or-filename>` | — | required | Exact content hash or filename to inspect |
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
 | `--json` | — | off | Emit machine-readable JSON |
 | `--dest-table` | — | none | Destination table name to include in output |
 
