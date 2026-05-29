@@ -389,8 +389,29 @@ class AuthoringWorkflow:
         return items
 
     def credential_placeholders(self) -> list[CredentialPlaceholder]:
-        """Return runtime Credential Placeholders for the selected Connector."""
-        return list(self.connector_descriptor().credential_placeholders)
+        """Return runtime Credential Placeholders for Connector and FE keys."""
+        placeholders = list(self.connector_descriptor().credential_placeholders)
+        seen = {p.env_var for p in placeholders}
+        for item in self.field_encryption_declarations():
+            for kind in ("encrypt", "hash"):
+                block = item.get(kind)
+                if not block:
+                    continue
+                key = block["key"]
+                name = key[len("env:"):] if key.startswith("env:") else key
+                if name in seen:
+                    continue
+                seen.add(name)
+                placeholders.append(
+                    CredentialPlaceholder(
+                        name,
+                        (
+                            f"Field Encryption {kind} key for destination "
+                            f"{item['dest']}"
+                        ),
+                    )
+                )
+        return placeholders
 
     def confidence_reviews(self) -> list[ConfidenceTierReview]:
         """List risky Confidence Tiers and whether each was acknowledged."""

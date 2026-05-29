@@ -413,9 +413,10 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
     ``"low"``, ``"ambiguous"``). Schema Inference refresh is issue #174.
 
     Only the minimal supported shape is accepted: CSV format, ``append`` write
-    mode, ``sqlite`` connector, no Field Encryption blocks. Unsupported shapes
-    raise ``ValueError`` naming the offending field so future slices can opt
-    them in deliberately.
+    mode, and ``sqlite`` connector. Field Encryption declarations are preserved
+    structurally (algorithm and key reference only). Unsupported shapes raise
+    ``ValueError`` naming the offending field so future slices can opt them in
+    deliberately.
     """
     if config.format != "csv":
         raise ValueError(
@@ -433,18 +434,6 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
             f"draft_from_config does not yet support write_mode {config.write_mode!r}; "
             "only 'append' is supported in this slice."
         )
-    for col in config.columns:
-        if col.encrypt is not None:
-            raise ValueError(
-                f"draft_from_config does not yet support Field Encryption "
-                f"(column {col.dest!r} has an encrypt: block)."
-            )
-        if col.hash is not None:
-            raise ValueError(
-                f"draft_from_config does not yet support Field Encryption "
-                f"(column {col.dest!r} has a hash: block)."
-            )
-
     columns = [
         ColumnDraft(
             source=col.source,
@@ -455,6 +444,16 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
             null_count=0,
             total_seen=0,
             notes=[],
+            encrypt=(
+                EncryptDraft(key=col.encrypt.key, algorithm=col.encrypt.algorithm)
+                if col.encrypt is not None
+                else None
+            ),
+            hash=(
+                HashDraft(key=col.hash.key, algorithm=col.hash.algorithm)
+                if col.hash is not None
+                else None
+            ),
         )
         for col in config.columns
     ]

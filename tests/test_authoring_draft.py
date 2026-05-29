@@ -380,7 +380,7 @@ def test_draft_from_config_tracer_bullet():
     assert by_source["amount"].required is False
 
 
-def test_draft_from_config_rejects_field_encryption_encrypt_block():
+def test_draft_from_config_loads_field_encryption_encrypt_block():
     cfg = config_from_dict(
         {
             "format": "csv",
@@ -396,11 +396,16 @@ def test_draft_from_config_rejects_field_encryption_encrypt_block():
             ],
         }
     )
-    with pytest.raises(ValueError, match="encrypt"):
-        draft_from_config(cfg)
+    draft = draft_from_config(cfg)
+
+    ssn = draft.column_by_dest("ssn")
+    assert ssn.encrypt is not None
+    assert ssn.encrypt.algorithm == "aes-256-gcm"
+    assert ssn.encrypt.key == "env:K"
+    assert ssn.hash is None
 
 
-def test_draft_from_config_rejects_field_encryption_hash_block():
+def test_draft_from_config_loads_field_encryption_hash_block():
     cfg = config_from_dict(
         {
             "format": "csv",
@@ -416,8 +421,13 @@ def test_draft_from_config_rejects_field_encryption_hash_block():
             ],
         }
     )
-    with pytest.raises(ValueError, match="hash"):
-        draft_from_config(cfg)
+    draft = draft_from_config(cfg)
+
+    ssn = draft.column_by_dest("ssn")
+    assert ssn.encrypt is None
+    assert ssn.hash is not None
+    assert ssn.hash.algorithm == "hmac-sha256"
+    assert ssn.hash.key == "env:H"
 
 
 def test_draft_from_config_rejects_non_csv_format():
@@ -496,3 +506,41 @@ def test_draft_from_config_round_trip_identity():
         assert em["dest"] == orig["dest"]
         assert em["type"] == orig["type"]
         assert em["required"] == orig["required"]
+
+
+def test_draft_from_config_round_trips_mixed_field_encryption_columns():
+    src_dict = {
+        "format": "csv",
+        "dest_table": "people",
+        "write_mode": "append",
+        "connector": {"type": "sqlite", "url": "sqlite:///people.db"},
+        "columns": [
+            {"source": "id", "dest": "id", "type": "integer", "required": True},
+            {
+                "source": "ssn",
+                "dest": "ssn_ciphertext",
+                "type": "string",
+                "required": True,
+                "encrypt": {"algorithm": "aes-256-gcm", "key": "env:SSN_ENC_KEY"},
+            },
+            {
+                "source": "email",
+                "dest": "email_token",
+                "type": "string",
+                "required": False,
+                "hash": {"algorithm": "hmac-sha256", "key": "env:EMAIL_HASH_KEY"},
+            },
+            {
+                "source": "phone",
+                "dest": "phone_protected",
+                "type": "string",
+                "required": True,
+                "encrypt": {"algorithm": "aes-256-gcm", "key": "env:PHONE_ENC_KEY"},
+                "hash": {"algorithm": "hmac-sha256", "key": "env:PHONE_HASH_KEY"},
+            },
+        ],
+    }
+
+    emitted = draft_from_config(config_from_dict(src_dict)).to_config_dict()
+
+    assert emitted == src_dict
