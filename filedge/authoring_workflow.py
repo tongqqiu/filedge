@@ -10,7 +10,12 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from filedge.authoring import AuthoringSession
-from filedge.authoring_draft import ColumnDraft, PipelineConfigDraft
+from filedge.authoring_draft import (
+    ColumnDraft,
+    EncryptDraft,
+    HashDraft,
+    PipelineConfigDraft,
+)
 from filedge.authoring_validation import AuthoringValidationReport, validate_authoring
 from filedge.connectors import (
     ConnectorDescriptor,
@@ -187,6 +192,68 @@ class AuthoringWorkflow:
         self._require_draft().set_connector_setting(name, value)
         self.validation_report = None
 
+    def set_field_encryption(
+        self,
+        dest: str,
+        *,
+        encrypt_key: Optional[str] = None,
+        hash_key: Optional[str] = None,
+    ) -> None:
+        """Declare AES-256-GCM encrypt and/or HMAC-SHA256 hash on a column.
+
+        Keys are Credential Placeholder references (``env:NAME`` or
+        ``secrets:/abs/path``). The UI never collects, stores, tests, or exports
+        key material.
+        """
+        draft = self._require_draft()
+        encrypt = EncryptDraft(key=encrypt_key) if encrypt_key else None
+        hash_block = HashDraft(key=hash_key) if hash_key else None
+        draft.set_field_encryption(dest, encrypt=encrypt, hash=hash_block)
+        self.validation_report = None
+
+    def clear_field_encryption(
+        self,
+        dest: str,
+        *,
+        encrypt: bool = False,
+        hash: bool = False,
+    ) -> None:
+        """Remove the encrypt or hash declaration from a destination column."""
+        self._require_draft().clear_field_encryption(
+            dest, encrypt=encrypt, hash=hash
+        )
+        self.validation_report = None
+
+    def duplicate_column(self, dest: str, *, new_dest: str) -> ColumnDraft:
+        """Clone a column under a new dest so one source maps to two destinations."""
+        cloned = self._require_draft().duplicate_column(dest, new_dest=new_dest)
+        self.validation_report = None
+        return cloned
+
+    def field_encryption_declarations(self) -> list[dict]:
+        """List declared encrypt/hash columns for the Authoring Runbook.
+
+        Returns Credential Placeholder references only — never resolved key
+        material — so this list is safe to render in the non-secret Runbook.
+        """
+        if self.draft is None:
+            return []
+        items: list[dict] = []
+        for column in self.draft.field_encryption_columns():
+            entry: dict = {"source": column.source, "dest": column.dest}
+            if column.encrypt is not None:
+                entry["encrypt"] = {
+                    "algorithm": column.encrypt.algorithm,
+                    "key": column.encrypt.key,
+                }
+            if column.hash is not None:
+                entry["hash"] = {
+                    "algorithm": column.hash.algorithm,
+                    "key": column.hash.key,
+                }
+            items.append(entry)
+        return items
+
     def credential_placeholders(self) -> list[CredentialPlaceholder]:
         """Return runtime Credential Placeholders for the selected Connector."""
         return list(self.connector_descriptor().credential_placeholders)
@@ -280,6 +347,7 @@ class AuthoringWorkflow:
                 }
                 for p in self.credential_placeholders()
             ],
+            field_encryption_columns=self.field_encryption_declarations(),
         )
         return self.generated
 

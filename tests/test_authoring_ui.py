@@ -402,3 +402,41 @@ def test_textual_authoring_ui_excel_sheet_change(tmp_path):
             app.on_select_changed(blank)
 
     asyncio.run(run())
+
+
+def test_textual_authoring_ui_declares_field_encryption(tmp_path, monkeypatch):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        src = tmp_path / "people.csv"
+        src.write_text("ssn,name\n123-45-6789,Alice\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(src),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.draft.edit_column("ssn", type="string")
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app._selected_column = lambda: workflow.draft.column_by_dest("ssn")
+
+            keys = iter(["env:SSN_ENC_KEY", "env:SSN_HASH_KEY"])
+
+            def fake_push_screen(screen, callback):
+                callback(next(keys))
+
+            monkeypatch.setattr(app, "push_screen", fake_push_screen)
+            app.action_edit_encrypt_key()
+            app.action_edit_hash_key()
+
+            panel = app.query_one("#field_encryption")
+            assert "ssn -> ssn" in str(panel.render())
+            assert "env:SSN_ENC_KEY" in str(panel.render())
+            assert "env:SSN_HASH_KEY" in str(panel.render())
+
+            app.action_clear_field_encryption()
+            assert workflow.draft.column_by_dest("ssn").encrypt is None
+            assert workflow.draft.column_by_dest("ssn").hash is None
+
+    asyncio.run(run())
