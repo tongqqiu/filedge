@@ -48,3 +48,41 @@ jobs:
           enable-cache: false
 
       - run: uv publish
+
+  github-release:
+    needs: [build, publish]  # only announce a release once PyPI publish succeeds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to create the GitHub Release
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Extract curated notes for this tag from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v ver="$version" '
+            $0 ~ ("^## \\[" ver "\\]") { flag = 1; next }
+            /^## \[/ { flag = 0 }
+            /^\[[^]]+\]: / { flag = 0 }
+            flag { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "::error::No CHANGELOG.md section found for version $version" \
+                 "(expected a '## [$version]' heading)."
+            exit 1
+          fi
+          echo "----- release notes for $version -----"
+          cat release-notes.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-notes.md      # curated highlights, pre-pended...
+          generate_release_notes: true     # ...above the auto-generated PR list
+          files: dist/*

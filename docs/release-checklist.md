@@ -38,11 +38,31 @@ run:
 uv lock
 ```
 
-## 3. Open the release-prep PR
+## 3. Update the changelog
+
+Add a new `## [0.x.y] - YYYY-MM-DD` section to [`CHANGELOG.md`](../CHANGELOG.md)
+with curated **Highlights** plus `Added` / `Changed` / `Fixed` / `Documentation`
+subsections as needed. This section is the release notes: the release workflow
+extracts it verbatim as the GitHub Release body and appends the auto-generated
+list of merged pull requests beneath it.
+
+Keep it tight — write for someone deciding whether to upgrade, not an exhaustive
+diff. Also update the link-reference lines at the bottom of the file:
+
+```markdown
+[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.x.y...HEAD
+[0.x.y]: https://github.com/tongqqiu/filedge/compare/v<prev>...v0.x.y
+```
+
+The heading must read exactly `## [0.x.y]` (matching the tag minus the `v`), or
+the release job fails fast because it can't find the section.
+
+## 4. Open the release-prep PR
 
 The release-prep PR should include:
 
-- The version bump.
+- The version bump (`pyproject.toml` + `uv.lock`).
+- The new `CHANGELOG.md` section.
 - Documentation updates for user-facing changes since the last tag.
 - Any small release-readiness fixes found while checking the docs.
 
@@ -58,9 +78,11 @@ gh pr create --fill
 
 Merge only after CI is green and the release notes/docs are complete.
 
-## 4. Create and push the release tag
+## 5. Create and push the release tag
 
-After the PR is merged and `main` is up to date, create the tag and push it:
+After the PR is merged and `main` is up to date, create the tag and push it.
+The tag name must match the `CHANGELOG.md` heading (`v` + the `## [0.x.y]`
+version):
 
 ```bash
 git checkout main
@@ -71,13 +93,14 @@ git push origin v0.x.y
 
 Pushing the tag triggers:
 
-- `.github/workflows/release.yml`, which runs lint, tests, builds the source
-  distribution and wheel, uploads the `dist/` artifact, and publishes to PyPI
-  via trusted publishing.
+- `.github/workflows/release.yml`, which runs lint and tests, builds the source
+  distribution and wheel, publishes to PyPI via trusted publishing, and creates
+  a **GitHub Release** whose body is the curated `CHANGELOG.md` section followed
+  by the auto-generated list of merged PRs, with the build artifacts attached.
 - `.github/workflows/docs.yml`, which deploys the docs for the tag with `mike`
   under the tag's version number and updates the `latest` alias.
 
-## 5. Watch the GitHub Actions workflows
+## 6. Watch the GitHub Actions workflows
 
 Open the release and docs workflow runs for the pushed tag and confirm they pass:
 
@@ -97,7 +120,7 @@ Confirm the docs appear at:
 - `https://tongqqiu.github.io/filedge/0.x.y/`
 - `https://tongqqiu.github.io/filedge/latest/`
 
-## 6. Optional local artifact smoke test
+## 7. Optional local artifact smoke test
 
 The GitHub Action owns publishing, but you can build and smoke-test artifacts
 locally before tagging if you want extra confidence:
@@ -114,7 +137,7 @@ uv run --isolated \
 
 The output should display the top-level help text without errors.
 
-## 7. Post-publish: update the one-command install path
+## 8. Post-publish: update the one-command install path
 
 After the package is live on PyPI, update the install command in `docs/getting-started.md` (and anywhere else the git-URL form appears) from:
 
@@ -136,7 +159,7 @@ git commit -m "docs: update install command to PyPI uvx form for v0.x.y"
 git push origin main
 ```
 
-## 8. Redeploy docs after post-publish docs edits
+## 9. Redeploy docs after post-publish docs edits
 
 ```bash
 uv run mike deploy --push --update-aliases 0.x.y latest
