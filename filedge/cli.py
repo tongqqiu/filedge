@@ -648,9 +648,15 @@ def completion(shell):
               help="Confirm bulk requeue (required with --all-terminal-failed)")
 @click.option("--retry-cap", default=3, show_default=True,
               help="Retry cap used to identify terminal-FAILED files; must match pipeline.yaml")
-@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL",
+@click.option("--pipeline", "pipeline_id", default=None,
+              help="Resolve the Audit DB from this Pipeline Registry id instead of --audit-db-url.")
+@click.option("--workspace", default=".", show_default=True,
+              type=click.Path(file_okay=False),
+              help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
+@click.option("--audit-db-url", default=None, envvar="FILEDGE_AUDIT_DB_URL",
               help="Audit database URL")
-def requeue(filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap, audit_db_url):
+@click.pass_context
+def requeue(ctx, filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap, pipeline_id, workspace, audit_db_url):
     """Requeue terminal-FAILED files so they are retried on the next run.
 
     \b
@@ -679,6 +685,8 @@ def requeue(filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap
     if dry_run and yes:
         click.echo("Error: --dry-run and --yes are mutually exclusive.", err=True)
         sys.exit(1)
+
+    audit_db_url = _operator_audit_db_url(ctx, pipeline_id, workspace, audit_db_url)
 
     db = Database(audit_db_url)
     create_audit_tables(db)
@@ -758,16 +766,23 @@ def requeue(filename, content_hash, all_terminal_failed, dry_run, yes, retry_cap
 
 @cli.command()
 @click.argument("identifier")
-@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--pipeline", "pipeline_id", default=None,
+              help="Resolve the Audit DB from this Pipeline Registry id instead of --audit-db-url.")
+@click.option("--workspace", default=".", show_default=True,
+              type=click.Path(file_okay=False),
+              help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
+@click.option("--audit-db-url", default=None, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
 @click.option("--json", "output_json", is_flag=True, help="Emit machine-readable JSON")
 @click.option("--dest-table", default=None, help="Destination table name to include in lineage output")
-def lineage(identifier, audit_db_url, output_json, dest_table):
+@click.pass_context
+def lineage(ctx, identifier, pipeline_id, workspace, audit_db_url, output_json, dest_table):
     """Show the full audit + source-manifest lineage for one File.
 
     IDENTIFIER may be a Content Hash or a filename. When a filename matches
     multiple Content Hashes, the command prints a disambiguation list and
     exits non-zero — re-run with the specific Content Hash to drill in.
     """
+    audit_db_url = _operator_audit_db_url(ctx, pipeline_id, workspace, audit_db_url)
     db = Database(audit_db_url)
     try:
         create_audit_tables(db)

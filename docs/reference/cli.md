@@ -186,6 +186,7 @@ Move terminal `FAILED` files back to `PENDING` so the next run can retry them.
 ```bash
 filedge requeue <filename> --audit-db-url <url>
 filedge requeue --all-terminal-failed --yes --audit-db-url <url>
+filedge requeue <filename> --pipeline <id> [--workspace <path>]
 ```
 
 | Option | Env var | Default | Description |
@@ -196,7 +197,9 @@ filedge requeue --all-terminal-failed --yes --audit-db-url <url>
 | `--dry-run` | — | off | List bulk requeue candidates without changing state |
 | `--yes` | — | off | Confirm bulk requeue |
 | `--retry-cap` | — | `3` | Retry cap used to identify terminal failures |
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
 
 **Exit codes:** `0` on success, `1` on error or missing bulk confirmation.
 
@@ -242,12 +245,15 @@ Show the full audit record and source-manifest metadata for one file.
 
 ```bash
 filedge lineage <content-hash-or-filename> --audit-db-url <url> [--json]
+filedge lineage <content-hash-or-filename> --pipeline <id> [--workspace <path>] [--json]
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
 | `<content-hash-or-filename>` | — | required | Exact content hash or filename to inspect |
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
 | `--json` | — | off | Emit machine-readable JSON |
 | `--dest-table` | — | none | Destination table name to include in output |
 
