@@ -10,6 +10,7 @@ import yaml
 from filedge.authoring_draft import PipelineConfigDraft
 from filedge.config import load_config
 from filedge.pipeline_folder import (
+    read_runbook_sample_file,
     slugify_pipeline_id,
     write_pipeline_folder,
 )
@@ -355,3 +356,62 @@ def test_secrets_audit_db_renders_in_runbook_without_value(tmp_path):
     )
     runbook = open(result.runbook_path).read()
     assert "secrets:/run/secrets/orders-audit-db" in runbook
+
+
+# --- re-author save-back (#173) ---------------------------------------------
+
+
+def test_runbook_records_injectable_authored_at_timestamp(tmp_path):
+    from datetime import datetime
+
+    workspace = str(tmp_path / "ws")
+    os.makedirs(workspace)
+    sample, config = _draft_config(tmp_path)
+    stamp = datetime(2026, 5, 29, 14, 30, 0)
+
+    result = write_pipeline_folder(
+        workspace, config, sample_file=sample, authored_at=stamp
+    )
+
+    runbook = open(result.runbook_path).read()
+    assert "Authored at: `2026-05-29T14:30:00`" in runbook
+
+
+def test_overwrite_rewrites_folder_and_preserves_registry(tmp_path):
+    workspace = str(tmp_path / "ws")
+    os.makedirs(workspace)
+    sample, config = _draft_config(tmp_path)
+    write_pipeline_folder(workspace, config, sample_file=sample)
+    registry_before = load_registry(workspace).to_dict()
+
+    # Flip a column type and save back over the existing Folder.
+    config["columns"][0]["type"] = "string"
+    result = write_pipeline_folder(
+        workspace,
+        config,
+        sample_file=sample,
+        watched_directory="./landing/orders",
+        audit_db="env:ORDERS_AUDIT_DB_URL",
+        audit_export="./audit-exports/orders",
+        overwrite=True,
+    )
+
+    reloaded = load_config(result.config_path)
+    assert reloaded.columns[0].type == "string"
+    # The Registry is the durable record; overwrite leaves it byte-for-byte.
+    assert load_registry(workspace).to_dict() == registry_before
+
+
+def test_write_pipeline_folder_without_overwrite_still_rejects_existing(tmp_path):
+    workspace = str(tmp_path / "ws")
+    os.makedirs(workspace)
+    sample, config = _draft_config(tmp_path)
+    write_pipeline_folder(workspace, config, sample_file=sample)
+    with pytest.raises(ValueError, match="already exists"):
+        write_pipeline_folder(workspace, config, sample_file=sample)
+
+
+def test_read_runbook_sample_file_round_trips_and_handles_absence():
+    runbook = "## Sample File\n\nAuthored from sample File: `/data/people.csv`\n"
+    assert read_runbook_sample_file(runbook) == "/data/people.csv"
+    assert read_runbook_sample_file("no sample line here") is None

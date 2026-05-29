@@ -627,3 +627,236 @@ def test_authoring_workflow_suggested_commands_match_runbook(tmp_path):
     for command in commands:
         assert command in runbook
     assert any('--audit-db-url "$PEOPLE_AUDIT_DB_URL"' in cmd for cmd in commands)
+
+
+# ---------------------------------------------------------------------------
+# Re-author an existing Pipeline Folder (#173)
+# ---------------------------------------------------------------------------
+
+
+def _author_minimal_folder(tmp_path, body="id,name\n1,Alice\n2,Bob\n"):
+    """Author one folder from scratch and return (workspace, sample, result)."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", body)
+    workflow = AuthoringWorkflow.start(
+        file=src, workspace=str(workspace), dest_table="people"
+    )
+    workflow.validate()
+    _acknowledge_all(workflow)
+    result = workflow.generate()
+    return str(workspace), src, result
+
+
+def test_open_folder_seeds_draft_from_saved_config(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+
+    saved = load_config(result.config_path)
+    by_source = {c.source: c for c in reopened.draft.columns}
+    assert set(by_source) == {c.source for c in saved.columns}
+    assert by_source["id"].dest == "id"
+    assert by_source["id"].type == "integer"
+
+
+def test_open_folder_recovers_sample_file_from_runbook(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+
+    assert reopened.file == src
+
+
+def test_reauthor_save_back_overwrites_in_place(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.edit_column("id", type="string")
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    # Same Folder overwritten in place: the type change survived a reload.
+    saved = load_config(result.config_path)
+    by_source = {c.source: c for c in saved.columns}
+    assert by_source["id"].type == "string"
+
+    # Exactly one Folder and one Registry entry — no duplicate was created.
+    pipelines_dir = os.path.join(workspace, "pipelines")
+    assert os.listdir(pipelines_dir) == ["people"]
+    registry = load_registry(workspace)
+    assert [e.id for e in registry.entries] == ["people"]
+
+
+def test_reauthor_save_back_changes_only_the_edited_column(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    before = load_config(result.config_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.edit_column("id", type="string")
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    after = load_config(result.config_path)
+    assert after.dest_table == before.dest_table
+    assert after.format == before.format
+    assert after.write_mode == before.write_mode
+    assert after.connector.type == before.connector.type
+    # Every column unchanged except `id`, whose type flipped to string.
+    before_cols = {c.source: c for c in before.columns}
+    after_cols = {c.source: c for c in after.columns}
+    assert set(after_cols) == set(before_cols)
+    for source in before_cols:
+        expected_type = "string" if source == "id" else before_cols[source].type
+        assert after_cols[source].type == expected_type
+        assert after_cols[source].dest == before_cols[source].dest
+        assert after_cols[source].required == before_cols[source].required
+
+
+def test_reauthor_save_back_refreshes_runbook_timestamp(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    runbook_before = open(result.runbook_path).read()
+    assert "Authored at: " in runbook_before
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.edit_column("id", type="string")
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    runbook_after = open(result.runbook_path).read()
+    assert "Authored at: " in runbook_after
+    # Both still name the same sample File.
+    assert src in runbook_after
+
+
+def test_open_folder_rejects_unsupported_shape_clearly(tmp_path):
+    # Hand-author a Folder with a non-CSV format the loader does not yet support.
+    workspace = tmp_path / "ws"
+    folder = workspace / "pipelines" / "events"
+    folder.mkdir(parents=True)
+    (folder / "pipeline.yaml").write_text(
+        "format: ndjson\n"
+        "dest_table: events\n"
+        "write_mode: append\n"
+        "connector:\n  type: sqlite\n"
+        "columns:\n  - source: id\n    dest: id\n    type: integer\n"
+    )
+    (folder / "RUNBOOK.md").write_text(
+        "## Sample File\n\nAuthored from sample File: `/data/events.ndjson`\n"
+    )
+
+    with pytest.raises(ValueError, match="ndjson"):
+        AuthoringWorkflow.open_folder(
+            folder="pipelines/events", workspace=str(workspace)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Fresh sample + Confidence Tier refresh on re-author (#174)
+# ---------------------------------------------------------------------------
+
+
+def test_refresh_sample_fills_confidence_tier_on_loaded_columns(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # Loaded columns start with the "loaded" sentinel — no inference evidence yet.
+    assert all(c.confidence == "loaded" for c in reopened.draft.columns)
+
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n1,Alice\n2,Bob\n3,Carol\n")
+    reopened.refresh_sample(fresh)
+
+    by_source = {c.source: c for c in reopened.draft.columns}
+    # The "loaded" sentinel is replaced by a real inference tier from the sample.
+    assert by_source["id"].confidence == "high"
+    assert by_source["name"].confidence != "loaded"
+    assert by_source["id"].total_seen == 3
+
+
+def test_refresh_sample_never_overwrites_authored_fields(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # Author chose: id is a string, renamed to identifier, optional.
+    reopened.edit_column("id", dest="identifier", type="string", required=False)
+
+    # A fresh sample where id looks like an integer must NOT flip the type back.
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n10,Alice\n20,Bob\n")
+    reopened.refresh_sample(fresh)
+
+    id_col = reopened.draft.column("id")
+    assert id_col.type == "string"       # authored field preserved
+    assert id_col.dest == "identifier"   # authored field preserved
+    assert id_col.required is False      # authored field preserved
+    assert id_col.confidence != "loaded" # evidence still refreshed
+
+
+def test_refresh_sample_can_downgrade_a_tier_when_new_data_has_nulls(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # A fresh sample where `id` has a null row -> integer tier drops to low.
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n1,Alice\n,Bob\n3,Carol\n")
+    reopened.refresh_sample(fresh)
+
+    id_col = reopened.draft.column("id")
+    assert id_col.confidence == "low"
+    assert id_col.null_count == 1
+
+
+def test_refresh_sample_records_new_sample_in_regenerated_runbook(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    fresh = _file(tmp_path, "fresh.csv", "id,name\n1,Alice\n2,Bob\n")
+    reopened.refresh_sample(fresh)
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    runbook = open(result.runbook_path).read()
+    assert fresh in runbook
+    assert src not in runbook
+
+
+def test_default_sample_file_uses_runbook_sample_when_present_else_none(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    # The original sample still exists on disk.
+    assert reopened.default_sample_file() == src
+
+    # If the recorded sample is gone, the picker has no default.
+    os.remove(src)
+    assert reopened.default_sample_file() is None
+
+
+def test_refresh_sample_invalidates_prior_validation(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.validate()
+    assert reopened.validation_report is not None
+
+    reopened.refresh_sample(_file(tmp_path, "fresh.csv", "id,name\n1,Alice\n"))
+    # A fresh sample is new evidence; the prior validation no longer applies.
+    assert reopened.validation_report is None

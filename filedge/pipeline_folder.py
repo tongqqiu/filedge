@@ -22,6 +22,7 @@ variables. Secret values are never read or exported.
 import os
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 
 import yaml
@@ -32,6 +33,25 @@ from filedge.pipeline_registry import RegistryEntry, add_entry, registry_path
 PIPELINES_DIRNAME = "pipelines"
 CONFIG_FILENAME = "pipeline.yaml"
 RUNBOOK_FILENAME = "RUNBOOK.md"
+
+_RUNBOOK_SAMPLE_PREFIX = "Authored from sample File: "
+
+
+def read_runbook_sample_file(runbook_text: str) -> Optional[str]:
+    """Recover the sample File path recorded in an Authoring Runbook.
+
+    The Runbook is the only authored artifact that records which sample File a
+    Pipeline was authored from (the Pipeline Registry does not, per ADR-0017).
+    Re-author (#173) reads it back from here. Returns ``None`` when no sample
+    line is present. This is the inverse of the ``## Sample File`` section the
+    renderer writes; the two must stay in sync.
+    """
+    for line in runbook_text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(_RUNBOOK_SAMPLE_PREFIX):
+            value = stripped[len(_RUNBOOK_SAMPLE_PREFIX):].strip()
+            return value.strip("`") or None
+    return None
 
 
 @dataclass
@@ -95,6 +115,8 @@ def write_pipeline_folder(
     confidence_acknowledgements: Optional[list[dict]] = None,
     credential_placeholders: Optional[list[dict]] = None,
     field_encryption_columns: Optional[list[dict]] = None,
+    overwrite: bool = False,
+    authored_at: Optional[datetime] = None,
 ) -> PipelineFolderResult:
     """Write a Pipeline Folder for `config` and register it in the workspace.
 
@@ -103,6 +125,13 @@ def write_pipeline_folder(
     config's `dest_table`. The Registry references (Watched Directory, Audit DB
     placeholder, Audit Export) default to per-id paths and may be overridden;
     `audit_db` is always a placeholder, never a literal connection string.
+
+    `overwrite=True` is the re-author save-back path (#173): an existing Folder
+    is rewritten in place — `pipeline.yaml` and the Authoring Runbook are
+    regenerated — and the Pipeline Registry is left untouched (the entry already
+    exists). Callers pass the existing Registry references so the regenerated
+    Runbook keeps them stable. `authored_at` stamps the Runbook; it defaults to
+    now and is injectable so tests stay deterministic.
     """
     # Prove the generated pipeline.yaml round-trips through the config loader
     # before writing anything; an invalid draft fails here, not at ingestion.
@@ -111,7 +140,8 @@ def write_pipeline_folder(
     pipeline_id = slugify_pipeline_id(out if out is not None else config["dest_table"])
     folder_rel = f"{PIPELINES_DIRNAME}/{pipeline_id}"
     folder_abs = os.path.join(workspace, PIPELINES_DIRNAME, pipeline_id)
-    if os.path.exists(folder_abs):
+    folder_exists = os.path.exists(folder_abs)
+    if folder_exists and not overwrite:
         raise ValueError(
             f"Pipeline Folder for id {pipeline_id!r} already exists at {folder_abs!r}."
         )
@@ -124,7 +154,7 @@ def write_pipeline_folder(
         audit_export if audit_export is not None else f"./audit-exports/{pipeline_id}"
     )
 
-    os.makedirs(folder_abs)
+    os.makedirs(folder_abs, exist_ok=True)
     config_path = os.path.join(folder_abs, CONFIG_FILENAME)
     runbook_path = os.path.join(folder_abs, RUNBOOK_FILENAME)
 
@@ -142,20 +172,25 @@ def write_pipeline_folder(
         confidence_acknowledgements=confidence_acknowledgements or [],
         credential_placeholders=credential_placeholders or [],
         field_encryption_columns=field_encryption_columns or [],
+        authored_at=authored_at or datetime.now(),
     )
     with open(runbook_path, "w") as f:
         f.write(runbook)
 
-    add_entry(
-        workspace,
-        RegistryEntry(
-            id=pipeline_id,
-            folder=folder_rel,
-            watched_directory=watched_directory,
-            audit_db=audit_db,
-            audit_export=audit_export,
-        ),
-    )
+    # On a re-author overwrite the Registry entry already exists; re-adding it
+    # would fail the duplicate-id check. The Registry is the durable record, so
+    # we leave it untouched and only refresh the in-Folder artifacts.
+    if not (folder_exists and overwrite):
+        add_entry(
+            workspace,
+            RegistryEntry(
+                id=pipeline_id,
+                folder=folder_rel,
+                watched_directory=watched_directory,
+                audit_db=audit_db,
+                audit_export=audit_export,
+            ),
+        )
 
     return PipelineFolderResult(
         pipeline_id=pipeline_id,
@@ -194,9 +229,11 @@ def _render_runbook(
     confidence_acknowledgements: list[dict],
     credential_placeholders: list[dict],
     field_encryption_columns: list[dict],
+    authored_at: datetime,
 ) -> str:
     """Render the non-secret Authoring Runbook Markdown for one Pipeline."""
     config_rel = f"{folder_rel}/{CONFIG_FILENAME}"
+    authored_stamp = authored_at.isoformat(timespec="seconds")
     commands = "\n".join(
         operator_handoff_commands(
             sample_file=sample_file,
@@ -220,6 +257,8 @@ this Pipeline was authored and how to operate it. It does not schedule, run, or
 deploy the Pipeline, and it contains no secret values.
 
 ## Sample File
+
+Authored at: `{authored_stamp}`
 
 Authored from sample File: `{sample_file}`
 
