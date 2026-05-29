@@ -22,6 +22,7 @@ Core CLI commands, each useful on its own:
 
 | Command | What it does |
 |---------|-------------|
+| `filedge author <file>` | Launch the local Authoring UI to build a pipeline from a sample file |
 | `filedge inspect <file>` | Sample a file and generate a `pipeline.yaml` columns block |
 | `filedge preview <file>` | Display rows as a table — jump to any row with `--start-row` |
 | `filedge validate <file>` | Dry-run a file against a config — no data written |
@@ -41,6 +42,8 @@ filedge inspect data.csv --output pipeline.yaml          # 1. generate columns
 filedge validate data.csv --config pipeline.yaml         # 2. check it
 filedge run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///filedge.db
 ```
+
+Or do steps 1–2 interactively: `filedge author data.csv` runs inference, lets you review the schema, choose write mode, connector, and field encryption, validates, and writes a ready-to-run pipeline folder. See the [Author guide](guides/author.md).
 
 ---
 
