@@ -9,14 +9,18 @@ and reads no secret material.
 from dataclasses import dataclass, field
 from typing import Optional
 
+import os
+
 from filedge.authoring import AuthoringSession
 from filedge.authoring_draft import (
     ColumnDraft,
     EncryptDraft,
     HashDraft,
     PipelineConfigDraft,
+    draft_from_config,
 )
 from filedge.authoring_validation import AuthoringValidationReport, validate_authoring
+from filedge.config import load_config
 from filedge.connectors import (
     ConnectorDescriptor,
     CredentialPlaceholder,
@@ -25,10 +29,14 @@ from filedge.connectors import (
 )
 from filedge.file_sample import FormatNotDetected, resolve_format, read_excel_sheet_names
 from filedge.pipeline_folder import (
+    CONFIG_FILENAME,
+    RUNBOOK_FILENAME,
     PipelineFolderResult,
     operator_handoff_commands,
+    read_runbook_sample_file,
     write_pipeline_folder,
 )
+from filedge.pipeline_registry import RegistryEntry, load_registry
 
 
 RISKY_CONFIDENCE_TIERS = {"low", "ambiguous"}
@@ -63,6 +71,53 @@ class AuthoringWorkflow:
     preview_rows: list[dict] = field(default_factory=list)
     excel_sheets: list[str] = field(default_factory=list)
     confidence_acknowledgements: dict[str, str] = field(default_factory=dict)
+    # Re-author state (#173): set by open_folder, drives save-back in place.
+    reauthor: bool = False
+    registry_entry: Optional[RegistryEntry] = None
+
+    @classmethod
+    def open_folder(
+        cls,
+        *,
+        folder: str,
+        workspace: str,
+        sample_rows: int = 1000,
+    ) -> "AuthoringWorkflow":
+        """Open an existing Pipeline Folder to re-author its Pipeline Config.
+
+        Loads the Folder's ``pipeline.yaml`` back into a Pipeline Config Draft
+        (the re-author entry point, #173) and recovers the sample File path from
+        the Authoring Runbook. No Schema Inference is run and no fresh sample is
+        chosen here — the loaded draft is editable as-is (#174 adds the refresh).
+        """
+        folder_abs = os.path.join(workspace, folder)
+        config_path = os.path.join(folder_abs, CONFIG_FILENAME)
+        runbook_path = os.path.join(folder_abs, RUNBOOK_FILENAME)
+
+        config = load_config(config_path)
+        draft = draft_from_config(config)
+
+        sample_file = None
+        if os.path.isfile(runbook_path):
+            with open(runbook_path) as f:
+                sample_file = read_runbook_sample_file(f.read())
+
+        registry = load_registry(workspace)
+        registry_entry = next(
+            (e for e in registry.entries if e.folder == folder), None
+        )
+
+        workflow = cls(
+            file=sample_file or "",
+            workspace=workspace,
+            dest_table=config.dest_table,
+            fmt=config.format,
+            sample_rows=sample_rows,
+            reauthor=True,
+            registry_entry=registry_entry,
+        )
+        workflow.draft = draft
+        return workflow
 
     @classmethod
     def start(
@@ -366,11 +421,18 @@ class AuthoringWorkflow:
         report = self.validation_report or self.validate()
         if not report.ok:
             raise ValueError("Authoring Validation must be green before generation.")
+        # Re-author save-back rewrites the existing Folder in place and preserves
+        # the Registry references recorded when the Pipeline was first authored.
+        entry = self.registry_entry if self.reauthor else None
         self.generated = write_pipeline_folder(
             self.workspace,
             draft.to_config_dict(),
             sample_file=self.file,
-            out=self.out,
+            out=entry.id if entry is not None else self.out,
+            watched_directory=entry.watched_directory if entry is not None else None,
+            audit_db=entry.audit_db if entry is not None else None,
+            audit_export=entry.audit_export if entry is not None else None,
+            overwrite=self.reauthor,
             confidence_acknowledgements=[
                 {
                     "source": r.source,

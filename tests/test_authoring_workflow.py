@@ -627,3 +627,138 @@ def test_authoring_workflow_suggested_commands_match_runbook(tmp_path):
     for command in commands:
         assert command in runbook
     assert any('--audit-db-url "$PEOPLE_AUDIT_DB_URL"' in cmd for cmd in commands)
+
+
+# ---------------------------------------------------------------------------
+# Re-author an existing Pipeline Folder (#173)
+# ---------------------------------------------------------------------------
+
+
+def _author_minimal_folder(tmp_path, body="id,name\n1,Alice\n2,Bob\n"):
+    """Author one folder from scratch and return (workspace, sample, result)."""
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", body)
+    workflow = AuthoringWorkflow.start(
+        file=src, workspace=str(workspace), dest_table="people"
+    )
+    workflow.validate()
+    _acknowledge_all(workflow)
+    result = workflow.generate()
+    return str(workspace), src, result
+
+
+def test_open_folder_seeds_draft_from_saved_config(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+
+    saved = load_config(result.config_path)
+    by_source = {c.source: c for c in reopened.draft.columns}
+    assert set(by_source) == {c.source for c in saved.columns}
+    assert by_source["id"].dest == "id"
+    assert by_source["id"].type == "integer"
+
+
+def test_open_folder_recovers_sample_file_from_runbook(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+
+    assert reopened.file == src
+
+
+def test_reauthor_save_back_overwrites_in_place(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.edit_column("id", type="string")
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    # Same Folder overwritten in place: the type change survived a reload.
+    saved = load_config(result.config_path)
+    by_source = {c.source: c for c in saved.columns}
+    assert by_source["id"].type == "string"
+
+    # Exactly one Folder and one Registry entry — no duplicate was created.
+    pipelines_dir = os.path.join(workspace, "pipelines")
+    assert os.listdir(pipelines_dir) == ["people"]
+    registry = load_registry(workspace)
+    assert [e.id for e in registry.entries] == ["people"]
+
+
+def test_reauthor_save_back_changes_only_the_edited_column(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    before = load_config(result.config_path)
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.edit_column("id", type="string")
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    after = load_config(result.config_path)
+    assert after.dest_table == before.dest_table
+    assert after.format == before.format
+    assert after.write_mode == before.write_mode
+    assert after.connector.type == before.connector.type
+    # Every column unchanged except `id`, whose type flipped to string.
+    before_cols = {c.source: c for c in before.columns}
+    after_cols = {c.source: c for c in after.columns}
+    assert set(after_cols) == set(before_cols)
+    for source in before_cols:
+        expected_type = "string" if source == "id" else before_cols[source].type
+        assert after_cols[source].type == expected_type
+        assert after_cols[source].dest == before_cols[source].dest
+        assert after_cols[source].required == before_cols[source].required
+
+
+def test_reauthor_save_back_refreshes_runbook_timestamp(tmp_path):
+    workspace, src, result = _author_minimal_folder(tmp_path)
+    runbook_before = open(result.runbook_path).read()
+    assert "Authored at: " in runbook_before
+
+    reopened = AuthoringWorkflow.open_folder(
+        folder=result.folder, workspace=workspace
+    )
+    reopened.edit_column("id", type="string")
+    reopened.validate()
+    _acknowledge_all(reopened)
+    reopened.generate()
+
+    runbook_after = open(result.runbook_path).read()
+    assert "Authored at: " in runbook_after
+    # Both still name the same sample File.
+    assert src in runbook_after
+
+
+def test_open_folder_rejects_unsupported_shape_clearly(tmp_path):
+    # Hand-author a Folder with a non-CSV format the loader does not yet support.
+    workspace = tmp_path / "ws"
+    folder = workspace / "pipelines" / "events"
+    folder.mkdir(parents=True)
+    (folder / "pipeline.yaml").write_text(
+        "format: ndjson\n"
+        "dest_table: events\n"
+        "write_mode: append\n"
+        "connector:\n  type: sqlite\n"
+        "columns:\n  - source: id\n    dest: id\n    type: integer\n"
+    )
+    (folder / "RUNBOOK.md").write_text(
+        "## Sample File\n\nAuthored from sample File: `/data/events.ndjson`\n"
+    )
+
+    with pytest.raises(ValueError, match="ndjson"):
+        AuthoringWorkflow.open_folder(
+            folder="pipelines/events", workspace=str(workspace)
+        )
