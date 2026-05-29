@@ -93,6 +93,32 @@ def _operator_audit_db_url(ctx, pipeline_id, workspace, audit_db_url) -> str:
     return audit_db_url
 
 
+def _operator_run_context(ctx, pipeline_id, workspace, watched_dir, config_path, audit_db_url):
+    """Pick (watched_dir, config_path, audit_db_url) from explicit flags or `--pipeline`.
+
+    `--pipeline` is mutually exclusive with any explicitly typed
+    `--dir`/`--config`/`--audit-db-url`; exactly one source must supply all three.
+    Uses `_explicit` so a `FILEDGE_AUDIT_DB_URL` env var does not falsely conflict.
+    """
+    if pipeline_id and (
+        _explicit(ctx, "watched_dir")
+        or _explicit(ctx, "config_path")
+        or _explicit(ctx, "audit_db_url")
+    ):
+        click.echo(
+            "Error: pass either --pipeline or --dir/--config/--audit-db-url, not both.",
+            err=True,
+        )
+        sys.exit(1)
+    if pipeline_id:
+        resolved = _resolve_pipeline_or_exit(workspace, pipeline_id)
+        return resolved.watched_directory, resolved.config_path, resolved.audit_db_url
+    if not (watched_dir and config_path and audit_db_url):
+        click.echo("Error: provide --dir/--config/--audit-db-url or --pipeline.", err=True)
+        sys.exit(1)
+    return watched_dir, config_path, audit_db_url
+
+
 def _parse_sheet_selector(value):
     """`--sheet` accepts either an integer (0-based index) or a sheet name."""
     if value is None:
@@ -109,13 +135,18 @@ def cli():
 
 
 @cli.command()
-@click.option("--dir", "watched_dir", required=True,
+@click.option("--pipeline", "pipeline_id", default=None,
+              help="Resolve --dir/--config/--audit-db-url from this Pipeline Registry id.")
+@click.option("--workspace", default=".", show_default=True,
+              type=click.Path(file_okay=False),
+              help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
+@click.option("--dir", "watched_dir", required=False, default=None,
               type=click.Path(exists=True, file_okay=False, dir_okay=True),
               help="Watched directory path")
-@click.option("--config", "config_path", required=True,
+@click.option("--config", "config_path", required=False, default=None,
               type=click.Path(exists=True, dir_okay=False),
               help="Path to pipeline.yaml")
-@click.option("--audit-db-url", required=True, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--audit-db-url", required=False, default=None, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
 @click.option(
     "--progress/--no-progress",
     "show_progress",
@@ -132,7 +163,11 @@ def cli():
               help="Enable OpenTelemetry tracing. Off by default. Also enabled by FILEDGE_OTEL_TRACES=true.")
 @click.option("--otel-logs/--no-otel-logs", "otel_logs", default=None,
               help="Export filedge logs through OpenTelemetry. Off by default. Also enabled by FILEDGE_OTEL_LOGS=true.")
+@click.pass_context
 def run(
+    ctx,
+    pipeline_id,
+    workspace,
     watched_dir,
     config_path,
     audit_db_url,
@@ -144,6 +179,10 @@ def run(
     otel_logs,
 ):
     """Run the ETL pipeline for a Watched Directory."""
+    watched_dir, config_path, audit_db_url = _operator_run_context(
+        ctx, pipeline_id, workspace, watched_dir, config_path, audit_db_url
+    )
+
     from filedge.log import configure_logging, get_logger
     from filedge.progress import LoggingProgressReporter
     from filedge.tracing import (

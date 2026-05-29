@@ -226,6 +226,78 @@ def test_run_accepts_no_progress_flag(tmp_path):
     assert "Committed: 1" in result.output
 
 
+# --- run --pipeline (Registry resolution) ---
+
+def _write_run_pipeline_workspace(tmp_path, dest_db_url):
+    """A workspace with one Registry entry whose Folder has a runnable config."""
+    ws = tmp_path / "ws"
+    folder = ws / "orders"
+    folder.mkdir(parents=True)
+    _write_run_config(folder / "pipeline.yaml", dest_db_url)
+    watched = ws / "landing"
+    watched.mkdir()
+    (watched / "data.csv").write_text("name,value\nAlice,1\n")
+    (ws / "pipeline-registry.yaml").write_text(
+        "version: 1\n"
+        "pipelines:\n"
+        "  - id: orders\n"
+        "    folder: orders\n"
+        f"    watched_directory: {watched}\n"
+        "    audit_db: env:RUN_PIPELINE_AUDIT\n"
+        "    audit_export: ./export\n"
+    )
+    return ws
+
+
+def test_run_pipeline_resolves_config_dir_and_audit_db_from_registry(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUN_PIPELINE_AUDIT", f"sqlite:///{tmp_path}/audit.db")
+    ws = _write_run_pipeline_workspace(tmp_path, f"sqlite:///{tmp_path}/dest.db")
+
+    result = CliRunner().invoke(
+        cli, ["run", "--pipeline", "orders", "--workspace", str(ws), "--no-progress"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Committed: 1" in result.output
+
+
+def test_run_pipeline_conflicts_with_explicit_audit_db_url(tmp_path):
+    result = CliRunner().invoke(
+        cli,
+        [
+            "run", "--pipeline", "orders",
+            "--audit-db-url", f"sqlite:///{tmp_path}/x.db",
+            "--workspace", str(tmp_path),
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "not both" in result.output
+
+
+def test_run_pipeline_unknown_id_lists_known_ids(tmp_path, monkeypatch):
+    monkeypatch.setenv("RUN_PIPELINE_AUDIT", f"sqlite:///{tmp_path}/audit.db")
+    ws = _write_run_pipeline_workspace(tmp_path, f"sqlite:///{tmp_path}/dest.db")
+
+    result = CliRunner().invoke(
+        cli, ["run", "--pipeline", "nope", "--workspace", str(ws), "--no-progress"]
+    )
+
+    assert result.exit_code == 1
+    assert "No Pipeline 'nope'" in result.output
+    assert "orders" in result.output
+
+
+def test_run_without_pipeline_or_explicit_flags_errors(tmp_path, monkeypatch):
+    monkeypatch.delenv("FILEDGE_AUDIT_DB_URL", raising=False)
+
+    result = CliRunner().invoke(cli, ["run", "--no-progress"])
+
+    assert result.exit_code == 1
+    assert "provide --dir/--config/--audit-db-url or --pipeline" in result.output
+
+
 # --- requeue helpers ---
 
 def _make_terminal_failed(db, filename, content_hash, retry_cap=3):
