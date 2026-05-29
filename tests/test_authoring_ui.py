@@ -186,6 +186,34 @@ def test_textual_authoring_ui_surfaces_write_mode_validation_failures(tmp_path):
     asyncio.run(run())
 
 
+def test_textual_authoring_ui_renders_drift_inline_for_reauthor(tmp_path):
+    async def run():
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        original = tmp_path / "original.csv"
+        original.write_text("id,nickname\n1,Al\n")
+        refreshed = tmp_path / "refreshed.csv"
+        refreshed.write_text("id\n1\n")
+        workflow = AuthoringWorkflow.start(
+            file=str(original),
+            workspace=str(workspace),
+            dest_table="people",
+        )
+        workflow.draft.edit_column("nickname", required=False)
+        workflow.file = str(refreshed)
+        workflow.reauthor = True
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            app.action_validate()
+            schema = app.query_one("#schema")
+            nickname_row = schema.get_row_at(1)
+            assert nickname_row[0] == "nickname"
+            assert "drift: declared-but-absent" in nickname_row[5]
+
+    asyncio.run(run())
+
+
 def test_edit_value_screen_submits_and_cancels(monkeypatch):
     screen = EditValueScreen("Destination", "name")
     dismissed = []

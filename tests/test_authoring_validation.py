@@ -3,6 +3,8 @@ compatibility check between a sample File and a Pipeline Config. Everything here
 drives the service from Python alone; no UI, no Run, no Audit DB."""
 
 from filedge.authoring_validation import (
+    DRIFT_DECLARED_BUT_ABSENT,
+    DRIFT_REQUIRED_BUT_NULL,
     SCOPE_COLUMN_TOLERANCE,
     SCOPE_CONFIG_LOADING,
     SCOPE_FIELD_ENCRYPTION,
@@ -102,6 +104,36 @@ def test_missing_optional_column_is_tolerated(tmp_path):
     report = validate_authoring(src, cfg)
 
     assert report.ok
+
+
+# --- Re-author drift --------------------------------------------------------
+
+
+def test_declared_but_absent_column_is_reported_as_drift(tmp_path):
+    src = _csv(tmp_path, "id\n1\n")
+    cfg = _config([_col("id", "integer"), _col("nickname", required=False)])
+
+    report = validate_authoring(src, cfg)
+
+    assert report.ok
+    assert len(report.drift) == 1
+    assert report.drift[0].category == DRIFT_DECLARED_BUT_ABSENT
+    assert report.drift[0].column == "nickname"
+    assert report.drift[0].reason == (
+        "Declared column 'nickname' is absent from the sample File."
+    )
+
+
+def test_required_but_null_column_is_reported_as_drift(tmp_path):
+    src = _csv(tmp_path, "id,name\n1,Alice\n2,\n")
+    cfg = _config([_col("id", "integer"), _col("name")])
+
+    report = validate_authoring(src, cfg)
+
+    drift = [d for d in report.drift if d.category == DRIFT_REQUIRED_BUT_NULL]
+    assert len(drift) == 1
+    assert drift[0].column == "name"
+    assert "sampled row(s): 2" in drift[0].reason
 
 
 # --- Strict Mode ------------------------------------------------------------

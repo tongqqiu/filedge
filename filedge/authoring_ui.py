@@ -4,6 +4,7 @@ from filedge.authoring_validation import (
     SCOPE_COLUMN_TOLERANCE,
     SCOPE_STRICT_MODE,
     SCOPE_WRITE_MODE,
+    DriftEntry,
 )
 from filedge.authoring_workflow import AuthoringWorkflow
 
@@ -186,6 +187,7 @@ class AuthoringApp(App):
         lines.append("Validation Scope findings")
         lines.extend(f"- {f.scope}: {f.message}" for f in report.findings)
         self.query_one("#validation", Static).update("\n".join(lines))
+        self._populate_schema()
 
     def action_edit_source(self) -> None:
         self._edit_field("source", "Source")
@@ -446,15 +448,29 @@ class AuthoringApp(App):
                 "Enter source/dest/type/start/width in the fixed-width layout surface.",
             )
             return
+        drift_by_column = self._drift_by_column()
         for col in self.workflow.draft.columns:
+            notes = [note for note in col.notes if note]
+            notes.extend(
+                f"drift: {entry.category} - {entry.reason}"
+                for entry in drift_by_column.get(col.source, [])
+            )
             table.add_row(
                 col.source,
                 col.dest,
                 col.type,
                 "yes" if col.required else "no",
                 col.confidence,
-                "; ".join(col.notes),
+                "; ".join(notes),
             )
+
+    def _drift_by_column(self) -> dict[str, list[DriftEntry]]:
+        if not self.workflow.reauthor or self.workflow.validation_report is None:
+            return {}
+        grouped: dict[str, list[DriftEntry]] = {}
+        for entry in self.workflow.validation_report.drift:
+            grouped.setdefault(entry.column, []).append(entry)
+        return grouped
 
     def _populate_connector(self) -> None:
         settings = self.query_one("#connector_settings", DataTable)
