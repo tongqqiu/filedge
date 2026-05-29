@@ -9,6 +9,7 @@ from filedge.authoring_draft import (
     EncryptDraft,
     HashDraft,
     PipelineConfigDraft,
+    draft_from_config,
 )
 from filedge.config import config_from_dict, load_config
 
@@ -343,3 +344,155 @@ def test_field_encryption_columns_lists_only_declared(tmp_path):
     draft.edit_column("ssn", type="string")
     draft.set_field_encryption("ssn", encrypt=EncryptDraft(key="env:K"))
     assert [c.dest for c in draft.field_encryption_columns()] == ["ssn"]
+
+
+# ---------------------------------------------------------------------------
+# draft_from_config — load an existing PipelineConfig back into a Draft (#172)
+# ---------------------------------------------------------------------------
+
+
+def _minimal_config():
+    """Minimal CSV/append/sqlite config — the supported shape for the loader."""
+    return config_from_dict(
+        {
+            "format": "csv",
+            "dest_table": "orders",
+            "write_mode": "append",
+            "connector": {"type": "sqlite", "path": "audit.db"},
+            "columns": [
+                {"source": "id", "dest": "order_id", "type": "integer", "required": True},
+                {"source": "amount", "dest": "amount", "type": "float", "required": False},
+            ],
+        }
+    )
+
+
+def test_draft_from_config_tracer_bullet():
+    """Loaded Draft exposes the same column source/dest/type/required as the config."""
+    cfg = _minimal_config()
+    draft = draft_from_config(cfg)
+
+    by_source = {c.source: c for c in draft.columns}
+    assert set(by_source) == {"id", "amount"}
+    assert by_source["id"].dest == "order_id"
+    assert by_source["id"].type == "integer"
+    assert by_source["id"].required is True
+    assert by_source["amount"].required is False
+
+
+def test_draft_from_config_rejects_field_encryption_encrypt_block():
+    cfg = config_from_dict(
+        {
+            "format": "csv",
+            "dest_table": "t",
+            "connector": {"type": "sqlite"},
+            "columns": [
+                {
+                    "source": "ssn",
+                    "dest": "ssn",
+                    "type": "string",
+                    "encrypt": {"algorithm": "aes-256-gcm", "key": "env:K"},
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="encrypt"):
+        draft_from_config(cfg)
+
+
+def test_draft_from_config_rejects_field_encryption_hash_block():
+    cfg = config_from_dict(
+        {
+            "format": "csv",
+            "dest_table": "t",
+            "connector": {"type": "sqlite"},
+            "columns": [
+                {
+                    "source": "ssn",
+                    "dest": "ssn",
+                    "type": "string",
+                    "hash": {"algorithm": "hmac-sha256", "key": "env:H"},
+                }
+            ],
+        }
+    )
+    with pytest.raises(ValueError, match="hash"):
+        draft_from_config(cfg)
+
+
+def test_draft_from_config_rejects_non_csv_format():
+    cfg = config_from_dict(
+        {
+            "format": "ndjson",
+            "dest_table": "t",
+            "connector": {"type": "sqlite"},
+            "columns": [{"source": "id", "dest": "id", "type": "integer"}],
+        }
+    )
+    with pytest.raises(ValueError, match="ndjson"):
+        draft_from_config(cfg)
+
+
+def test_draft_from_config_rejects_non_sqlite_connector():
+    cfg = config_from_dict(
+        {
+            "format": "csv",
+            "dest_table": "t",
+            "connector": {"type": "postgres", "host": "localhost", "port": "5432", "dbname": "db", "user": "u"},
+            "columns": [{"source": "id", "dest": "id", "type": "integer"}],
+        }
+    )
+    with pytest.raises(ValueError, match="postgres"):
+        draft_from_config(cfg)
+
+
+def test_draft_from_config_rejects_non_append_write_mode():
+    cfg = config_from_dict(
+        {
+            "format": "csv",
+            "dest_table": "t",
+            "write_mode": "truncate",
+            "connector": {"type": "sqlite"},
+            "columns": [{"source": "id", "dest": "id", "type": "integer"}],
+        }
+    )
+    with pytest.raises(ValueError, match="truncate"):
+        draft_from_config(cfg)
+
+
+def test_draft_from_config_loaded_confidence_sentinel():
+    """Loaded columns carry confidence='loaded', not 'high' or any inference tier."""
+    cfg = _minimal_config()
+    draft = draft_from_config(cfg)
+    for col in draft.columns:
+        assert col.confidence == "loaded"
+
+
+def test_draft_from_config_round_trip_identity():
+    """Draft → to_config_dict() equals the dict that produced the original config."""
+    src_dict = {
+        "format": "csv",
+        "dest_table": "orders",
+        "write_mode": "append",
+        "connector": {"type": "sqlite", "path": "audit.db"},
+        "columns": [
+            {"source": "id", "dest": "order_id", "type": "integer", "required": True},
+            {"source": "name", "dest": "full_name", "type": "string", "required": True},
+            {"source": "score", "dest": "score", "type": "float", "required": False},
+            {"source": "active", "dest": "active", "type": "boolean", "required": False},
+        ],
+    }
+    cfg = config_from_dict(src_dict)
+    emitted = draft_from_config(cfg).to_config_dict()
+
+    assert emitted["format"] == src_dict["format"]
+    assert emitted["dest_table"] == src_dict["dest_table"]
+    assert emitted["write_mode"] == src_dict["write_mode"]
+    assert emitted["connector"]["type"] == "sqlite"
+    assert emitted["connector"]["path"] == "audit.db"
+    emitted_cols = {c["source"]: c for c in emitted["columns"]}
+    for orig in src_dict["columns"]:
+        em = emitted_cols[orig["source"]]
+        assert em["dest"] == orig["dest"]
+        assert em["type"] == orig["type"]
+        assert em["required"] == orig["required"]

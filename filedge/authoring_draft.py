@@ -21,6 +21,7 @@ from filedge.column_types import validate_column_type
 from filedge.config import PipelineConfig, config_from_dict
 from filedge.connectors import connector_descriptor
 
+
 WRITE_MODES = ("append", "truncate", "cdc")
 DEFAULT_CDC_OPERATION_COLUMN = "op"
 DEFAULT_CDC_OPERATIONS = {
@@ -402,3 +403,73 @@ class PipelineConfigDraft:
                 "key": column.hash.key,
             }
         return data
+
+
+def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
+    """Load an existing PipelineConfig back into an editable Draft (#172).
+
+    Confidence Tier is set to ``"loaded"`` on all columns to distinguish
+    loaded-but-unverified columns from inference-backed ones (``"high"``,
+    ``"low"``, ``"ambiguous"``). Schema Inference refresh is issue #174.
+
+    Only the minimal supported shape is accepted: CSV format, ``append`` write
+    mode, ``sqlite`` connector, no Field Encryption blocks. Unsupported shapes
+    raise ``ValueError`` naming the offending field so future slices can opt
+    them in deliberately.
+    """
+    if config.format != "csv":
+        raise ValueError(
+            f"draft_from_config does not yet support format {config.format!r}; "
+            "only 'csv' is supported in this slice."
+        )
+    connector_type = config.connector.type if config.connector else "sqlite"
+    if connector_type != "sqlite":
+        raise ValueError(
+            f"draft_from_config does not yet support connector {connector_type!r}; "
+            "only 'sqlite' is supported in this slice."
+        )
+    if config.write_mode != "append":
+        raise ValueError(
+            f"draft_from_config does not yet support write_mode {config.write_mode!r}; "
+            "only 'append' is supported in this slice."
+        )
+    for col in config.columns:
+        if col.encrypt is not None:
+            raise ValueError(
+                f"draft_from_config does not yet support Field Encryption "
+                f"(column {col.dest!r} has an encrypt: block)."
+            )
+        if col.hash is not None:
+            raise ValueError(
+                f"draft_from_config does not yet support Field Encryption "
+                f"(column {col.dest!r} has a hash: block)."
+            )
+
+    columns = [
+        ColumnDraft(
+            source=col.source,
+            dest=col.dest,
+            type=col.type,
+            required=col.required,
+            confidence="loaded",
+            null_count=0,
+            total_seen=0,
+            notes=[],
+        )
+        for col in config.columns
+    ]
+    connector_options = dict(config.connector.options) if config.connector else {}
+    # Bypass __post_init__ (which re-seeds connector defaults from the Registry)
+    # so the loaded options from pipeline.yaml are preserved verbatim.
+    draft = PipelineConfigDraft.__new__(PipelineConfigDraft)
+    draft.dest_table = config.dest_table
+    draft.columns = columns
+    draft.fmt = config.format
+    draft.write_mode = config.write_mode
+    draft.sheet = None
+    draft.cdc_keys = []
+    draft.cdc_sequence_by = ""
+    draft.cdc_operation_column = DEFAULT_CDC_OPERATION_COLUMN
+    draft.connector_type = connector_type
+    draft.connector_options = connector_options
+    return draft
