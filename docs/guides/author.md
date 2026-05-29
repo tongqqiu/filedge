@@ -1,8 +1,8 @@
 # Author a pipeline
 
-`filedge author` launches a local **Authoring UI** — a terminal app that walks you through [Pipeline Authoring](../../CONTEXT.md#pipeline-authoring) from a sample File to a ready-to-run [Pipeline Folder](../../CONTEXT.md#pipeline-folder). It reuses the exact same parsing, [Schema Inference](../../CONTEXT.md#schema-inference), config loading, and validation behavior as the rest of the CLI, so what it generates can't drift from what `filedge run` consumes.
+`filedge author` launches a local **Authoring UI** — a terminal app that walks you through [Pipeline Authoring](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#pipeline-authoring) from a sample File to a ready-to-run [Pipeline Folder](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#pipeline-folder). It reuses the exact same parsing, [Schema Inference](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#schema-inference), config loading, and validation behavior as the rest of the CLI, so what it generates can't drift from what `filedge run` consumes.
 
-It is **local and CLI-adjacent**, not a hosted service. It produces or reviews Pipeline Configs; it never runs ingestion, mutates [Audit Records](../../CONTEXT.md#audit-record), or stores secrets. See [ADR-0015](../adr/0015-control-and-audit-platform-starts-with-local-pipeline-authoring.md) and [ADR-0016](../adr/0016-authoring-ui-textual-tui.md).
+It is **local and CLI-adjacent**, not a hosted service. It produces or reviews Pipeline Configs; it never runs ingestion, mutates [Audit Records](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#audit-record), or stores secrets. See [ADR-0015](../adr/0015-control-and-audit-platform-starts-with-local-pipeline-authoring.md) and [ADR-0016](../adr/0016-authoring-ui-textual-tui.md).
 
 ## Install
 
@@ -28,13 +28,13 @@ The destination table defaults to the sample File's stem (`orders.csv` → `orde
 
 ## The Authoring Workflow
 
-The [Authoring Workflow](../../CONTEXT.md#authoring-workflow) starts from a sample File rather than a blank form, because the File is the atomic unit of Filedge ingestion:
+The [Authoring Workflow](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#authoring-workflow) starts from a sample File rather than a blank form, because the File is the atomic unit of Filedge ingestion:
 
 1. **Preview** — the UI reads a few rows so you can confirm you picked the intended input.
-2. **Schema review** — [Schema Inference](../../CONTEXT.md#schema-inference) proposes a column for each field with its inferred [Column Type](../../CONTEXT.md#column-type), `required` flag, and [Confidence Tier](../../CONTEXT.md#confidence-tier). Edit source name, destination name, type, and required inline.
-3. **Settings** — choose the [Write Mode](../../CONTEXT.md#write-mode), the [Connector](../../CONTEXT.md#connector), and (optionally) per-column [Field Encryption](../../CONTEXT.md#field-encryption).
-4. **Validate** — run [Authoring Validation](../../CONTEXT.md#authoring-validation) and read a green/red result.
-5. **Generate** — on green and explicit confirmation, write a [Pipeline Folder](../../CONTEXT.md#pipeline-folder) and create/update the [Pipeline Registry](../../CONTEXT.md#pipeline-registry).
+2. **Schema review** — [Schema Inference](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#schema-inference) proposes a column for each field with its inferred [Column Type](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#column-type), `required` flag, and [Confidence Tier](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#confidence-tier). Edit source name, destination name, type, and required inline.
+3. **Settings** — choose the [Write Mode](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#write-mode), the [Connector](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#connector), and (optionally) per-column [Field Encryption](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#field-encryption).
+4. **Validate** — run [Authoring Validation](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#authoring-validation) and read a green/red result.
+5. **Generate** — on green and explicit confirmation, write a [Pipeline Folder](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#pipeline-folder) and create/update the [Pipeline Registry](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#pipeline-registry).
 
 ## Keys
 
@@ -56,7 +56,7 @@ Write Mode and Connector are chosen from dropdowns in the side panel.
 
 ## Schema review and Confidence Tiers
 
-Every **low** and **ambiguous** Confidence Tier column must be acknowledged (`a`) before generation — this is how risky inference choices become explicit and auditable. The acknowledgement and its evidence (null count, sample size, inference notes) are recorded in the [Authoring Runbook](../../CONTEXT.md#authoring-runbook). High-confidence columns need no acknowledgement.
+Every **low** and **ambiguous** Confidence Tier column must be acknowledged (`a`) before generation — this is how risky inference choices become explicit and auditable. The acknowledgement and its evidence (null count, sample size, inference notes) are recorded in the [Authoring Runbook](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#authoring-runbook). High-confidence columns need no acknowledgement.
 
 See the [inspect guide](inspect.md#confidence-tiers) for what each tier means.
 
@@ -66,11 +66,11 @@ Pick `append` (default), `truncate`, or `cdc` from the Write Mode dropdown. Sele
 
 ## Connector and Credential Placeholders
 
-Choose a [Connector](../../CONTEXT.md#connector) from the dropdown and fill in its required **non-secret** settings (press `o`). Credentials are never collected: the UI shows the [Credential Placeholders](../../CONTEXT.md#credential-placeholder) — the environment variable names the connector expects at runtime — and records them in the Runbook. Required non-secret settings must be present before generation.
+Choose a [Connector](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#connector) from the dropdown and fill in its required **non-secret** settings (press `o`). Credentials are never collected: the UI shows the [Credential Placeholders](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#credential-placeholder) — the environment variable names the connector expects at runtime — and records them in the Runbook. Required non-secret settings must be present before generation.
 
 ## Field Encryption
 
-You can declare per-column [Field Encryption](../../CONTEXT.md#field-encryption) so plaintext PII never reaches the warehouse:
+You can declare per-column [Field Encryption](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#field-encryption) so plaintext PII never reaches the warehouse:
 
 - Press `E` on a column to declare an `encrypt:` block (AES-256-GCM, randomized).
 - Press `H` to declare a `hash:` block (HMAC-SHA256, a one-way joinable token).
@@ -82,7 +82,7 @@ The key reference you enter is a **Credential Placeholder** — `env:NAME` or `s
 
 ## What Authoring Validation does — and doesn't — cover
 
-Authoring Validation proves the sample File and the Pipeline Config are compatible under the [Validation Scope](../../CONTEXT.md#validation-scope): Parser readability, [Column Tolerance](../../CONTEXT.md#column-tolerance), [Strict Mode](../../CONTEXT.md#strict-mode) type coercion, structural Field Encryption validity, Write Mode required settings, and config loading.
+Authoring Validation proves the sample File and the Pipeline Config are compatible under the [Validation Scope](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#validation-scope): Parser readability, [Column Tolerance](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#column-tolerance), [Strict Mode](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#strict-mode) type coercion, structural Field Encryption validity, Write Mode required settings, and config loading.
 
 It deliberately **excludes** Destination reachability, production credentials, and destination table readiness. A green result does not promise production readiness — that boundary belongs to [`filedge healthcheck`](healthcheck.md), and the UI says so after generation.
 
@@ -100,7 +100,7 @@ and creates or updates `pipeline-registry.yaml` at the workspace root.
 
 - **`pipeline.yaml`** round-trips through the same config loader the Operator CLI uses — it is validated before anything lands on disk.
 - **`RUNBOOK.md`** is a non-secret note recording the sample File (by path, never copied), accepted Confidence Tiers, Credential Placeholders, declared Field Encryption columns (key *references* only), validation assumptions, and the suggested next commands. No environment variable is ever read, so no secret can bleed into an artifact.
-- **`pipeline-registry.yaml`** indexes each Pipeline's Folder, Watched Directory, Audit DB connection placeholder, and Audit Export destination. It keeps Audit DBs separate — one [Audit DB](../../CONTEXT.md#audit-db) maps to exactly one Pipeline. See [ADR-0017](../adr/0017-pipeline-folder-and-registry-layout.md).
+- **`pipeline-registry.yaml`** indexes each Pipeline's Folder, Watched Directory, Audit DB connection placeholder, and Audit Export destination. It keeps Audit DBs separate — one [Audit DB](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#audit-db) maps to exactly one Pipeline. See [ADR-0017](../adr/0017-pipeline-folder-and-registry-layout.md).
 
 ## Next steps
 
@@ -120,7 +120,7 @@ Run `filedge healthcheck` to confirm Destination reachability before the first r
 The Authoring UI supports every format the Parser does:
 
 - **CSV / NDJSON / Parquet / Excel** — schema is inferred from the sample. For Excel, a sheet picker appears for multi-sheet workbooks (or pass `--sheet`).
-- **Fixed-width** — no schema can be inferred from the file ([ADR-0013](../adr/0013-fixed-width-format-support.md)), so launch with `--format fixed_width` and enter the [Fixed-Width Layout](../../CONTEXT.md#fixed-width-layout) (`start`/`width` per column) from the partner record-layout spec. See the [fixed-width guide](fixed-width.md).
+- **Fixed-width** — no schema can be inferred from the file ([ADR-0013](../adr/0013-fixed-width-format-support.md)), so launch with `--format fixed_width` and enter the [Fixed-Width Layout](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#fixed-width-layout) (`start`/`width` per column) from the partner record-layout spec. See the [fixed-width guide](fixed-width.md).
 
 ## Options
 

@@ -152,7 +152,7 @@ Then inspect the NDJSON:
 filedge inspect events.ndjson
 ```
 
-For data sources you control, the cleaner fix is to have your [Fetcher](../../CONTEXT.md#fetcher) or [Queue Materializer](../../CONTEXT.md#queue-materializer) write NDJSON directly to the Watched Directory.
+For data sources you control, the cleaner fix is to have your [Fetcher](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#fetcher) or [Queue Materializer](https://github.com/tongqqiu/filedge/blob/main/CONTEXT.md#queue-materializer) write NDJSON directly to the Watched Directory.
 
 ## Excel files
 
