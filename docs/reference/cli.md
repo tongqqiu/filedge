@@ -206,13 +206,15 @@ Show a summary of file states in the audit database.
 ```bash
 filedge status --audit-db-url <url> [--json]
 filedge status --pipeline <id> [--workspace <path>] [--json]
+filedge status --all [--workspace <path>] [--json]
 ```
 
 | Option | Env var | Default | Description |
 |--------|---------|---------|-------------|
-| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
-| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url` |
-| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` and `--all` |
+| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url`. Mutually exclusive with `--all` |
+| `--all` | — | off | Fan out across every Pipeline in the Registry, summarizing each Audit DB independently. Mutually exclusive with `--pipeline` and `--audit-db-url` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline` or `--all`) |
 | `--json` | — | off | Output as JSON |
 
 Example output:
@@ -227,7 +229,27 @@ Recent failures:
   bad_data.csv: cannot coerce 'n/a' to float
 ```
 
-**Exit codes:** `0` on success, `1` on error.
+With `--all`, the same summary is printed once per Pipeline, each block keyed by
+its Registry id. Each Audit DB is opened on its own (never joined — one Audit DB
+maps to exactly one Pipeline). A Pipeline whose Audit DB cannot be resolved or
+opened prints inline as `<id>: ERROR: <reason>` and the others still report:
+
+```
+alpha:
+  PENDING:    0
+  PROCESSING: 0
+  COMMITTED:  47
+  FAILED:     0
+
+beta: ERROR: Environment variable 'BETA_DB' is not set
+```
+
+With `--all --json`, the output is a JSON array with one object per Pipeline:
+`{"pipeline": "<id>", ...summary}` for healthy entries and
+`{"pipeline": "<id>", "error": "<reason>"}` for errored ones.
+
+**Exit codes:** `0` on success, `1` on error (including a missing or malformed
+Registry, or `--all` combined with `--pipeline` / `--audit-db-url`).
 
 ---
 
