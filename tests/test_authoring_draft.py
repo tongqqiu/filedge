@@ -445,30 +445,32 @@ def test_draft_from_config_rejects_unsupported_format():
         draft_from_config(cfg)
 
 
-def test_draft_from_config_rejects_non_sqlite_connector():
+def test_draft_from_config_rejects_unknown_connector():
     cfg = config_from_dict(
         {
             "format": "csv",
             "dest_table": "t",
-            "connector": {"type": "postgres", "host": "localhost", "port": "5432", "dbname": "db", "user": "u"},
+            "connector": {"type": "snowflake"},
             "columns": [{"source": "id", "dest": "id", "type": "integer"}],
         }
     )
-    with pytest.raises(ValueError, match="postgres"):
+    with pytest.raises(ValueError, match="snowflake"):
         draft_from_config(cfg)
 
 
-def test_draft_from_config_rejects_non_append_write_mode():
-    cfg = config_from_dict(
-        {
-            "format": "csv",
-            "dest_table": "t",
-            "write_mode": "truncate",
-            "connector": {"type": "sqlite"},
-            "columns": [{"source": "id", "dest": "id", "type": "integer"}],
-        }
-    )
-    with pytest.raises(ValueError, match="truncate"):
+def test_draft_from_config_rejects_unknown_write_mode():
+    cfg_dict = {
+        "format": "csv",
+        "dest_table": "t",
+        "write_mode": "append",
+        "connector": {"type": "sqlite"},
+        "columns": [{"source": "id", "dest": "id", "type": "integer"}],
+    }
+    cfg = config_from_dict(cfg_dict)
+    # Forge an unknown write mode after loading (config_from_dict does not gate
+    # the enum, but the loader must).
+    cfg.write_mode = "merge"
+    with pytest.raises(ValueError, match="merge"):
         draft_from_config(cfg)
 
 
@@ -616,6 +618,183 @@ def test_draft_from_config_round_trips_fixed_width_layout():
     assert draft.column("id").start == 1
     assert draft.column("name").width == 5
     assert draft.to_config_dict() == src_dict
+
+
+# ---------------------------------------------------------------------------
+# Non-sqlite Connectors + non-append Write Modes round-trip (#178)
+# ---------------------------------------------------------------------------
+
+
+_NON_SQLITE_CONNECTOR_CASES = [
+    pytest.param(
+        {"type": "postgres", "url": "env:DATABASE_URL"},
+        id="postgres",
+    ),
+    pytest.param(
+        {"type": "bigquery", "project": "my-project", "dataset": "analytics"},
+        id="bigquery",
+    ),
+    pytest.param(
+        {
+            "type": "databricks",
+            "server_hostname": "dbc.example.com",
+            "http_path": "/sql/1.0/warehouses/abc",
+            "catalog": "main",
+            "schema": "raw",
+        },
+        id="databricks",
+    ),
+    pytest.param(
+        {"type": "duckdb", "path": "./analytics.duckdb"},
+        id="duckdb",
+    ),
+]
+
+
+@pytest.mark.parametrize("connector", _NON_SQLITE_CONNECTOR_CASES)
+def test_draft_from_config_round_trips_all_connectors(connector):
+    src_dict = {
+        "format": "csv",
+        "dest_table": "orders",
+        "write_mode": "append",
+        "connector": connector,
+        "columns": _baseline_columns(),
+    }
+    cfg = config_from_dict(src_dict)
+    draft = draft_from_config(cfg)
+    assert draft.connector_type == connector["type"]
+    assert draft.to_config_dict() == src_dict
+
+
+def test_draft_from_config_round_trips_truncate_write_mode():
+    src_dict = {
+        "format": "csv",
+        "dest_table": "orders",
+        "write_mode": "truncate",
+        "connector": {"type": "sqlite", "url": "sqlite:///orders.db"},
+        "columns": _baseline_columns(),
+    }
+    draft = draft_from_config(config_from_dict(src_dict))
+    assert draft.write_mode == "truncate"
+    assert draft.to_config_dict() == src_dict
+
+
+def test_draft_from_config_round_trips_cdc_write_mode_with_all_fields():
+    src_dict = {
+        "format": "csv",
+        "dest_table": "people",
+        "write_mode": "cdc",
+        "connector": {"type": "postgres", "url": "env:DATABASE_URL"},
+        "columns": [
+            {"source": "id", "dest": "id", "type": "integer", "required": True},
+            {"source": "op", "dest": "op", "type": "string", "required": True},
+            {
+                "source": "updated_at",
+                "dest": "updated_at",
+                "type": "timestamp",
+                "required": True,
+            },
+            {"source": "name", "dest": "name", "type": "string", "required": False},
+        ],
+        "cdc": {
+            "keys": ["id"],
+            "operation_column": "op",
+            "sequence_by": "updated_at",
+            "operations": {
+                "insert": ["c", "insert"],
+                "update": ["u", "update"],
+                "delete": ["d", "delete"],
+            },
+        },
+    }
+    draft = draft_from_config(config_from_dict(src_dict))
+    assert draft.cdc_keys == ["id"]
+    assert draft.cdc_sequence_by == "updated_at"
+    assert draft.cdc_operation_column == "op"
+    assert draft.to_config_dict() == src_dict
+
+
+def test_draft_from_config_round_trips_custom_cdc_operations_map():
+    # Operations map values are loaded verbatim, not silently replaced by the
+    # built-in default.
+    src_dict = {
+        "format": "csv",
+        "dest_table": "people",
+        "write_mode": "cdc",
+        "connector": {"type": "sqlite"},
+        "columns": [
+            {"source": "id", "dest": "id", "type": "integer", "required": True},
+            {"source": "action", "dest": "action", "type": "string", "required": True},
+            {"source": "seq", "dest": "seq", "type": "integer", "required": True},
+        ],
+        "cdc": {
+            "keys": ["id"],
+            "operation_column": "action",
+            "sequence_by": "seq",
+            "operations": {
+                "insert": ["I"],
+                "update": ["U"],
+                "delete": ["D", "X"],
+            },
+        },
+    }
+    draft = draft_from_config(config_from_dict(src_dict))
+    assert draft.cdc_operations["delete"] == ["D", "X"]
+    assert draft.to_config_dict() == src_dict
+
+
+def test_draft_from_config_does_not_read_credential_env_vars(monkeypatch):
+    # Re-author flow must not read or prompt for credentials — verified by
+    # asserting no credential env var is touched even when the loaded
+    # Connector declares one.
+    read_env_vars: list[str] = []
+    original_getenv = __import__("os").environ.get
+
+    def tracking_get(key, default=None):
+        read_env_vars.append(key)
+        return original_getenv(key, default)
+
+    monkeypatch.setattr("os.environ", _SpyMapping(read_env_vars, dict(__import__("os").environ)))
+
+    src_dict = {
+        "format": "csv",
+        "dest_table": "orders",
+        "write_mode": "append",
+        "connector": {
+            "type": "bigquery",
+            "project": "my-project",
+            "dataset": "analytics",
+        },
+        "columns": _baseline_columns(),
+    }
+    draft = draft_from_config(config_from_dict(src_dict))
+    draft.to_config_dict()
+    # Credentials live behind these placeholders for each non-sqlite Connector;
+    # none of them should have been read.
+    forbidden = {
+        "DATABASE_URL",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "DATABRICKS_TOKEN",
+    }
+    assert not (forbidden & set(read_env_vars)), (
+        f"Re-author read credential env vars: {forbidden & set(read_env_vars)}"
+    )
+
+
+class _SpyMapping(dict):
+    """A dict subclass that records every key lookup via __getitem__/get."""
+
+    def __init__(self, log, base):
+        super().__init__(base)
+        self._log = log
+
+    def __getitem__(self, key):
+        self._log.append(key)
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self._log.append(key)
+        return super().get(key, default)
 
 
 def test_draft_from_config_fixed_width_layout_validation_still_fires():

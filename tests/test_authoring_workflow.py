@@ -865,9 +865,9 @@ def test_open_folder_rejects_unsupported_shape_clearly(tmp_path):
     folder = workspace / "pipelines" / "events"
     folder.mkdir(parents=True)
     (folder / "pipeline.yaml").write_text(
-        "format: csv\n"
+        "format: avro\n"
         "dest_table: events\n"
-        "write_mode: truncate\n"
+        "write_mode: append\n"
         "connector:\n  type: sqlite\n"
         "columns:\n  - source: id\n    dest: id\n    type: integer\n"
     )
@@ -875,7 +875,7 @@ def test_open_folder_rejects_unsupported_shape_clearly(tmp_path):
         "## Sample File\n\nAuthored from sample File: `/data/events.csv`\n"
     )
 
-    with pytest.raises(ValueError, match="truncate"):
+    with pytest.raises(ValueError, match="avro"):
         AuthoringWorkflow.open_folder(
             folder="pipelines/events", workspace=str(workspace)
         )
@@ -946,6 +946,147 @@ def test_open_folder_loads_excel_sheet_selector(tmp_path):
     # Sheet is editable through the draft; the new value rides into to_config_dict.
     workflow.draft.sheet = "Returns"
     assert workflow.draft.to_config_dict()["excel"] == {"sheet": "Returns"}
+
+
+# ---------------------------------------------------------------------------
+# Non-sqlite Connectors + non-append Write Modes round-trip (#178)
+# ---------------------------------------------------------------------------
+
+
+def test_open_folder_loads_non_sqlite_connector_and_lists_placeholders(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _write_handauthored_folder(
+        workspace,
+        "pipelines/orders",
+        "format: csv\n"
+        "dest_table: orders\n"
+        "write_mode: append\n"
+        "connector:\n"
+        "  type: bigquery\n"
+        "  project: my-project\n"
+        "  dataset: analytics\n"
+        "columns:\n  - source: id\n    dest: id\n    type: integer\n",
+        sample_path="/data/orders.csv",
+    )
+
+    workflow = AuthoringWorkflow.open_folder(
+        folder="pipelines/orders", workspace=str(workspace)
+    )
+
+    assert workflow.draft.connector_type == "bigquery"
+    assert workflow.draft.connector_options == {
+        "project": "my-project",
+        "dataset": "analytics",
+    }
+    # Connector picker default falls back to the loaded selection — same data
+    # path used by the Textual Select default in authoring_ui.py.
+    placeholders = {p.env_var for p in workflow.credential_placeholders()}
+    assert "GOOGLE_APPLICATION_CREDENTIALS" in placeholders
+
+
+def test_open_folder_loads_truncate_write_mode(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _write_handauthored_folder(
+        workspace,
+        "pipelines/events",
+        "format: csv\n"
+        "dest_table: events\n"
+        "write_mode: truncate\n"
+        "connector:\n  type: sqlite\n  url: sqlite:///events.db\n"
+        "columns:\n  - source: id\n    dest: id\n    type: integer\n",
+        sample_path="/data/events.csv",
+    )
+
+    workflow = AuthoringWorkflow.open_folder(
+        folder="pipelines/events", workspace=str(workspace)
+    )
+    assert workflow.draft.write_mode == "truncate"
+    assert workflow.draft.to_config_dict()["write_mode"] == "truncate"
+
+
+def test_open_folder_loads_cdc_write_mode_with_all_fields(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _write_handauthored_folder(
+        workspace,
+        "pipelines/people",
+        "format: csv\n"
+        "dest_table: people\n"
+        "write_mode: cdc\n"
+        "connector:\n  type: postgres\n  url: env:DATABASE_URL\n"
+        "columns:\n"
+        "  - source: id\n    dest: id\n    type: integer\n"
+        "  - source: op\n    dest: op\n    type: string\n"
+        "  - source: updated_at\n    dest: updated_at\n    type: timestamp\n"
+        "cdc:\n"
+        "  keys: [id]\n"
+        "  operation_column: op\n"
+        "  sequence_by: updated_at\n"
+        "  operations:\n"
+        "    insert: [c, insert]\n"
+        "    update: [u, update]\n"
+        "    delete: [d, delete]\n",
+        sample_path="/data/people.csv",
+    )
+
+    workflow = AuthoringWorkflow.open_folder(
+        folder="pipelines/people", workspace=str(workspace)
+    )
+    assert workflow.draft.write_mode == "cdc"
+    assert workflow.draft.cdc_keys == ["id"]
+    assert workflow.draft.cdc_sequence_by == "updated_at"
+    assert workflow.draft.cdc_operation_column == "op"
+    # CDC settings ride into the regenerated pipeline.yaml shape.
+    cdc_emitted = workflow.draft.to_config_dict()["cdc"]
+    assert cdc_emitted["keys"] == ["id"]
+    assert cdc_emitted["sequence_by"] == "updated_at"
+    assert cdc_emitted["operations"]["delete"] == ["d", "delete"]
+    # Postgres Credential Placeholder is surfaced to the Authoring Runbook.
+    assert "DATABASE_URL" in {
+        p.env_var for p in workflow.credential_placeholders()
+    }
+
+
+def test_reauthor_flow_does_not_read_credential_env_vars(tmp_path, monkeypatch):
+    # The re-author flow must never read or write credential material.
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    _write_handauthored_folder(
+        workspace,
+        "pipelines/orders",
+        "format: csv\n"
+        "dest_table: orders\n"
+        "write_mode: append\n"
+        "connector:\n"
+        "  type: bigquery\n"
+        "  project: my-project\n"
+        "  dataset: analytics\n"
+        "columns:\n  - source: id\n    dest: id\n    type: integer\n",
+        sample_path="/data/orders.csv",
+    )
+
+    import os as _os
+
+    forbidden = {"DATABASE_URL", "GOOGLE_APPLICATION_CREDENTIALS", "DATABRICKS_TOKEN"}
+    read_keys: list[str] = []
+    real_getenv = _os.environ.get
+
+    def tracking_getenv(key, default=None):
+        read_keys.append(key)
+        return real_getenv(key, default)
+
+    monkeypatch.setattr(_os.environ, "get", tracking_getenv, raising=False)
+
+    workflow = AuthoringWorkflow.open_folder(
+        folder="pipelines/orders", workspace=str(workspace)
+    )
+    workflow.draft.to_config_dict()
+    workflow.credential_placeholders()
+
+    leaked = forbidden & set(read_keys)
+    assert not leaked, f"Re-author flow read credential env vars: {leaked}"
 
 
 # ---------------------------------------------------------------------------

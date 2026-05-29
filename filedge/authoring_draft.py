@@ -19,7 +19,7 @@ from typing import List, Optional
 from filedge.authoring import AuthoringSession
 from filedge.column_types import validate_column_type
 from filedge.config import PipelineConfig, config_from_dict
-from filedge.connectors import connector_descriptor
+from filedge.connectors import available_connector_types, connector_descriptor
 
 
 WRITE_MODES = ("append", "truncate", "cdc")
@@ -91,6 +91,9 @@ class PipelineConfigDraft:
     cdc_keys: List[str] = field(default_factory=list)
     cdc_sequence_by: str = ""
     cdc_operation_column: str = DEFAULT_CDC_OPERATION_COLUMN
+    cdc_operations: dict[str, list[str]] = field(
+        default_factory=lambda: {k: list(v) for k, v in DEFAULT_CDC_OPERATIONS.items()}
+    )
     connector_type: str = "sqlite"
     connector_options: dict[str, str] = field(default_factory=dict)
 
@@ -372,8 +375,7 @@ class PipelineConfigDraft:
                 "operation_column": self.cdc_operation_column,
                 "sequence_by": self.cdc_sequence_by,
                 "operations": {
-                    key: list(values)
-                    for key, values in DEFAULT_CDC_OPERATIONS.items()
+                    key: list(values) for key, values in self.cdc_operations.items()
                 },
             }
         return data
@@ -418,10 +420,15 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
     Supported formats are CSV, NDJSON, Parquet, Excel, and Fixed-Width.
     Format-specific fields ride along: the ``excel.sheet`` selector and the
     Fixed-Width Layout (per-column ``start`` / ``width``) round-trip exactly.
-    Only the minimal connector and write-mode shape is accepted (``sqlite`` /
-    ``append``). Field Encryption declarations are preserved structurally
-    (algorithm and key reference only). Unsupported shapes raise ``ValueError``
-    naming the offending field so future slices can opt them in deliberately.
+    Every Connector Registry entry (``sqlite``, ``postgres``, ``bigquery``,
+    ``databricks``, ``duckdb``) and every Write Mode (``append``, ``truncate``,
+    ``cdc`` — including CDC sequence column, business keys, and operations
+    map) is accepted; non-secret connector settings round-trip exactly while
+    credentials remain Credential Placeholders resolved at runtime (the
+    re-author flow never reads, prompts for, or writes credential material).
+    Field Encryption declarations are preserved structurally (algorithm and
+    key reference only). Unsupported shapes raise ``ValueError`` naming the
+    offending field so future slices can opt them in deliberately.
     """
     if config.format not in SUPPORTED_LOADER_FORMATS:
         raise ValueError(
@@ -429,15 +436,15 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
             f"supported formats are: {', '.join(SUPPORTED_LOADER_FORMATS)}."
         )
     connector_type = config.connector.type if config.connector else "sqlite"
-    if connector_type != "sqlite":
+    if connector_type not in available_connector_types():
         raise ValueError(
-            f"draft_from_config does not yet support connector {connector_type!r}; "
-            "only 'sqlite' is supported in this slice."
+            f"draft_from_config does not support connector {connector_type!r}; "
+            f"known Connector Registry types: {', '.join(available_connector_types())}."
         )
-    if config.write_mode != "append":
+    if config.write_mode not in WRITE_MODES:
         raise ValueError(
-            f"draft_from_config does not yet support write_mode {config.write_mode!r}; "
-            "only 'append' is supported in this slice."
+            f"draft_from_config does not support write_mode {config.write_mode!r}; "
+            f"supported Write Modes: {', '.join(WRITE_MODES)}."
         )
     columns = [
         ColumnDraft(
@@ -473,9 +480,20 @@ def draft_from_config(config: PipelineConfig) -> PipelineConfigDraft:
     draft.fmt = config.format
     draft.write_mode = config.write_mode
     draft.sheet = config.excel.sheet if config.excel is not None else None
-    draft.cdc_keys = []
-    draft.cdc_sequence_by = ""
-    draft.cdc_operation_column = DEFAULT_CDC_OPERATION_COLUMN
+    if config.cdc is not None:
+        draft.cdc_keys = list(config.cdc.keys)
+        draft.cdc_sequence_by = config.cdc.sequence_by
+        draft.cdc_operation_column = config.cdc.operation_column
+        draft.cdc_operations = {
+            key: list(values) for key, values in config.cdc.operations.items()
+        }
+    else:
+        draft.cdc_keys = []
+        draft.cdc_sequence_by = ""
+        draft.cdc_operation_column = DEFAULT_CDC_OPERATION_COLUMN
+        draft.cdc_operations = {
+            k: list(v) for k, v in DEFAULT_CDC_OPERATIONS.items()
+        }
     draft.connector_type = connector_type
     draft.connector_options = connector_options
     return draft
