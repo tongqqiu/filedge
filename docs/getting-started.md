@@ -38,6 +38,9 @@ Start by pointing `filedge inspect` at your data file. It samples the first 1,00
 filedge inspect data.csv
 ```
 
+!!! tip "Prefer an interactive flow?"
+    `filedge author data.csv` (install with `uv sync --extra authoring`) walks you through Steps 1–3 in a terminal UI — schema review, write mode, connector, field encryption, and validation — then writes the pipeline folder for you. See the [Author guide](guides/author.md).
+
 Output goes to stdout; a human-readable summary goes to stderr:
 
 ```

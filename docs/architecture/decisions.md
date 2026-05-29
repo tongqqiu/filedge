@@ -115,3 +115,53 @@ Upstream Fetchers, Queue Materializers, SFTP sync jobs, and vendor export proces
 Filedge consumes this shape but does not emit to lineage backends or take over source mechanics. That keeps the File boundary intact while giving regulated pipelines a deterministic link back to upstream source ranges.
 
 [Full ADR](../adr/0011-source-manifest-and-lineage.md)
+
+---
+
+## ADR-0012: Excel is the next Parser format, ahead of Avro {#adr-0012}
+
+Excel (`.xlsx`) ships as the next Parser format because real target users — fintech data teams — land small datasets as spreadsheets, while Avro use is already covered by the Queue Materializer pattern. Schema inference, preview, and validate all work on `.xlsx` via `openpyxl` (optional `excel` extra), with row 1 as the header and a `--sheet` selector for multi-sheet workbooks.
+
+This re-applies the principle from ADR-0005/0006/0007: format priority follows real target-user evidence, not an abstract roadmap.
+
+[Full ADR](../adr/0012-excel-format-support.md)
+
+---
+
+## ADR-0013: Fixed-width is a Parser format with schema declared in pipeline.yaml {#adr-0013}
+
+Fixed-width text files have no separator and no embedded schema, so the column layout (`start`/`width` per column) is declared inline in `pipeline.yaml` from the partner's record-layout spec. `filedge inspect` is unsupported for fixed-width — inference is infeasible without an external layout — and `preview`/`validate` require `--config`. Validation rejects overlapping, unsorted, or non-positive-width columns at load time.
+
+[Full ADR](../adr/0013-fixed-width-format-support.md)
+
+---
+
+## ADR-0014: Column-level Field Encryption {#adr-0014}
+
+A per-column Field Encryption step runs between Transform and Connector so plaintext PII never lands in the warehouse. An `encrypt:` block (AES-256-GCM, randomized) gives confidentiality; a `hash:` block (HMAC-SHA256) gives a one-way joinable token; a column may declare neither, one, or both. Filedge owns the crypto math but not key management — key material comes from environment variables or a secrets mount at runtime, never from YAML, and Filedge does not integrate with KMS.
+
+[Full ADR](../adr/0014-column-level-field-encryption.md)
+
+---
+
+## ADR-0015: Control and Audit Platform starts with local Pipeline Authoring {#adr-0015}
+
+Filedge's first platform surface is a local Pipeline Authoring UI, not a hosted read-write operations platform. The Authoring UI helps operators create and review Pipeline Configs with preview, Schema Inference, Authoring Validation, connector settings, and Credential Placeholders; it does not run ingestion, store secrets, mutate Audit Records, or become a second control plane. A Pipeline Registry is created with the first authored Pipeline and keeps Audit DBs independent — preserving the one-Audit-DB-per-Pipeline rule.
+
+[Full ADR](../adr/0015-control-and-audit-platform-starts-with-local-pipeline-authoring.md)
+
+---
+
+## ADR-0016: Authoring UI is a Textual TUI launched from the Operator CLI {#adr-0016}
+
+The Authoring UI is a [Textual](https://textual.textualize.io) terminal app launched via `filedge author <sample-file>`, shipped behind an optional `authoring` extra. A terminal app is the most CLI-adjacent choice (same shell, working directory, and environment as the Operator CLI), is testable in-process via Textual's `Pilot` harness, and adds a lightweight dependency surface. The shell only renders panes and routes keystrokes; every domain rule stays in deep `filedge.*` modules reused unchanged from the CLI.
+
+[Full ADR](../adr/0016-authoring-ui-textual-tui.md)
+
+---
+
+## ADR-0017: Pipeline Folder layout and Pipeline Registry format {#adr-0017}
+
+Authored artifacts land in visible, version-controllable files at the workspace root: a `pipelines/<id>/` directory per Pipeline (holding `pipeline.yaml` and a Markdown Authoring Runbook) and a single `pipeline-registry.yaml` index. The Registry is created lazily with the first authored Pipeline and grows one independent entry per Pipeline, each pointing at its Pipeline Folder, Watched Directory, Audit DB connection placeholder, and Audit Export destination. It never combines Audit DBs and rejects malformed entries.
+
+[Full ADR](../adr/0017-pipeline-folder-and-registry-layout.md)
