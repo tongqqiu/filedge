@@ -12,6 +12,12 @@ from typing import Optional
 from filedge.authoring import AuthoringSession
 from filedge.authoring_draft import ColumnDraft, PipelineConfigDraft
 from filedge.authoring_validation import AuthoringValidationReport, validate_authoring
+from filedge.connectors import (
+    ConnectorDescriptor,
+    CredentialPlaceholder,
+    available_connector_types,
+    connector_descriptor,
+)
 from filedge.file_sample import FormatNotDetected, resolve_format, read_excel_sheet_names
 from filedge.pipeline_folder import PipelineFolderResult, write_pipeline_folder
 
@@ -161,6 +167,30 @@ class AuthoringWorkflow:
         )
         self.validation_report = None
 
+    def connector_types(self) -> list[str]:
+        """Return Connector Registry types available to the Authoring UI."""
+        return available_connector_types()
+
+    def connector_descriptor(self) -> ConnectorDescriptor:
+        """Return authoring-safe metadata for the selected Connector."""
+        return connector_descriptor(self._require_draft().connector_type)
+
+    def choose_connector(self, connector_type: str) -> ConnectorDescriptor:
+        """Select a Connector and seed its non-secret settings."""
+        draft = self._require_draft()
+        draft.choose_connector(connector_type)
+        self.validation_report = None
+        return connector_descriptor(draft.connector_type)
+
+    def set_connector_setting(self, name: str, value: str) -> None:
+        """Record one required non-secret Connector setting."""
+        self._require_draft().set_connector_setting(name, value)
+        self.validation_report = None
+
+    def credential_placeholders(self) -> list[CredentialPlaceholder]:
+        """Return runtime Credential Placeholders for the selected Connector."""
+        return list(self.connector_descriptor().credential_placeholders)
+
     def confidence_reviews(self) -> list[ConfidenceTierReview]:
         """List risky Confidence Tiers and whether each was acknowledged."""
         if self.draft is None:
@@ -212,6 +242,12 @@ class AuthoringWorkflow:
     def generate(self) -> PipelineFolderResult:
         """Write the Pipeline Folder and update the Pipeline Registry."""
         draft = self._require_draft()
+        missing = draft.required_connector_settings_missing()
+        if missing:
+            raise ValueError(
+                "Required non-secret Connector settings are missing: "
+                + ", ".join(missing)
+            )
         unacknowledged = self.unacknowledged_confidence_reviews()
         if unacknowledged:
             columns = ", ".join(r.source for r in unacknowledged)
@@ -236,6 +272,13 @@ class AuthoringWorkflow:
                 }
                 for r in self.confidence_reviews()
                 if r.acknowledged
+            ],
+            credential_placeholders=[
+                {
+                    "env_var": p.env_var,
+                    "purpose": p.purpose,
+                }
+                for p in self.credential_placeholders()
             ],
         )
         return self.generated

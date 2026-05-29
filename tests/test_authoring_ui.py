@@ -60,6 +60,48 @@ def test_textual_authoring_ui_lists_and_acknowledges_confidence_tiers(tmp_path):
     asyncio.run(run())
 
 
+def test_textual_authoring_ui_selects_connector_and_edits_settings(
+    tmp_path, monkeypatch
+):
+    async def run():
+        workflow = _csv_workflow(tmp_path)
+        app = AuthoringApp(workflow)
+
+        async with app.run_test():
+            event = type(
+                "Event",
+                (),
+                {
+                    "select": type("SelectRef", (), {"id": "connector"})(),
+                    "value": "bigquery",
+                },
+            )()
+            app.on_select_changed(event)
+
+            credentials = app.query_one("#credentials")
+            assert "GOOGLE_APPLICATION_CREDENTIALS" in str(credentials.render())
+
+            values = iter(["analytics-prod", "landing"])
+
+            def fake_push_screen(screen, callback):
+                callback(next(values))
+
+            monkeypatch.setattr(app, "push_screen", fake_push_screen)
+            app.action_edit_connector_setting()
+            app._selected_connector_setting = (
+                lambda: workflow.connector_descriptor().settings[1]
+            )
+            app.action_edit_connector_setting()
+
+        assert workflow.draft.connector_type == "bigquery"
+        assert workflow.draft.connector_options == {
+            "project": "analytics-prod",
+            "dataset": "landing",
+        }
+
+    asyncio.run(run())
+
+
 def test_textual_authoring_ui_blocks_generation_until_confidence_ack(tmp_path):
     async def run():
         workflow = _csv_workflow(tmp_path)
@@ -273,6 +315,7 @@ def test_textual_authoring_ui_noops_without_selected_column(tmp_path):
         async with app.run_test():
             app.action_edit_dest()
             app.action_toggle_required()
+            app.action_edit_connector_setting()
             app.action_ack_confidence()
             app.action_generate()
             validation = app.query_one("#validation")

@@ -302,6 +302,82 @@ def test_authoring_workflow_generates_cdc_pipeline_yaml(tmp_path):
     assert "- Write Mode: `cdc`" in runbook
 
 
+def test_authoring_workflow_generates_chosen_connector_and_credentials(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+
+    assert workflow.connector_types() == [
+        "bigquery",
+        "databricks",
+        "duckdb",
+        "postgres",
+        "sqlite",
+    ]
+
+    workflow.choose_connector("bigquery")
+    workflow.set_connector_setting("project", "analytics-prod")
+    workflow.set_connector_setting("dataset", "landing")
+    workflow.acknowledge_confidence_tier("name")
+
+    result = workflow.generate()
+    config = load_config(result.config_path)
+    runbook = open(result.runbook_path).read()
+
+    assert config.connector.type == "bigquery"
+    assert config.connector.options == {
+        "project": "analytics-prod",
+        "dataset": "landing",
+    }
+    assert "GOOGLE_APPLICATION_CREDENTIALS" in runbook
+    assert "BigQuery Application Default Credentials" in runbook
+
+
+def test_authoring_workflow_blocks_generation_when_connector_settings_missing(tmp_path):
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.choose_connector("bigquery")
+    workflow.set_connector_setting("project", "analytics-prod")
+    workflow.acknowledge_confidence_tier("name")
+
+    with pytest.raises(ValueError, match="dataset"):
+        workflow.generate()
+
+
+def test_authoring_workflow_never_exports_credential_values(tmp_path, monkeypatch):
+    secret = "/tmp/do-not-export-service-account.json"
+    monkeypatch.setenv("GOOGLE_APPLICATION_CREDENTIALS", secret)
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n")
+    workflow = AuthoringWorkflow.start(
+        file=src,
+        workspace=str(workspace),
+        dest_table="people",
+    )
+    workflow.choose_connector("bigquery")
+    workflow.set_connector_setting("project", "analytics-prod")
+    workflow.set_connector_setting("dataset", "landing")
+    workflow.acknowledge_confidence_tier("name")
+
+    result = workflow.generate()
+
+    assert secret not in open(result.config_path).read()
+    assert secret not in open(result.runbook_path).read()
+    assert secret not in open(result.registry_path).read()
+
+
 def test_authoring_workflow_rejects_non_risky_confidence_acknowledgement(tmp_path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
