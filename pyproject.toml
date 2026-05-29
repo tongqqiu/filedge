@@ -46,6 +46,7 @@ filedge = "filedge.cli:cli"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "ruff>=0.15.14", "fsspec>=2023.0"]
+authoring = ["textual>=5.0"]
 postgres = ["psycopg2-binary>=2.9.12"]
 bigquery = ["google-cloud-bigquery>=3.0"]
 databricks = ["databricks-sql-connector>=3.0", "fsspec>=2023.0"]

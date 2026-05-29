@@ -63,6 +63,7 @@ def write_pipeline_folder(
     watched_directory: Optional[str] = None,
     audit_db: Optional[str] = None,
     audit_export: Optional[str] = None,
+    confidence_acknowledgements: Optional[list[dict]] = None,
 ) -> PipelineFolderResult:
     """Write a Pipeline Folder for `config` and register it in the workspace.
 
@@ -107,6 +108,7 @@ def write_pipeline_folder(
         watched_directory=watched_directory,
         audit_db=audit_db,
         audit_export=audit_export,
+        confidence_acknowledgements=confidence_acknowledgements or [],
     )
     with open(runbook_path, "w") as f:
         f.write(runbook)
@@ -153,6 +155,7 @@ def _render_runbook(
     watched_directory: str,
     audit_db: str,
     audit_export: str,
+    confidence_acknowledgements: list[dict],
 ) -> str:
     """Render the non-secret Authoring Runbook Markdown for one Pipeline."""
     config_rel = f"{folder_rel}/{CONFIG_FILENAME}"
@@ -166,6 +169,9 @@ def _render_runbook(
             f"filedge export-audit --audit-db-url {audit_ref} "
             f"--output {audit_export}/index.html",
         ]
+    )
+    confidence_section = _render_confidence_acknowledgements(
+        confidence_acknowledgements
     )
     return f"""# Authoring Runbook: {pipeline_id}
 
@@ -193,8 +199,7 @@ Folder, so this folder accumulates no source data or PII.
 
 ## Accepted Confidence Tiers
 
-No low or ambiguous Confidence Tier acknowledgements recorded. The Authoring UI
-surface that captures these decisions ships in a later slice.
+{confidence_section}
 
 ## Credential Placeholders
 
@@ -214,3 +219,17 @@ Destination reachability, production credentials, or destination table readiness
 {commands}
 ```
 """
+
+
+def _render_confidence_acknowledgements(acknowledgements: list[dict]) -> str:
+    if not acknowledgements:
+        return "No low or ambiguous Confidence Tier acknowledgements recorded."
+    lines = []
+    for item in acknowledgements:
+        lines.append(
+            "- "
+            f"Source `{item.get('source', '')}` -> destination `{item.get('dest', '')}`: "
+            f"accepted `{item.get('confidence', '')}` Confidence Tier. "
+            f"Evidence: {item.get('evidence', '')}"
+        )
+    return "\n".join(lines)

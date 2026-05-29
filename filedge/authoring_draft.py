@@ -8,9 +8,9 @@ config loading the Operator CLI uses. It reuses `AuthoringSession` for Schema
 Inference and `config_from_dict` for the round-trip; it reimplements no domain
 rule, holds no secrets, and writes nothing to disk (ADR-0015).
 
-This slice is deliberately narrow (#146): CSV only, `write_mode: append`, and a
-placeholder Connector block sufficient for config loading. Field Encryption, CDC
-settings, and the Connector picker arrive in later Authoring UI slices.
+This draft stays deliberately headless: the Authoring UI edits it, but Parser
+dispatch, Schema Inference, config loading, and Fixed-Width Layout validation
+remain in the same modules the Operator CLI uses.
 """
 
 from dataclasses import dataclass, field
@@ -43,6 +43,8 @@ class ColumnDraft:
     null_count: int = 0
     total_seen: int = 0
     notes: List[str] = field(default_factory=list)
+    start: Optional[int] = None
+    width: Optional[int] = None
 
 
 @dataclass
@@ -53,6 +55,7 @@ class PipelineConfigDraft:
     columns: List[ColumnDraft]
     fmt: str = "csv"
     write_mode: str = "append"
+    sheet: Optional[object] = None
 
     @classmethod
     def from_sample(
@@ -63,6 +66,7 @@ class PipelineConfigDraft:
         fmt: str = "csv",
         sample_rows: int = 1000,
         encoding: Optional[str] = None,
+        sheet: Optional[object] = None,
     ) -> "PipelineConfigDraft":
         """Run Schema Inference over a sample File and seed an editable draft.
 
@@ -72,14 +76,14 @@ class PipelineConfigDraft:
         Tolerance). The Confidence Tier and inference notes ride along as
         read-only evidence.
         """
-        if fmt != "csv":
+        if fmt == "fixed_width":
             raise ValueError(
-                "PipelineConfigDraft currently supports CSV samples only; "
-                "multi-format authoring ships in a later slice."
+                "fixed_width authoring requires an explicit Fixed-Width Layout; "
+                "Schema Inference is not available for fixed-width Files."
             )
-        inferred = AuthoringSession(file, fmt, encoding=encoding).infer_schema(
-            sample_rows=sample_rows
-        )
+        inferred = AuthoringSession(
+            file, fmt, encoding=encoding, sheet=sheet
+        ).infer_schema(sample_rows=sample_rows)
         columns = [
             ColumnDraft(
                 source=c.name,
@@ -93,7 +97,26 @@ class PipelineConfigDraft:
             )
             for c in inferred
         ]
-        return cls(dest_table=dest_table, columns=columns, fmt=fmt)
+        return cls(dest_table=dest_table, columns=columns, fmt=fmt, sheet=sheet)
+
+    @classmethod
+    def from_fixed_width_layout(
+        cls,
+        dest_table: str,
+        columns: List[ColumnDraft],
+    ) -> "PipelineConfigDraft":
+        """Seed a draft from an explicit Fixed-Width Layout entry surface."""
+        draft = cls(dest_table=dest_table, columns=[], fmt="fixed_width")
+        for c in columns:
+            draft.add_fixed_width_column(
+                source=c.source,
+                dest=c.dest,
+                type=c.type,
+                start=c.start,
+                width=c.width,
+                required=c.required,
+            )
+        return draft
 
     def column(self, source: str) -> ColumnDraft:
         """Return the column whose current source name matches, or raise."""
@@ -110,6 +133,8 @@ class PipelineConfigDraft:
         dest: Optional[str] = None,
         type: Optional[str] = None,
         required: Optional[bool] = None,
+        start: Optional[int] = None,
+        width: Optional[int] = None,
     ) -> ColumnDraft:
         """Edit one column's authored fields, validating the Column Type.
 
@@ -127,26 +152,64 @@ class PipelineConfigDraft:
             col.dest = dest
         if required is not None:
             col.required = required
+        if start is not None:
+            col.start = start
+        if width is not None:
+            col.width = width
+        return col
+
+    def add_fixed_width_column(
+        self,
+        *,
+        source: str,
+        dest: str,
+        type: str,
+        start: int,
+        width: int,
+        required: bool = True,
+    ) -> ColumnDraft:
+        """Append one authored Fixed-Width Layout row."""
+        if self.fmt != "fixed_width":
+            raise ValueError("Fixed-Width Layout columns are only valid for fixed_width.")
+        validate_column_type(type)
+        col = ColumnDraft(
+            source=source,
+            dest=dest,
+            type=type,
+            required=required,
+            confidence="manual",
+            notes=["Fixed-Width Layout entered manually; Schema Inference skipped."],
+            start=start,
+            width=width,
+        )
+        self.columns.append(col)
         return col
 
     def to_config_dict(self) -> dict:
         """Emit a Pipeline Config mapping for this draft."""
-        return {
+        data = {
             "format": self.fmt,
             "dest_table": self.dest_table,
             "write_mode": self.write_mode,
             "connector": dict(_PLACEHOLDER_CONNECTOR),
-            "columns": [
-                {
-                    "source": c.source,
-                    "dest": c.dest,
-                    "type": c.type,
-                    "required": c.required,
-                }
-                for c in self.columns
-            ],
+            "columns": [self._column_config(c) for c in self.columns],
         }
+        if self.fmt == "excel":
+            data["excel"] = {"sheet": self.sheet}
+        return data
 
     def to_config(self) -> PipelineConfig:
         """Round-trip the draft through the existing config loading rules."""
         return config_from_dict(self.to_config_dict())
+
+    def _column_config(self, column: ColumnDraft) -> dict:
+        data = {
+            "source": column.source,
+            "dest": column.dest,
+            "type": column.type,
+            "required": column.required,
+        }
+        if self.fmt == "fixed_width":
+            data["start"] = column.start
+            data["width"] = column.width
+        return data
