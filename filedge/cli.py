@@ -358,10 +358,17 @@ def compact(watched_dir, output, max_files, compress, delete_source):
               type=click.Path(file_okay=False),
               help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
 @click.option("--audit-db-url", default=None, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--all", "all_pipelines", is_flag=True,
+              help="Fan out across every Pipeline in the Registry. Mutually exclusive "
+                   "with --pipeline and --audit-db-url.")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
-def status(ctx, pipeline_id, workspace, audit_db_url, output_json):
+def status(ctx, pipeline_id, workspace, audit_db_url, all_pipelines, output_json):
     """Show pipeline status summary."""
+    if all_pipelines:
+        _status_all(workspace, output_json, ctx, pipeline_id)
+        return
+
     audit_db_url = _operator_audit_db_url(ctx, pipeline_id, workspace, audit_db_url)
     db = Database(audit_db_url)
     create_audit_tables(db)
@@ -371,14 +378,58 @@ def status(ctx, pipeline_id, workspace, audit_db_url, output_json):
     if output_json:
         click.echo(json_lib.dumps(summary, indent=2))
     else:
-        click.echo(f"PENDING:    {summary['PENDING']}")
-        click.echo(f"PROCESSING: {summary['PROCESSING']}")
-        click.echo(f"COMMITTED:  {summary['COMMITTED']}")
-        click.echo(f"FAILED:     {summary['FAILED']}")
-        if summary["recent_failures"]:
-            click.echo("\nRecent failures:")
-            for f in summary["recent_failures"]:
-                click.echo(f"  {f['filename']}: {f['error_message']}")
+        _print_status_summary(summary)
+
+
+def _print_status_summary(summary, prefix=""):
+    """Render one Pipeline's state counts and recent failures (human format)."""
+    click.echo(f"{prefix}PENDING:    {summary['PENDING']}")
+    click.echo(f"{prefix}PROCESSING: {summary['PROCESSING']}")
+    click.echo(f"{prefix}COMMITTED:  {summary['COMMITTED']}")
+    click.echo(f"{prefix}FAILED:     {summary['FAILED']}")
+    if summary["recent_failures"]:
+        if not prefix:
+            click.echo("")
+        click.echo(f"{prefix}Recent failures:")
+        for f in summary["recent_failures"]:
+            click.echo(f"{prefix}  {f['filename']}: {f['error_message']}")
+
+
+def _status_all(workspace, output_json, ctx, pipeline_id):
+    """Handle `status --all`: validate exclusivity, fan out, and print per Pipeline."""
+    if pipeline_id or _explicit(ctx, "audit_db_url"):
+        click.echo(
+            "Error: --all is mutually exclusive with --pipeline and --audit-db-url.",
+            err=True,
+        )
+        sys.exit(1)
+
+    from filedge.status_all import status_all
+
+    try:
+        results = status_all(workspace)
+    except (RegistryError, FileNotFoundError) as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+    if output_json:
+        payload = []
+        for r in results:
+            if r.error is not None:
+                payload.append({"pipeline": r.id, "error": r.error})
+            else:
+                payload.append({"pipeline": r.id, **r.summary})
+        click.echo(json_lib.dumps(payload, indent=2))
+        return
+
+    for i, r in enumerate(results):
+        if i > 0:
+            click.echo("")
+        if r.error is not None:
+            click.echo(f"{r.id}: ERROR: {r.error}")
+        else:
+            click.echo(f"{r.id}:")
+            _print_status_summary(r.summary, prefix="  ")
 
 
 @cli.command()
