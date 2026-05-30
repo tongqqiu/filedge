@@ -217,3 +217,5 @@ The first sheet is read by default; use `--sheet <name-or-index>` to choose anot
 - [Run guide](guides/run.md) — scheduling, retry behaviour, write modes
 - [Connectors](reference/connectors.md) — switch from SQLite to PostgreSQL or BigQuery
 - [Compact guide](guides/compact.md) — merge small files before ingestion
+- [API sources](guides/api-sources.md) — materialize API pulls with `filedge-fetch`
+- [Queue sources](guides/queue-sources.md) — materialize Kafka Micro-batches with `filedge-materialize`

@@ -34,6 +34,13 @@ Core CLI commands, each useful on its own:
 | `filedge healthcheck` | Probe the audit DB and destination connector without writing rows |
 | `filedge requeue` | Move terminal failed files back to `PENDING` after remediation |
 
+External companion entry points:
+
+| Command | What it does |
+|---------|-------------|
+| `filedge-fetch` | Materialize an API Source, including EDGAR `companyConcept`, into complete NDJSON Files + Source Manifests |
+| `filedge-materialize` | Materialize Kafka Queue Source Micro-batches into complete NDJSON Files + Source Manifests |
+
 The typical workflow for a new pipeline:
 
 ```
@@ -64,6 +71,8 @@ Pluggable via a `connector:` block in `pipeline.yaml`:
 - [Getting Started](getting-started.md) — install and run your first pipeline in 5 minutes
 - [Guides](guides/run.md) — one page per workflow
 - [Scale ingestion](guides/scale.md) — large files, many files, parallel workers, and backfills
+- [API sources](guides/api-sources.md) — Fetcher pattern and the `filedge-fetch` reference companion
+- [Queue sources](guides/queue-sources.md) — Queue Materializer pattern and the `filedge-materialize` reference companion
 - [Source manifests](guides/source-manifests.md) — upstream lineage for API / Queue / SFTP / vendor exports
 - [pipeline.yaml reference](reference/pipeline-yaml.md) — every config option
 - [Connectors](reference/connectors.md) — destination setup for each backend

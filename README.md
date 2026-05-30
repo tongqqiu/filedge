@@ -44,6 +44,8 @@ uv sync --extra dev --extra bigquery         # + BigQuery
 uv sync --extra dev --extra databricks       # + Databricks
 uv sync --extra dev --extra duckdb           # + DuckDB
 uv sync --extra dev --extra authoring        # + Authoring UI
+uv sync --extra dev --extra excel            # + Excel (.xlsx)
+uv sync --extra dev --extra kafka            # + Reference Queue Materializer
 ```
 
 Declare a pipeline:
@@ -79,6 +81,13 @@ filedge status --audit-db-url sqlite:///filedge.db
 Don't know the schema yet? `filedge inspect data.csv` samples the file and prints a `columns:` block with confidence tiers ready to paste.
 
 Prefer to author interactively? `filedge author data.csv` launches a local terminal UI that runs schema inference, lets you review columns, write modes, connectors, and field encryption, validates the result, and writes a ready-to-run pipeline folder. To revise a pipeline later, `filedge author --pipeline pipelines/<id>` re-opens it in place — or run `filedge author` with no arguments to browse and pick from the registry. See the [author guide](docs/guides/author.md).
+
+Pulling from APIs or queues? Use an upstream Fetcher or Queue Materializer to
+land complete Files, then run Filedge. The first-party companions
+`filedge-fetch` and `filedge-materialize` demonstrate the audited
+materialize-to-files contract for API Sources, EDGAR `companyConcept`, and
+Kafka Queue Sources. See the [API sources](docs/guides/api-sources.md) and
+[queue sources](docs/guides/queue-sources.md) guides.
 
 ## Connectors
 
@@ -133,6 +142,8 @@ The audit DB and the destination are separate systems. A crash between connector
   - [ADR-0015: Control and Audit Platform starts with local Pipeline Authoring](docs/adr/0015-control-and-audit-platform-starts-with-local-pipeline-authoring.md)
   - [ADR-0016: Authoring UI — Textual TUI](docs/adr/0016-authoring-ui-textual-tui.md)
   - [ADR-0017: Pipeline Folder and Pipeline Registry layout](docs/adr/0017-pipeline-folder-and-registry-layout.md)
+  - [ADR-0018: Reference Fetcher external companion](docs/adr/0018-reference-fetcher-external-companion.md)
+  - [ADR-0019: Dead-Letter Quarantine](docs/adr/0019-dead-letter-quarantine.md)
 
 ## License
 
