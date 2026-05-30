@@ -49,6 +49,11 @@ class FetchPlan:
     # response (e.g. EDGAR `units.USD` or `data`). None → the response is a
     # top-level JSON array (the GitHub default).
     record_path: Optional[str] = None
+    # "server" (default): the cursor is sent as a query param and the API
+    # returns only newer records (GitHub). "client": the API has no cursor
+    # param, so a single document is fetched and records are filtered by
+    # cursor_field locally (EDGAR).
+    cursor_mode: str = "server"
 
     def credential(self) -> Optional[str]:
         """Resolve the bearer credential from the environment, if configured."""
