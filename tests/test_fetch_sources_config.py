@@ -88,3 +88,30 @@ def test_cursor_without_param_or_field_rejected(tmp_path):
 def test_empty_sources_list_rejected(tmp_path):
     with pytest.raises(SourcesConfigError, match="non-empty"):
         load_sources(_write(tmp_path, "version: 1\nsources: []\n"), "x")
+
+
+def test_non_mapping_document_rejected(tmp_path):
+    with pytest.raises(SourcesConfigError, match="must be a mapping"):
+        load_sources(_write(tmp_path, "- a\n- b\n"), "x")
+
+
+def test_duplicate_source_name_rejected(tmp_path):
+    text = _VALID + """\
+  - name: github-commits
+    type: github
+    url: https://api.github.com/repos/o/r/commits
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      param: since
+      field: id
+"""
+    with pytest.raises(SourcesConfigError, match="Duplicate"):
+        load_sources(_write(tmp_path, text), "github-commits")
+
+
+def test_non_mapping_query_rejected(tmp_path):
+    text = _VALID.replace("    query:\n      sha: main\n", "    query: not-a-mapping\n")
+    with pytest.raises(SourcesConfigError, match="query"):
+        load_sources(_write(tmp_path, text), "github-commits")

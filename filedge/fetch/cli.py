@@ -50,5 +50,5 @@ def fetch(config_path, source_name, dry_run):
     )
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     fetch()

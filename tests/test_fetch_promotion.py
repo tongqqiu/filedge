@@ -99,3 +99,30 @@ def test_fetch_lock_is_released_even_when_body_raises(tmp_path):
 
     with FetchLock(str(lock_dir), "src"):  # reacquirable
         pass
+
+
+def test_fetch_lock_exit_tolerates_an_already_removed_lock(tmp_path):
+    lock_dir = tmp_path / "state"
+    lock = FetchLock(str(lock_dir), "src")
+    with lock:
+        os.rmdir(lock._path)  # something else cleaned it up first
+    # __exit__ must not raise on the missing lock dir.
+
+
+def test_promote_falls_back_to_copy_when_rename_crosses_filesystems(tmp_path, monkeypatch):
+    data, sidecar = _stage(tmp_path)
+    watched = tmp_path / "landing"
+
+    import filedge.fetch.promotion as promotion_mod
+
+    def cross_device(src, dest):
+        raise OSError("EXDEV: cross-device link")
+
+    monkeypatch.setattr(promotion_mod.os, "replace", cross_device)
+
+    result = promote(data, sidecar, str(watched))
+
+    assert os.path.isfile(result.data_path)
+    assert os.path.isfile(result.sidecar_path)
+    assert not os.path.exists(data)  # copied then removed from staging
+    assert not os.path.exists(sidecar)

@@ -111,7 +111,9 @@ class HttpSourceClient:
                     f"Rate limited fetching {url!r} after {self._max_retries} retries."
                 )
             raise SourceClientError(f"HTTP {status} fetching {url!r}.")
-        raise SourceClientError(f"Exhausted retries fetching {url!r}.")
+        raise SourceClientError(  # pragma: no cover - loop always returns or raises
+            f"Exhausted retries fetching {url!r}."
+        )
 
     def _build_url(self, plan: FetchPlan, cursor: Optional[str], page: int) -> str:
         params = dict(plan.query)
