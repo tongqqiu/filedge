@@ -156,5 +156,47 @@ class QueueConsumer:
                 if len(buffers[tp]) >= self._batch_size:
                     yield cut(tp)
 
+    def consume_continuous(self, should_stop: Callable[[], bool]) -> Iterator[MicroBatch]:
+        """Yield Micro-batches indefinitely until ``should_stop()`` turns True.
+
+        Unlike Drain, there is no high-water-mark snapshot: the loop polls until
+        asked to stop (a SIGTERM-set flag in production). The count-or-time
+        boundary is identical to Drain. On stop, the in-flight Micro-batch is
+        flushed and promoted before returning — shutdown never drops a partial
+        batch (issue #18, story 7).
+        """
+        buffers: Dict[TopicPartition, List[Message]] = {}
+        opened_at: Dict[TopicPartition, float] = {}
+
+        def open_buffer(tp: TopicPartition) -> None:
+            if tp not in buffers:
+                buffers[tp] = []
+                opened_at[tp] = self._monotonic()
+
+        def cut(tp: TopicPartition) -> MicroBatch:
+            buf = buffers.pop(tp)
+            opened_at.pop(tp, None)
+            return MicroBatch(
+                topic=tp[0], partition=tp[1],
+                start_offset=buf[0].offset, end_offset=buf[-1].offset,
+                messages=[m.value for m in buf],
+            )
+
+        while not should_stop():
+            for tp in [t for t, b in buffers.items() if b and self._timed_out(opened_at[t])]:
+                yield cut(tp)
+
+            for message in self._client.poll(self._poll_timeout):
+                tp = (message.topic, message.partition)
+                open_buffer(tp)
+                buffers[tp].append(message)
+                if len(buffers[tp]) >= self._batch_size:
+                    yield cut(tp)
+
+        # Stopped: finish the in-flight Micro-batch(es) before exiting.
+        for tp in list(buffers):
+            if buffers[tp]:
+                yield cut(tp)
+
     def _timed_out(self, opened: float) -> bool:
         return (self._monotonic() - opened) >= self._batch_timeout
