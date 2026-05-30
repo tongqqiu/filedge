@@ -53,6 +53,10 @@ authoring = ["textual>=5.0"]
 # library, so this extra carries no extra runtime deps today — it reserves the
 # namespace for source-client dependencies a richer Fetcher might add.
 fetch = []
+# The Reference Queue Materializer (filedge-materialize) is an external
+# companion (ADR-0007). The Kafka client lives only behind this extra, so the
+# core ingestion path and the Fetcher take on no Kafka dependency.
+kafka = ["confluent-kafka>=2.0"]
 postgres = ["psycopg2-binary>=2.9.12"]
 bigquery = ["google-cloud-bigquery>=3.0"]
 databricks = ["databricks-sql-connector>=3.0", "fsspec>=2023.0"]
