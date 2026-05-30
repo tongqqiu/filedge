@@ -181,3 +181,19 @@ Filedge ships a Reference Fetcher (`filedge-fetch`) as a runnable example of the
 Dead-Letter Quarantine is opt-in per Pipeline and off by default, so Strict Mode (ADR-0003) is unchanged for every Pipeline that does not enable it. When enabled, rows that fail Transform/Field Encryption are written to an NDJSON quarantine sidecar and the good rows still commit; the File stays `COMMITTED` but records `quarantined_row_count` alongside `committed_row_count` (committed + quarantined = total), so the partial is explicit, never silent. A configured failure threshold (max invalid fraction and/or count) keeps the Strict signal: a File whose bad rows exceed the threshold fails wholesale — nothing committed, no sidecar — enforced by raising at end-of-stream before the Connector's commit (ADR-0001).
 
 [Full ADR](../adr/0019-dead-letter-quarantine.md)
+
+---
+
+## ADR-0020: Iceberg is a Table Format ingested via a Materializer companion, not a Parser {#adr-0020}
+
+Apache Iceberg is not a Parser format. An Iceberg table is a catalog pointer plus a snapshot over many data files and delete files — not a single File whose bytes can be Content-Hashed and ingested — so reading it natively is a category error against the File boundary, not a new Parser entry. Pointing existing Parquet support at the underlying data files is silently wrong (it ignores snapshot isolation and merge-on-read deletes). Iceberg also already provides ACID, snapshots, and time travel at the table layer, so re-ingesting it through Filedge is usually the overkill case (query it directly instead). If a real target user must load Iceberg into a Destination, an external Iceberg Materializer reads a snapshot, honors deletes, and writes complete NDJSON Files with a Source Manifest (ADR-0011) — the same external-companion pattern as ADR-0006/0007/0018, on the ADR-0012 evidence bar.
+
+[Full ADR](../adr/0020-iceberg-table-format-via-materializer.md)
+
+---
+
+## ADR-0021: Reference companions materialize NDJSON; Parquet intermediates are a boundary capability {#adr-0021}
+
+`filedge-fetch` and `filedge-materialize` materialize NDJSON only (optionally gzip'd), and are not extended to write Parquet by default. The input is loosely-typed JSON, NDJSON is schema-on-read, and the type contract lives in `pipeline.yaml` applied at `filedge run` — emitting Parquet would force a second schema into the materialize layer and risk materialize-time vs. ingest-time drift, for a storage gain already covered by `gzip: true`. Parquet intermediates remain supported *at the boundary*: `filedge run` reads Parquet natively (ADR-0007), so any Parquet-writing materializer (Kafka Connect, Flink, Spark) can land Files in the Watched Directory. A Parquet-emitting companion is deferred to a measured, volume-driven case and, if built, must reuse the Pipeline Config columns as its schema rather than infer a second one.
+
+[Full ADR](../adr/0021-companion-output-ndjson-parquet-at-boundary.md)
