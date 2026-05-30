@@ -10,6 +10,68 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+This pre-release line expands Filedge from the ingestion core into a fuller
+Control and Audit Platform surface: Pipeline Registry-aware operator commands,
+first-party companion jobs for API and Queue sources, and opt-in
+Dead-Letter Quarantine for bounded bad-row handling.
+
+### Highlights
+
+- **Pipeline Registry-aware Operator CLI** — `filedge run`, `status`,
+  `lineage`, `requeue`, and `export-audit` can resolve Pipeline Config,
+  Watched Directory, Audit DB, and Audit Export destination from a Pipeline
+  Registry with `--pipeline <id>`. `filedge status --all` fans out across every
+  registered Pipeline while keeping each Audit DB independent.
+- **Reference Fetcher (`filedge-fetch`)** — an external companion that pulls an
+  API Source from a Sources Config, stages a complete NDJSON File, emits a
+  Source Manifest, promotes under a Fetch Lock, and advances the cursor only
+  after promotion. It now supports generic HTTP/GitHub-style sources and SEC
+  EDGAR `companyConcept` sources with required `User-Agent` headers and
+  client-side incremental filtering by `filed`.
+- **Reference Queue Materializer (`filedge-materialize`)** — an external
+  companion for Kafka Queue Sources. It materializes per-partition
+  Micro-batches into complete NDJSON Files with Offset Range Metadata, supports
+  Drain and Continuous Trigger Modes, and commits broker offsets only after
+  promotion.
+- **Dead-Letter Quarantine** — an opt-in Pipeline policy that commits good rows
+  while writing bad rows to an accounted quarantine sidecar, guarded by
+  configured failure thresholds so Strict Mode remains the default signal.
+
+### Added
+
+- `--pipeline <id>` / `--workspace <path>` resolution for Run, Status,
+  Lineage, Requeue, and Audit Export workflows.
+- `filedge status --all` for Registry-wide status summaries.
+- `filedge-fetch` console script, Sources Config loader, HTTP source client,
+  cursor store, staging/manifest/promotion flow, and EDGAR source support.
+- `filedge-materialize` console script, Kafka Sources Config loader, JSON
+  decoder, Queue Consumer, Drain and Continuous Trigger Modes, and the `kafka`
+  optional extra.
+- Shared `filedge.companion` modules for staged NDJSON writing, Source Manifest
+  emission, and Fetch Lock promotion.
+- `source_manifest:` parsing on file registration with lineage/status
+  visibility for Source Manifest metadata.
+- Dead-Letter Quarantine config, processor, sink, audit fields, CLI/status/
+  lineage display, and ADR-0019.
+
+### Changed
+
+- Pipeline Authoring gained Re-Author support for existing Pipeline Folders,
+  Registry browse-and-pick, sample refresh, and Authoring Validation Drift
+  feedback.
+- `filedge run` and companion jobs share the same materialized-File contract:
+  complete Files plus optional Source Manifests reach the Watched Directory;
+  source mechanics remain upstream.
+
+### Documentation
+
+- New guides for [API sources](docs/guides/api-sources.md),
+  [Queue sources](docs/guides/queue-sources.md), and
+  [Dead-Letter Quarantine](docs/adr/0019-dead-letter-quarantine.md).
+- CLI reference updated for Pipeline Registry resolution, `filedge-fetch`, and
+  `filedge-materialize`.
+- ADR-0018 and ADR-0019 added to the architecture decisions index.
+
 ## [0.2.0] - 2026-05-29
 
 The first **Control and Audit Platform** surface lands: a local Pipeline
