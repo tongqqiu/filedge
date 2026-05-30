@@ -71,7 +71,9 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     manifest_started_at TEXT,
     manifest_finished_at TEXT,
     manifest_record_count INTEGER,
-    source_range TEXT
+    source_range TEXT,
+    quarantined_row_count INTEGER,
+    quarantine_path TEXT
 )
 """
 
@@ -99,7 +101,9 @@ CREATE TABLE IF NOT EXISTS etl_file_audit (
     manifest_started_at TIMESTAMP WITH TIME ZONE,
     manifest_finished_at TIMESTAMP WITH TIME ZONE,
     manifest_record_count BIGINT,
-    source_range TEXT
+    source_range TEXT,
+    quarantined_row_count INTEGER,
+    quarantine_path TEXT
 )
 """
 
@@ -108,6 +112,9 @@ _SOURCE_MANIFEST_TEXT_COLUMNS = (
     "manifest_version", "manifest_started_at", "manifest_finished_at", "source_range",
 )
 _SOURCE_MANIFEST_INT_COLUMNS = ("manifest_record_count",)
+# Dead-Letter Quarantine columns (ADR-0019), added for existing audit DBs too.
+_QUARANTINE_TEXT_COLUMNS = ("quarantine_path",)
+_QUARANTINE_INT_COLUMNS = ("quarantined_row_count",)
 
 
 def create_audit_tables(db: Database) -> None:
@@ -123,9 +130,9 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS source_dir TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS run_id TEXT")
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS row_count INTEGER")  # pragma: no cover
-        for col in _SOURCE_MANIFEST_TEXT_COLUMNS:
+        for col in _SOURCE_MANIFEST_TEXT_COLUMNS + _QUARANTINE_TEXT_COLUMNS:  # pragma: no cover
             db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS {col} TEXT")
-        for col in _SOURCE_MANIFEST_INT_COLUMNS:
+        for col in _SOURCE_MANIFEST_INT_COLUMNS + _QUARANTINE_INT_COLUMNS:  # pragma: no cover
             db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN IF NOT EXISTS {col} BIGINT")
         return
 
@@ -139,10 +146,10 @@ def _ensure_audit_columns(db: Database) -> None:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN run_id TEXT")
     if "row_count" not in existing:
         db.execute("ALTER TABLE etl_file_audit ADD COLUMN row_count INTEGER")
-    for col in _SOURCE_MANIFEST_TEXT_COLUMNS:
+    for col in _SOURCE_MANIFEST_TEXT_COLUMNS + _QUARANTINE_TEXT_COLUMNS:
         if col not in existing:
             db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN {col} TEXT")
-    for col in _SOURCE_MANIFEST_INT_COLUMNS:
+    for col in _SOURCE_MANIFEST_INT_COLUMNS + _QUARANTINE_INT_COLUMNS:
         if col not in existing:
             db.execute(f"ALTER TABLE etl_file_audit ADD COLUMN {col} INTEGER")
 
@@ -171,6 +178,8 @@ class FileRecord:
     finished_at: Optional[str] = None
     record_count: Optional[int] = None
     source_range: Optional[dict] = None
+    quarantined_row_count: Optional[int] = None
+    quarantine_path: Optional[str] = None
 
 
 def _now() -> str:
@@ -201,7 +210,8 @@ def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
     cursor = db.execute(
         "SELECT id, filename, source_dir, content_hash, state, attempt_count, error_message, worker_id, claimed_at, row_count,"
         " source_type, source_name, producer, external_run_id, manifest_payload,"
-        " manifest_version, manifest_started_at, manifest_finished_at, manifest_record_count, source_range"
+        " manifest_version, manifest_started_at, manifest_finished_at, manifest_record_count, source_range,"
+        " quarantined_row_count, quarantine_path"
         " FROM etl_file_audit WHERE content_hash = ?",
         [content_hash],
     )
@@ -222,6 +232,8 @@ def find_file_by_hash(db: Database, content_hash: str) -> Optional[FileRecord]:
         finished_at=row[17] if row[17] is None or isinstance(row[17], str) else row[17].isoformat(),
         record_count=row[18],
         source_range=source_range,
+        quarantined_row_count=row[20],
+        quarantine_path=row[21],
     )
 
 
@@ -280,10 +292,23 @@ def claim_processing(
     return cursor.rowcount == 1
 
 
-def mark_committed(db: Database, content_hash: str, row_count: Optional[int] = None) -> None:
+def mark_committed(
+    db: Database,
+    content_hash: str,
+    row_count: Optional[int] = None,
+    quarantined_row_count: int = 0,
+    quarantine_path: Optional[str] = None,
+) -> None:
+    """Mark a File COMMITTED, recording committed and quarantined row counts.
+
+    `quarantined_row_count` defaults to 0 (a clean commit); when a File partially
+    commits under Dead-Letter Quarantine (ADR-0019) it records how many rows were
+    set aside and the sidecar path. The state stays COMMITTED — no new state.
+    """
     db.execute(
-        "UPDATE etl_file_audit SET state='COMMITTED', worker_id=NULL, row_count=?, updated_at=? WHERE content_hash=?",
-        [row_count, _now(), content_hash],
+        "UPDATE etl_file_audit SET state='COMMITTED', worker_id=NULL, row_count=?,"
+        " quarantined_row_count=?, quarantine_path=?, updated_at=? WHERE content_hash=?",
+        [row_count, quarantined_row_count, quarantine_path, _now(), content_hash],
     )
 
 
