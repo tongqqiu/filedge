@@ -45,6 +45,10 @@ class FetchPlan:
     page_size: int = 100
     gzip: bool = False
     producer: str = "https://github.com/tongqqiu/filedge#reference-fetcher"
+    # When set, records are extracted from this dotted path inside a JSON-object
+    # response (e.g. EDGAR `units.USD` or `data`). None → the response is a
+    # top-level JSON array (the GitHub default).
+    record_path: Optional[str] = None
 
     def credential(self) -> Optional[str]:
         """Resolve the bearer credential from the environment, if configured."""

@@ -102,7 +102,7 @@ class HttpSourceClient:
         for attempt in range(self._max_retries + 1):
             status, resp_headers, body = self._transport(url, headers)
             if status == 200:
-                return _decode_array(body, url)
+                return extract_records(body, url, plan.record_path)
             if status in _RATE_LIMIT_STATUSES and self._is_rate_limited(resp_headers):
                 if attempt < self._max_retries:
                     self._sleep(self._retry_delay(resp_headers))
@@ -152,16 +152,35 @@ class HttpSourceClient:
         return best
 
 
-def _decode_array(body: bytes, url: str) -> List[dict]:
+def extract_records(body: bytes, url: str, record_path: Optional[str] = None) -> List[dict]:
+    """Extract the record list from a JSON response.
+
+    With ``record_path`` None the response must be a top-level JSON array (the
+    GitHub default). With a dotted ``record_path`` the records are the array at
+    that path inside a JSON object (e.g. EDGAR ``units.USD`` or ``data``); a
+    missing path or empty document yields an empty list rather than erroring.
+    """
     try:
         payload = json.loads(body)
     except json.JSONDecodeError as e:
         raise SourceClientError(f"Non-JSON response from {url!r}.") from e
-    if not isinstance(payload, list):
+
+    if record_path is None:
+        if not isinstance(payload, list):
+            raise SourceClientError(
+                f"Expected a JSON array from {url!r}, got {type(payload).__name__}."
+            )
+        return payload
+
+    located = _dotted_get(payload, record_path) if isinstance(payload, dict) else None
+    if located is None:
+        return []
+    if not isinstance(located, list):
         raise SourceClientError(
-            f"Expected a JSON array from {url!r}, got {type(payload).__name__}."
+            f"Expected a JSON array at {record_path!r} in {url!r}, "
+            f"got {type(located).__name__}."
         )
-    return payload
+    return located
 
 
 def _dotted_get(record: dict, dotted: str):
