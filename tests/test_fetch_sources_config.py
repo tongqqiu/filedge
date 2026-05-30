@@ -6,7 +6,7 @@ file — credentials are named by environment variable.
 import pytest
 
 from filedge.fetch.errors import SourcesConfigError
-from filedge.fetch.sources_config import load_sources
+from filedge.fetch.sources_config import company_concept_url, load_sources
 
 _VALID = """\
 version: 1
@@ -46,6 +46,7 @@ def test_loads_a_valid_source_into_a_fetch_plan(tmp_path):
     assert plan.page_size == 50
     assert plan.gzip is True
     assert plan.credential_env == "GITHUB_TOKEN"
+    assert plan.headers == {}
 
 
 def test_credential_resolves_from_the_environment_only(tmp_path, monkeypatch):
@@ -115,3 +116,137 @@ def test_non_mapping_query_rejected(tmp_path):
     text = _VALID.replace("    query:\n      sha: main\n", "    query: not-a-mapping\n")
     with pytest.raises(SourcesConfigError, match="query"):
         load_sources(_write(tmp_path, text), "github-commits")
+
+
+def test_loads_static_headers(tmp_path):
+    text = _VALID.replace(
+        "    query:\n      sha: main\n",
+        "    headers:\n"
+        "      User-Agent: Filedge Test contact@example.com\n"
+        "      X-Source: filedge\n"
+        "    query:\n"
+        "      sha: main\n",
+    )
+
+    plan = load_sources(_write(tmp_path, text), "github-commits")
+
+    assert plan.headers == {
+        "User-Agent": "Filedge Test contact@example.com",
+        "X-Source": "filedge",
+    }
+
+
+def test_non_mapping_headers_rejected(tmp_path):
+    text = _VALID.replace("    query:\n      sha: main\n", "    headers: nope\n")
+    with pytest.raises(SourcesConfigError, match="headers"):
+        load_sources(_write(tmp_path, text), "github-commits")
+
+
+def test_edgar_source_parses_with_company_concept_url_and_defaults(tmp_path):
+    text = """\
+version: 1
+sources:
+  - name: apple-revenues
+    type: edgar
+    cik: 320193
+    concept: Revenues
+    unit: USD
+    user_agent: Filedge Example contact@example.com
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      field: filed
+"""
+
+    plan = load_sources(_write(tmp_path, text), "apple-revenues")
+
+    assert plan.source_type == "edgar"
+    assert plan.cik == "0000320193"
+    assert plan.taxonomy == "us-gaap"
+    assert plan.concept == "Revenues"
+    assert plan.unit == "USD"
+    assert plan.cursor_field == "filed"
+    assert plan.cursor_param == "filed"
+    assert plan.cursor_mode == "client"
+    assert plan.record_path == "units.USD"
+    assert plan.headers["User-Agent"] == "Filedge Example contact@example.com"
+    assert plan.url == (
+        "https://data.sec.gov/api/xbrl/companyconcept/"
+        "CIK0000320193/us-gaap/Revenues.json"
+    )
+
+
+def test_edgar_source_allows_taxonomy_override(tmp_path):
+    text = """\
+version: 1
+sources:
+  - name: apple-assets
+    type: edgar
+    cik: "0000320193"
+    taxonomy: dei
+    concept: EntityCommonStockSharesOutstanding
+    unit: shares
+    user_agent: Filedge Example contact@example.com
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      field: filed
+"""
+
+    plan = load_sources(_write(tmp_path, text), "apple-assets")
+
+    assert plan.taxonomy == "dei"
+    assert plan.record_path == "units.shares"
+    assert plan.url.endswith(
+        "/CIK0000320193/dei/EntityCommonStockSharesOutstanding.json"
+    )
+
+
+def test_company_concept_url_zero_pads_cik():
+    assert company_concept_url(
+        cik="320193", taxonomy="us-gaap", concept="Revenues"
+    ) == (
+        "https://data.sec.gov/api/xbrl/companyconcept/"
+        "CIK0000320193/us-gaap/Revenues.json"
+    )
+
+
+def test_edgar_user_agent_is_required(tmp_path):
+    text = """\
+version: 1
+sources:
+  - name: apple-revenues
+    type: edgar
+    cik: 320193
+    concept: Revenues
+    unit: USD
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      field: filed
+"""
+    with pytest.raises(SourcesConfigError, match="user_agent"):
+        load_sources(_write(tmp_path, text), "apple-revenues")
+
+
+def test_edgar_rejects_malformed_cik(tmp_path):
+    text = """\
+version: 1
+sources:
+  - name: apple-revenues
+    type: edgar
+    cik: apple
+    concept: Revenues
+    unit: USD
+    user_agent: Filedge Example contact@example.com
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      field: filed
+"""
+    with pytest.raises(SourcesConfigError, match="cik"):
+        load_sources(_write(tmp_path, text), "apple-revenues")

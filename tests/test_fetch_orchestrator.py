@@ -4,6 +4,7 @@ is a clean no-op, and a promotion failure leaves the cursor un-advanced. One
 end-to-end test then ingests the promoted File with `filedge run`.
 """
 
+import json
 import os
 
 import pytest
@@ -12,6 +13,7 @@ from click.testing import CliRunner
 from filedge.cli import cli
 from filedge.fetch.cursor_state import CursorStore
 from filedge.fetch.orchestrator import run_fetch
+from filedge.fetch.source_client import HttpSourceClient
 from filedge.fetch.source_client import FetchResult
 from filedge.source_manifest import discover_and_parse
 
@@ -167,3 +169,135 @@ def test_promoted_file_is_ingestable_by_filedge_run(tmp_path):
     ])
     assert lineage.exit_code == 0, lineage.output
     assert "commits" in lineage.output
+
+
+def test_edgar_fetch_lands_manifest_and_ingestable_fact_file(tmp_path):
+    staging = tmp_path / "staging"
+    landing = tmp_path / "landing"
+    state = tmp_path / "state"
+    cfg = tmp_path / "sources.yaml"
+    cfg.write_text(
+        "version: 1\n"
+        "sources:\n"
+        "  - name: apple-revenues\n"
+        "    type: edgar\n"
+        "    cik: 320193\n"
+        "    concept: Revenues\n"
+        "    unit: USD\n"
+        "    user_agent: Filedge Test contact@example.com\n"
+        f"    staging_dir: {staging}\n"
+        f"    watched_directory: {landing}\n"
+        f"    state_dir: {state}\n"
+        "    cursor:\n"
+        "      field: filed\n"
+    )
+    seen = {}
+    facts = [
+        {"fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-01", "val": 100},
+        {"fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-05-01", "val": 125},
+    ]
+
+    def transport(url, headers):
+        seen["url"] = url
+        seen["headers"] = dict(headers)
+        return 200, {}, json.dumps({"units": {"USD": facts}}).encode()
+
+    outcome = run_fetch(
+        str(cfg),
+        "apple-revenues",
+        client=HttpSourceClient(
+            transport,
+            sleep=lambda s: None,
+            now=lambda: "2026-05-30T00:00:00+00:00",
+        ),
+    )
+
+    assert seen["url"] == (
+        "https://data.sec.gov/api/xbrl/companyconcept/"
+        "CIK0000320193/us-gaap/Revenues.json"
+    )
+    assert seen["headers"]["User-Agent"] == "Filedge Test contact@example.com"
+    assert outcome.record_count == 2
+    assert CursorStore(str(state)).read("apple-revenues") == "2026-05-01"
+    manifest = discover_and_parse(outcome.data_path)
+    assert manifest.error_category is None
+    assert manifest.metadata.source_type == "edgar"
+    assert manifest.metadata.source_name == "apple-revenues"
+    assert manifest.metadata.source_range == {
+        "cursor_param": "filed",
+        "cursor_field": "filed",
+        "from": None,
+        "to": "2026-05-01",
+        "cik": "0000320193",
+        "taxonomy": "us-gaap",
+        "concept": "Revenues",
+        "unit": "USD",
+    }
+
+    config_file = tmp_path / "pipeline.yaml"
+    config_file.write_text(
+        "format: ndjson\n"
+        "dest_table: edgar_facts\n"
+        "connector:\n"
+        "  type: sqlite\n"
+        f"  url: sqlite:///{tmp_path}/dest.db\n"
+        "columns:\n"
+        "  - source: filed\n"
+        "    dest: filed\n"
+        "    type: string\n"
+        "    required: true\n"
+        "  - source: val\n"
+        "    dest: value\n"
+        "    type: integer\n"
+        "    required: true\n"
+    )
+
+    result = CliRunner().invoke(cli, [
+        "run",
+        "--dir", str(landing),
+        "--config", str(config_file),
+        "--audit-db-url", f"sqlite:///{tmp_path}/audit.db",
+        "--no-progress",
+    ])
+    assert result.exit_code == 0, result.output
+    assert "Committed: 1" in result.output
+
+
+def test_edgar_second_fetch_with_no_newer_facts_is_noop(tmp_path):
+    staging = tmp_path / "staging"
+    landing = tmp_path / "landing"
+    state = tmp_path / "state"
+    cfg = tmp_path / "sources.yaml"
+    cfg.write_text(
+        "version: 1\n"
+        "sources:\n"
+        "  - name: apple-revenues\n"
+        "    type: edgar\n"
+        "    cik: 320193\n"
+        "    concept: Revenues\n"
+        "    unit: USD\n"
+        "    user_agent: Filedge Test contact@example.com\n"
+        f"    staging_dir: {staging}\n"
+        f"    watched_directory: {landing}\n"
+        f"    state_dir: {state}\n"
+        "    cursor:\n"
+        "      field: filed\n"
+    )
+    facts = [{"filed": "2026-02-01", "val": 100}]
+
+    def transport(url, headers):
+        return 200, {}, json.dumps({"units": {"USD": facts}}).encode()
+
+    client = HttpSourceClient(
+        transport,
+        sleep=lambda s: None,
+        now=lambda: "2026-05-30T00:00:00+00:00",
+    )
+    first = run_fetch(str(cfg), "apple-revenues", client=client)
+    second = run_fetch(str(cfg), "apple-revenues", client=client)
+
+    assert first.record_count == 1
+    assert second.skipped is True
+    assert second.record_count == 0
+    assert os.listdir(landing)
+    assert sum(name.endswith(".ndjson") for name in os.listdir(landing)) == 1

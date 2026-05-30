@@ -82,11 +82,7 @@ def run_fetch(
         started_at=result.started_at,
         finished_at=result.finished_at,
         record_count=len(result.records),
-        source_range={
-            "cursor_param": plan.cursor_param,
-            "from": from_cursor,
-            "to": to_cursor,
-        },
+        source_range=_source_range(plan, from_cursor, to_cursor),
     )
 
     with FetchLock(plan.state_dir, source_name):
@@ -118,3 +114,24 @@ def _dry_run_outcome(plan: FetchPlan, from_cursor: Optional[str]) -> FetchOutcom
         dry_run=True,
         target_filename=target,
     )
+
+
+def _source_range(
+    plan: FetchPlan, from_cursor: Optional[str], to_cursor: Optional[str]
+) -> dict:
+    if plan.source_type == "edgar":
+        return {
+            "cursor_param": plan.cursor_param,
+            "cursor_field": plan.cursor_field,
+            "from": from_cursor,
+            "to": to_cursor,
+            "cik": plan.cik,
+            "taxonomy": plan.taxonomy,
+            "concept": plan.concept,
+            "unit": plan.unit,
+        }
+    return {
+        "cursor_param": plan.cursor_param,
+        "from": from_cursor,
+        "to": to_cursor,
+    }

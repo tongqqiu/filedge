@@ -132,6 +132,41 @@ def test_credential_is_sent_as_bearer_header(monkeypatch):
     assert seen["auth"] == "Bearer secret-token"
 
 
+def test_static_headers_are_sent_with_each_request():
+    seen = []
+
+    def transport(url, headers):
+        seen.append(dict(headers))
+        return _ok([])
+
+    client = HttpSourceClient(transport, sleep=lambda s: None)
+    client.fetch(_plan(headers={"User-Agent": "Filedge Test contact@example.com"}), None)
+
+    assert seen[0]["Accept"] == "application/json"
+    assert seen[0]["User-Agent"] == "Filedge Test contact@example.com"
+
+
+def test_bearer_authorization_composes_with_static_headers(monkeypatch):
+    seen = {}
+
+    def transport(url, headers):
+        seen.update(headers)
+        return _ok([])
+
+    monkeypatch.setenv("TOK", "secret-token")
+    client = HttpSourceClient(transport, sleep=lambda s: None)
+    client.fetch(
+        _plan(
+            credential_env="TOK",
+            headers={"User-Agent": "Filedge Test contact@example.com"},
+        ),
+        None,
+    )
+
+    assert seen["Authorization"] == "Bearer secret-token"
+    assert seen["User-Agent"] == "Filedge Test contact@example.com"
+
+
 def test_rate_limit_detected_via_remaining_header_then_succeeds():
     calls = {"n": 0}
 

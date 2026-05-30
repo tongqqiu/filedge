@@ -106,7 +106,7 @@ class HttpSourceClient:
         return [r for r in records if self._is_newer(plan, r, cursor)]
 
     def _request(self, plan: FetchPlan, url: str) -> List[dict]:
-        headers = {"Accept": "application/json"}
+        headers = {"Accept": "application/json", **plan.headers}
         credential = plan.credential()
         if credential:
             headers["Authorization"] = f"Bearer {credential}"

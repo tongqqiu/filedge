@@ -323,7 +323,7 @@ filedge completion [--shell zsh|bash]
 
 ## `filedge-fetch`
 
-The Reference Fetcher — a **separate entry point**, not a `filedge` subcommand. It is an external companion to `filedge run` (ADR-0018): it pulls one API Source described in a Sources Config and lands complete NDJSON Files (each with a Source Manifest sidecar) in the Watched Directory, where `filedge run` ingests them. It never Commits to a Destination.
+The Reference Fetcher — a **separate entry point**, not a `filedge` subcommand. It is an external companion to `filedge run` (ADR-0018): it pulls one API Source described in a Sources Config and lands complete NDJSON Files (each with a Source Manifest sidecar) in the Watched Directory, where `filedge run` ingests them. It never Commits to a Destination. Supported source types include `github`, generic HTTP-style sources, and SEC EDGAR `companyConcept` sources declared as `type: edgar`.
 
 ```bash
 filedge-fetch --config <sources.yaml> --source <name> [--dry-run]
