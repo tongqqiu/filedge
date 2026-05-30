@@ -10,6 +10,8 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-30
+
 This pre-release line expands Filedge from the ingestion core into a fuller
 Control and Audit Platform surface: Pipeline Registry-aware operator commands,
 first-party companion jobs for API and Queue sources, and opt-in
@@ -66,6 +68,8 @@ Dead-Letter Quarantine for bounded bad-row handling.
 ### Documentation
 
 - New guides for [API sources](docs/guides/api-sources.md),
+  [API Source adapters](docs/guides/api-source-adapters.md),
+  [EDGAR API demo](docs/guides/edgar-demo.md),
   [Queue sources](docs/guides/queue-sources.md), and
   [Dead-Letter Quarantine](docs/adr/0019-dead-letter-quarantine.md).
 - CLI reference updated for Pipeline Registry resolution, `filedge-fetch`, and
@@ -121,5 +125,6 @@ Authoring UI. Plus column-level Field Encryption and two new file formats.
 - ADR-0012 through ADR-0017 added to the architecture decisions index.
 - Versioned documentation site deployment.
 
-[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/tongqqiu/filedge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tongqqiu/filedge/compare/v0.1.2...v0.2.0

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "filedge"
-version = "0.2.0"
+version = "0.3.0"
 description = "Atomic file ingestion with content-hash idempotency and a full audit trail — into SQLite, PostgreSQL, BigQuery, Databricks, or DuckDB."
 readme = "README.md"
 requires-python = ">=3.11"
