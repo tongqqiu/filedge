@@ -90,6 +90,10 @@ class QueueConsumer:
         """Commit the broker offset past this Micro-batch (last offset + 1)."""
         self._client.commit(batch.topic, batch.partition, batch.end_offset + 1)
 
+    def close(self) -> None:
+        """Release the underlying broker client."""
+        self._client.close()
+
     def drain(self) -> Iterator[MicroBatch]:
         """Yield Micro-batches up to the per-partition high-water mark, then stop.
 
