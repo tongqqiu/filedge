@@ -25,8 +25,13 @@ class FakeConsumer:
         self._batches = batches
         self.committed = []
         self.closed = False
+        self.continuous_stop = None
 
     def drain(self):
+        return iter(self._batches)
+
+    def consume_continuous(self, should_stop):
+        self.continuous_stop = should_stop
         return iter(self._batches)
 
     def commit_batch(self, batch):
@@ -79,6 +84,22 @@ def test_drain_promotes_file_and_sidecar_then_commits_offset(tmp_path):
     assert md.source_range == {
         "topic": "orders", "partition": 0, "start_offset": 0, "end_offset": 1
     }
+
+
+def test_continuous_trigger_routes_through_consume_continuous(tmp_path):
+    cfg, staging, landing, state = _sources_yaml(tmp_path)
+    # Flip the source's trigger to continuous.
+    cfg_text = open(cfg).read().replace(
+        "    consumer_group: g\n", "    consumer_group: g\n    trigger: continuous\n"
+    )
+    open(cfg, "w").write(cfg_text)
+    consumer = FakeConsumer([_batch(0, 0, [{"id": 1}])])
+
+    outcome = run_materialize(cfg, "orders", consumer=consumer, should_stop=lambda: True)
+
+    assert outcome.batch_count == 1
+    assert consumer.continuous_stop is not None  # continuous path was taken
+    assert consumer.committed == [("orders", 0, 1)]
 
 
 def test_empty_drain_is_a_noop(tmp_path):
