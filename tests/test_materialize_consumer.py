@@ -159,3 +159,12 @@ def test_commit_batch_commits_one_past_the_last_offset():
     consumer.commit_batch(MicroBatch("t", 0, 5, 9, [b"x"]))
 
     assert client.committed == [("t", 0, 10)]
+
+
+def test_close_releases_the_client():
+    client = FakeQueueClient(partitions=[("t", 0)], polls=[], end_offsets={("t", 0): 0})
+    consumer = QueueConsumer(client, _plan(), monotonic=_FROZEN)
+
+    consumer.close()
+
+    assert client.closed is True
