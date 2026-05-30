@@ -1,10 +1,9 @@
 """Wire the Reference Queue Materializer together for one Drain cycle.
 
-The ordering is the contract and is fixed here, per Micro-batch:
+The ordering is the contract, per Micro-batch:
 
-    decode records -> write complete staged NDJSON (offset-range-named) ->
-    emit Source Manifest sidecar (offset range) -> [Fetch Lock] promote
-    sidecar+data into the Watched Directory -> commit the broker offset
+    decode records -> publish complete File + Source Manifest under Fetch Lock ->
+    commit the broker offset
 
 The broker offset is committed **only after** a successful promotion, so a crash
 anywhere earlier re-consumes the same offset range rather than losing it
@@ -16,14 +15,11 @@ Drain only here; Continuous Trigger Mode is added in a later slice.
 """
 
 import signal
-import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable, List, Optional
 
-from filedge.companion.manifest import emit_manifest
-from filedge.companion.promotion import FetchLock, promote
-from filedge.companion.staging import write_staged_ndjson
+from filedge.companion.published_file import PublishRequest, publish_file
 from filedge.materialize.config import MaterializePlan, load_kafka_source
 from filedge.materialize.consumer import MicroBatch, QueueConsumer
 from filedge.materialize.decoder import get_decoder
@@ -114,34 +110,31 @@ def _materialize_batch(plan: MaterializePlan, decoder, batch: MicroBatch):
     records = [decoder.decode(payload) for payload in batch.messages]
     finished_at = _utc_now_iso()
 
-    data_path = write_staged_ndjson(
-        records,
-        plan.staging_dir,
-        plan.source_name,
-        from_cursor=f"{batch.topic}.{batch.partition}.{batch.start_offset}",
-        to_cursor=str(batch.end_offset),
-        timestamp=finished_at,
-        gzip_enabled=plan.gzip,
+    from_cursor = f"{batch.topic}.{batch.partition}.{batch.start_offset}"
+    to_cursor = str(batch.end_offset)
+    published = publish_file(
+        PublishRequest(
+            records=records,
+            staging_dir=plan.staging_dir,
+            watched_directory=plan.watched_directory,
+            state_dir=plan.state_dir,
+            source_name=plan.source_name,
+            source_type=plan.source_type,
+            producer=plan.producer,
+            started_at=started_at,
+            finished_at=finished_at,
+            from_cursor=from_cursor,
+            to_cursor=to_cursor,
+            source_range={
+                "topic": batch.topic,
+                "partition": batch.partition,
+                "start_offset": batch.start_offset,
+                "end_offset": batch.end_offset,
+            },
+            gzip=plan.gzip,
+        )
     )
-    sidecar_path = emit_manifest(
-        data_path,
-        source_type=plan.source_type,
-        source_name=plan.source_name,
-        producer=plan.producer,
-        run_id=uuid.uuid4().hex,
-        started_at=started_at,
-        finished_at=finished_at,
-        record_count=len(records),
-        source_range={
-            "topic": batch.topic,
-            "partition": batch.partition,
-            "start_offset": batch.start_offset,
-            "end_offset": batch.end_offset,
-        },
-    )
-    with FetchLock(plan.state_dir, plan.source_name):
-        promotion = promote(data_path, sidecar_path, plan.watched_directory)
-    return promotion.data_path, len(records)
+    return published.data_path, len(records)
 
 
 def _build_consumer(plan: MaterializePlan) -> QueueConsumer:  # pragma: no cover - real broker wiring; tests inject a fake consumer

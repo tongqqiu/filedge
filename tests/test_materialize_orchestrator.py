@@ -118,8 +118,8 @@ def test_promotion_failure_leaves_offset_uncommitted(tmp_path, monkeypatch):
     cfg, staging, landing, state = _sources_yaml(tmp_path)
     consumer = FakeConsumer([_batch(0, 0, [{"id": 1}])])
 
-    import filedge.materialize.orchestrator as orch
-    monkeypatch.setattr(orch, "promote", lambda *a, **k: (_ for _ in ()).throw(OSError("landing down")))
+    import filedge.companion.published_file as pub
+    monkeypatch.setattr(pub, "promote", lambda *a, **k: (_ for _ in ()).throw(OSError("landing down")))
 
     with pytest.raises(OSError):
         run_materialize(cfg, "orders", consumer=consumer)

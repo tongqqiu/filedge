@@ -104,12 +104,12 @@ def test_promotion_failure_leaves_cursor_unadvanced(tmp_path, monkeypatch):
     cfg, staging, landing, state = _sources_yaml(tmp_path)
     CursorStore(str(state)).advance("commits", "2026-05-01")
 
-    import filedge.fetch.orchestrator as orch
+    import filedge.companion.published_file as pub
 
     def boom(*a, **k):
         raise OSError("landing zone unreachable")
 
-    monkeypatch.setattr(orch, "promote", boom)
+    monkeypatch.setattr(pub, "promote", boom)
 
     with pytest.raises(OSError):
         run_fetch(cfg, "commits", client=FakeClient(_result(

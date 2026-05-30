@@ -6,19 +6,39 @@ advance to the max. Server-side (GitHub) mode is unchanged.
 import json
 
 from filedge.fetch.source_client import HttpSourceClient
+from filedge.fetch.source_adapters import EdgarCompanyConceptSource
 from filedge.fetch.sources_config import FetchPlan
 
 
 def _plan(**overrides):
-    base = dict(
-        source_name="edgar", source_type="edgar",
+    source_kwargs = dict(
+        source_name="edgar",
+        source_type="edgar",
         url="https://data.sec.gov/api/xbrl/companyConcept/CIK/us-gaap/Revenues.json",
-        staging_dir="s", watched_directory="w", state_dir="st",
         cursor_param="since", cursor_field="filed",
-        record_path="units.USD", cursor_mode="client",
+        record_path="units.USD",
+        cik="0000000001",
+        taxonomy="us-gaap",
+        concept="Revenues",
+        unit="USD",
+        user_agent="Filedge Test contact@example.com",
     )
-    base.update(overrides)
-    return FetchPlan(**base)
+    source_keys = {
+        "source_name", "source_type", "url", "cursor_param", "cursor_field", "query",
+        "headers", "page_size", "record_path", "cik", "taxonomy", "concept", "unit",
+        "user_agent",
+    }
+    for key in list(overrides):
+        if key in source_keys:
+            source_kwargs[key] = overrides.pop(key)
+    return FetchPlan(
+        source_name=source_kwargs["source_name"],
+        staging_dir=overrides.pop("staging_dir", "s"),
+        watched_directory=overrides.pop("watched_directory", "w"),
+        state_dir=overrides.pop("state_dir", "st"),
+        source=EdgarCompanyConceptSource(**source_kwargs),
+        **overrides,
+    )
 
 
 def _doc(*filed_dates):
