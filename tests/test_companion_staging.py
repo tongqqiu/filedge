@@ -6,7 +6,7 @@ import gzip
 import json
 import os
 
-from filedge.fetch.staging_writer import staged_filename, write_staged_ndjson
+from filedge.companion.staging import staged_filename, write_staged_ndjson
 
 
 def test_writes_one_complete_ndjson_file(tmp_path):

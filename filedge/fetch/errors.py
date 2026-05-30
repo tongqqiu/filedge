@@ -16,7 +16,3 @@ class SourcesConfigError(FetchError):
 
 class SourceClientError(FetchError):
     """Raised when the API Source cannot be fetched (HTTP, rate limit, decode)."""
-
-
-class FetchLockHeld(FetchError):
-    """Raised when another fetch already holds the Fetch Lock for this source."""
