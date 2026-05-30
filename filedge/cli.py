@@ -262,7 +262,7 @@ def run(
         if output_json:
             click.echo(json_lib.dumps(result))
         else:
-            click.echo(
+            line = (
                 f"Committed: {result['committed']}  "
                 f"Failed: {result['failed']}  "
                 f"Skipped: {result['skipped']}  "
@@ -270,6 +270,9 @@ def run(
                 f"Reclaimed: {result['reclaimed']}  "
                 f"Retried: {result['retried']}"
             )
+            if result.get("quarantined_rows"):
+                line += f"  Quarantined rows: {result['quarantined_rows']}"
+            click.echo(line)
 
         if result["failed"] > 0:
             sys.exit(1)
@@ -387,6 +390,8 @@ def _print_status_summary(summary, prefix=""):
     click.echo(f"{prefix}PROCESSING: {summary['PROCESSING']}")
     click.echo(f"{prefix}COMMITTED:  {summary['COMMITTED']}")
     click.echo(f"{prefix}FAILED:     {summary['FAILED']}")
+    if summary.get("quarantined_rows"):
+        click.echo(f"{prefix}QUARANTINED ROWS: {summary['quarantined_rows']}")
     if summary["recent_failures"]:
         if not prefix:
             click.echo("")
@@ -569,6 +574,21 @@ def validate(file, config_path, fmt, sample_rows, output_json, encoding, sheet):
         sys.exit(2)
 
     click.echo(format_text(result), err=True)
+
+    if config.quarantine is not None:
+        failing_rows = len({f.row_number for f in result.failures})
+        over = config.quarantine.is_over_threshold(failing_rows, result.rows_checked)
+        verdict = (
+            "exceeds the quarantine threshold — the whole File would FAIL (nothing committed)"
+            if over else
+            "within the quarantine threshold — good rows would commit, bad rows quarantined"
+        )
+        click.echo(
+            f"Quarantine: {failing_rows} of {result.rows_checked} sampled rows "
+            f"would be quarantined; {verdict}.",
+            err=True,
+        )
+
     if output_json:
         click.echo(json_lib.dumps(format_json(result)))
 
@@ -905,6 +925,9 @@ def _print_lineage_human(record, run_id, created_at, updated_at, dest_table):
     click.echo(f"state:            {record.state}")
     click.echo(f"attempt_count:    {record.attempt_count}")
     click.echo(f"row_count:        {record.row_count if record.row_count is not None else '-'}")
+    if record.quarantined_row_count:
+        click.echo(f"quarantined_rows: {record.quarantined_row_count}")
+        click.echo(f"quarantine_file:  {record.quarantine_path or '-'}")
     click.echo(f"dest_table:       {dest_table or '-'}")
     click.echo(f"error_message:    {record.error_message or '-'}")
     click.echo(f"run_id:           {run_id or '-'}")
@@ -953,6 +976,8 @@ def _lineage_payload(record, run_id, created_at, updated_at, dest_table):
         "state": record.state,
         "attempt_count": record.attempt_count,
         "row_count": record.row_count,
+        "quarantined_row_count": record.quarantined_row_count,
+        "quarantine_path": record.quarantine_path,
         "error_message": record.error_message,
         "run_id": run_id,
         "created_at": created_at,
