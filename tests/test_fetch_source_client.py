@@ -9,21 +9,36 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from filedge.fetch.errors import SourceClientError
+from filedge.fetch.source_adapters import HttpApiSource
 from filedge.fetch.source_client import HttpSourceClient
 from filedge.fetch.sources_config import FetchPlan
 
 
 def _plan(page_size=2, **overrides):
-    kwargs = dict(
+    source_kwargs = dict(
         source_name="commits",
         source_type="github",
         url="https://api.example/commits",
-        staging_dir="s", watched_directory="w", state_dir="st",
         cursor_param="since", cursor_field="updated_at",
         page_size=page_size,
     )
-    kwargs.update(overrides)
-    return FetchPlan(**kwargs)
+    source_keys = {
+        "source_name", "source_type", "url", "cursor_param", "cursor_field", "query",
+        "credential_env", "headers", "page_param", "per_page_param", "page_size",
+        "record_path",
+    }
+    for key in list(overrides):
+        if key in source_keys:
+            source_kwargs[key] = overrides.pop(key)
+    source_kwargs.update(overrides.pop("source_overrides", {}))
+    return FetchPlan(
+        source_name=source_kwargs["source_name"],
+        staging_dir=overrides.pop("staging_dir", "s"),
+        watched_directory=overrides.pop("watched_directory", "w"),
+        state_dir=overrides.pop("state_dir", "st"),
+        source=HttpApiSource(**source_kwargs),
+        **overrides,
+    )
 
 
 def _rec(i):
