@@ -1,0 +1,2470 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Reliable file ingestion toolkit — atomic commits, content-based idempotency, full audit trail">
+      
+      
+      
+        <link rel="canonical" href="https://tongqqiu.github.io/filedge/0.3.0/reference/cli/">
+      
+      
+        <link rel="prev" href="../pipeline-yaml/">
+      
+      
+        <link rel="next" href="../connectors/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>CLI commands - Filedge</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#cli-reference" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Filedge" class="md-header__button md-logo" aria-label="Filedge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Filedge
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              CLI commands
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/tongqqiu/filedge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    tongqqiu/filedge
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../guides/author/" class="md-tabs__link">
+          
+  
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../pipeline-yaml/" class="md-tabs__link">
+          
+  
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../release-checklist/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Release checklist
+
+      </a>
+    </li>
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Filedge" class="md-nav__button md-logo" aria-label="Filedge" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Filedge
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/tongqqiu/filedge" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    tongqqiu/filedge
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/author/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Author a pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/inspect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inspect a file
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/preview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Preview a file
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/validate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validate a file
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/compact/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Compact small files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/run/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Run a pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/scale/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scale ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/healthcheck/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Healthcheck
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/crash-retry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Crash-retry demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/requeue/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Requeue failed files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/audit-export/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Audit Export
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/cdc-files/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CDC files
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/api-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/api-source-adapters/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Source adapters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/edgar-demo/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    EDGAR API demo
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/queue-sources/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Queue sources
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/source-manifests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Source manifests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipeline-yaml/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    pipeline.yaml
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI commands
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-inspect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge inspect
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-author" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge author
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-preview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge preview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge validate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-compact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge compact
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-healthcheck" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge healthcheck
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-requeue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge requeue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-lineage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge lineage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-export-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge export-audit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge completion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-fetch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge-fetch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-materialize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge-materialize
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../connectors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../column-types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Column types
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How it works
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/decisions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design decisions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../release-checklist/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release checklist
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-inspect" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge inspect
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-author" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge author
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-preview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge preview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge validate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-compact" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge compact
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-healthcheck" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge healthcheck
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-requeue" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge requeue
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-status" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge status
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-lineage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge lineage
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-export-audit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge export-audit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-completion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge completion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-fetch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge-fetch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#filedge-materialize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filedge-materialize
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="cli-reference">CLI reference</h1>
+<p>All commands are accessed via the <code>filedge</code> entry point.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>filedge<span class="w"> </span>--help
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>filedge<span class="w"> </span>&lt;command&gt;<span class="w"> </span>--help
+</code></pre></div>
+<hr />
+<h2 id="filedge-inspect"><code>filedge inspect</code></h2>
+<p>Sample a file and generate a <code>columns:</code> block for <code>pipeline.yaml</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>filedge<span class="w"> </span>inspect<span class="w"> </span>&lt;file&gt;<span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;file&gt;</code></td>
+<td>required</td>
+<td>File to inspect (local path or cloud URI)</td>
+</tr>
+<tr>
+<td><code>--format</code></td>
+<td>auto from extension</td>
+<td>File format: <code>csv</code>, <code>ndjson</code>, or <code>parquet</code></td>
+</tr>
+<tr>
+<td><code>--sample-rows</code></td>
+<td>1000</td>
+<td>Number of rows to sample</td>
+</tr>
+<tr>
+<td><code>--output</code></td>
+<td>stdout</td>
+<td>Write YAML block to this file instead of stdout</td>
+</tr>
+<tr>
+<td><code>--encoding</code></td>
+<td><code>utf-8</code></td>
+<td>File encoding for text formats</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> on error.</p>
+<p>See the <a href="../../guides/inspect/">Inspect guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-author"><code>filedge author</code></h2>
+<p>Launch the local Authoring UI: review the inferred schema, choose write mode, connector, and field encryption, validate, and generate a Pipeline Folder. Requires the <code>authoring</code> extra (<code>uv sync --extra authoring</code>).</p>
+<p>Pass a <code>&lt;sample-file&gt;</code> to author from scratch, or <code>--pipeline &lt;folder&gt;</code> to re-open an existing Pipeline Folder and revise its config in place. With neither argument, the UI opens a browse-and-pick screen of registered Pipelines when a Pipeline Registry exists in the workspace, and otherwise asks for a sample file or <code>--pipeline</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>filedge<span class="w"> </span>author<span class="w"> </span>&lt;sample-file&gt;<span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>filedge<span class="w"> </span>author<span class="w"> </span>--pipeline<span class="w"> </span>&lt;folder&gt;<span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>filedge<span class="w"> </span>author<span class="w"> </span><span class="o">[</span>--workspace<span class="w"> </span>&lt;dir&gt;<span class="o">]</span><span class="w">            </span><span class="c1"># browse the Pipeline Registry</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;sample-file&gt;</code></td>
+<td>—</td>
+<td>Sample file to author from (local path or cloud URI). Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--pipeline</code></td>
+<td>—</td>
+<td>Re-author an existing Pipeline Folder (workspace-relative path). Mutually exclusive with <code>&lt;sample-file&gt;</code></td>
+</tr>
+<tr>
+<td><code>--format</code></td>
+<td>auto from extension</td>
+<td>File format: <code>csv</code>, <code>ndjson</code>, <code>parquet</code>, <code>excel</code>, or <code>fixed_width</code></td>
+</tr>
+<tr>
+<td><code>--sample-rows</code></td>
+<td>1000</td>
+<td>Number of rows to sample for schema inference</td>
+</tr>
+<tr>
+<td><code>--dest-table</code></td>
+<td>sample file stem</td>
+<td>Destination table name</td>
+</tr>
+<tr>
+<td><code>--out</code></td>
+<td>from <code>--dest-table</code></td>
+<td>Pipeline Folder id/name override</td>
+</tr>
+<tr>
+<td><code>--workspace</code></td>
+<td><code>.</code></td>
+<td>Workspace root for the Pipeline Folder and Pipeline Registry</td>
+</tr>
+<tr>
+<td><code>--encoding</code></td>
+<td>auto</td>
+<td>File encoding override</td>
+</tr>
+<tr>
+<td><code>--sheet</code></td>
+<td>first sheet</td>
+<td>Excel sheet name or 0-based index (excel format only)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> if the <code>authoring</code> extra is not installed, <code>2</code> on error (bad file path, unrecognised format, both <code>&lt;sample-file&gt;</code> and <code>--pipeline</code> given, or neither with no Registry to browse).</p>
+<p>See the <a href="../../guides/author/">Author guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-preview"><code>filedge preview</code></h2>
+<p>Display rows of a file as a formatted table.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>filedge<span class="w"> </span>preview<span class="w"> </span>&lt;file&gt;<span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;file&gt;</code></td>
+<td>required</td>
+<td>File to preview (local path or cloud URI)</td>
+</tr>
+<tr>
+<td><code>--format</code></td>
+<td>auto from extension</td>
+<td>File format: <code>csv</code>, <code>ndjson</code>, or <code>parquet</code></td>
+</tr>
+<tr>
+<td><code>--rows</code></td>
+<td>10</td>
+<td>Number of rows to display</td>
+</tr>
+<tr>
+<td><code>--start-row</code></td>
+<td>1</td>
+<td>First row to display (1-indexed)</td>
+</tr>
+<tr>
+<td><code>--encoding</code></td>
+<td><code>utf-8</code></td>
+<td>File encoding for text formats</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>2</code> on error (bad file path, unrecognised format).</p>
+<p>See the <a href="../../guides/preview/">Preview guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-validate"><code>filedge validate</code></h2>
+<p>Dry-run a file against a <code>pipeline.yaml</code> config. No data is written.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>filedge<span class="w"> </span>validate<span class="w"> </span>&lt;file&gt;<span class="w"> </span>--config<span class="w"> </span>&lt;path&gt;<span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;file&gt;</code></td>
+<td>required</td>
+<td>File to validate (local path or cloud URI)</td>
+</tr>
+<tr>
+<td><code>--config</code></td>
+<td>required</td>
+<td>Path to <code>pipeline.yaml</code></td>
+</tr>
+<tr>
+<td><code>--format</code></td>
+<td>auto from extension</td>
+<td>File format: <code>csv</code>, <code>ndjson</code>, or <code>parquet</code></td>
+</tr>
+<tr>
+<td><code>--sample-rows</code></td>
+<td>all rows</td>
+<td>Validate only the first N rows</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>off</td>
+<td>Emit JSON to stdout in addition to text summary</td>
+</tr>
+<tr>
+<td><code>--encoding</code></td>
+<td>config value</td>
+<td>Override file encoding from <code>pipeline.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> clean, <code>1</code> failures found, <code>2</code> error (bad file path, bad config).</p>
+<p>See the <a href="../../guides/validate/">Validate guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-compact"><code>filedge compact</code></h2>
+<p>Merge small NDJSON files into fewer, larger files before ingestion.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>filedge<span class="w"> </span>compact<span class="w"> </span>--watched-dir<span class="w"> </span>&lt;path&gt;<span class="w"> </span>--output<span class="w"> </span>&lt;path&gt;<span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--watched-dir</code></td>
+<td>required</td>
+<td>Source prefix containing small files</td>
+</tr>
+<tr>
+<td><code>--output</code></td>
+<td>required</td>
+<td>Output prefix for compacted files</td>
+</tr>
+<tr>
+<td><code>--max-files</code></td>
+<td>1000</td>
+<td>Max input files per output batch</td>
+</tr>
+<tr>
+<td><code>--compress</code></td>
+<td>off</td>
+<td>Gzip-compress output files (<code>.ndjson.gz</code>)</td>
+</tr>
+<tr>
+<td><code>--delete-source</code></td>
+<td>off</td>
+<td>Delete source files after each batch commits</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> on error.</p>
+<p>See the <a href="../../guides/compact/">Compact guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-run"><code>filedge run</code></h2>
+<p>Ingest files from a watched directory with retry-safe commits and a full audit trail.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>filedge<span class="w"> </span>run<span class="w"> </span>--dir<span class="w"> </span>&lt;path&gt;<span class="w"> </span>--config<span class="w"> </span>&lt;path&gt;<span class="w"> </span>--audit-db-url<span class="w"> </span>&lt;url&gt;<span class="w"> </span><span class="o">[</span>--progress<span class="p">|</span>--no-progress<span class="o">]</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>filedge<span class="w"> </span>run<span class="w"> </span>--pipeline<span class="w"> </span>&lt;id&gt;<span class="w"> </span><span class="o">[</span>--workspace<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--progress<span class="p">|</span>--no-progress<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--pipeline</code></td>
+<td>—</td>
+<td>—</td>
+<td>Resolve <code>--dir</code>/<code>--config</code>/<code>--audit-db-url</code> from this Pipeline Registry id. Mutually exclusive with those three flags</td>
+</tr>
+<tr>
+<td><code>--workspace</code></td>
+<td>—</td>
+<td><code>.</code></td>
+<td>Workspace root holding <code>pipeline-registry.yaml</code> (used with <code>--pipeline</code>)</td>
+</tr>
+<tr>
+<td><code>--dir</code></td>
+<td>—</td>
+<td>required*</td>
+<td>Watched directory path (local or cloud URI). Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--config</code></td>
+<td>—</td>
+<td>required*</td>
+<td>Path to <code>pipeline.yaml</code>. Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--audit-db-url</code></td>
+<td><code>FILEDGE_AUDIT_DB_URL</code></td>
+<td>required*</td>
+<td>Audit database URL. Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--progress / --no-progress</code></td>
+<td>—</td>
+<td>auto</td>
+<td>Show live progress bars; defaults to on for interactive terminals</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>—</td>
+<td>off</td>
+<td>Write the Run summary as JSON</td>
+</tr>
+<tr>
+<td><code>--log-format</code></td>
+<td>—</td>
+<td>auto</td>
+<td><code>text</code> on a TTY, <code>json</code> otherwise</td>
+</tr>
+<tr>
+<td><code>--log-level</code></td>
+<td>—</td>
+<td><code>INFO</code></td>
+<td>Log level</td>
+</tr>
+<tr>
+<td><code>--otel-traces / --no-otel-traces</code></td>
+<td><code>FILEDGE_OTEL_TRACES</code></td>
+<td>off</td>
+<td>Enable OpenTelemetry tracing</td>
+</tr>
+<tr>
+<td><code>--otel-logs / --no-otel-logs</code></td>
+<td><code>FILEDGE_OTEL_LOGS</code></td>
+<td>off</td>
+<td>Enable the OpenTelemetry log bridge</td>
+</tr>
+</tbody>
+</table>
+<p>* Provide either <code>--pipeline</code> or all three of <code>--dir</code>/<code>--config</code>/<code>--audit-db-url</code>, not both.</p>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> on error.</p>
+<p>See the <a href="../../guides/run/">Run guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-healthcheck"><code>filedge healthcheck</code></h2>
+<p>Probe the Audit DB and destination connector without writing data.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>filedge<span class="w"> </span>healthcheck<span class="w"> </span>--config<span class="w"> </span>&lt;path&gt;<span class="w"> </span>--audit-db-url<span class="w"> </span>&lt;url&gt;<span class="w"> </span><span class="o">[</span>--json<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config</code></td>
+<td>—</td>
+<td>required</td>
+<td>Path to <code>pipeline.yaml</code></td>
+</tr>
+<tr>
+<td><code>--audit-db-url</code></td>
+<td><code>FILEDGE_AUDIT_DB_URL</code></td>
+<td>required</td>
+<td>Audit database URL</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>—</td>
+<td>off</td>
+<td>Write one machine-readable health object</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> when all checks pass, <code>1</code> when any check fails.</p>
+<p>See the <a href="../../guides/healthcheck/">Healthcheck guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-requeue"><code>filedge requeue</code></h2>
+<p>Move terminal <code>FAILED</code> files back to <code>PENDING</code> so the next run can retry them.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>filedge<span class="w"> </span>requeue<span class="w"> </span>&lt;filename&gt;<span class="w"> </span>--audit-db-url<span class="w"> </span>&lt;url&gt;
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>filedge<span class="w"> </span>requeue<span class="w"> </span>--all-terminal-failed<span class="w"> </span>--yes<span class="w"> </span>--audit-db-url<span class="w"> </span>&lt;url&gt;
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>filedge<span class="w"> </span>requeue<span class="w"> </span>&lt;filename&gt;<span class="w"> </span>--pipeline<span class="w"> </span>&lt;id&gt;<span class="w"> </span><span class="o">[</span>--workspace<span class="w"> </span>&lt;path&gt;<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;filename&gt;</code></td>
+<td>—</td>
+<td>optional</td>
+<td>Failed filename to requeue</td>
+</tr>
+<tr>
+<td><code>--hash</code></td>
+<td>—</td>
+<td>optional</td>
+<td>Content hash to disambiguate duplicate filenames</td>
+</tr>
+<tr>
+<td><code>--all-terminal-failed</code></td>
+<td>—</td>
+<td>off</td>
+<td>Select every terminal failed file</td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>—</td>
+<td>off</td>
+<td>List bulk requeue candidates without changing state</td>
+</tr>
+<tr>
+<td><code>--yes</code></td>
+<td>—</td>
+<td>off</td>
+<td>Confirm bulk requeue</td>
+</tr>
+<tr>
+<td><code>--retry-cap</code></td>
+<td>—</td>
+<td><code>3</code></td>
+<td>Retry cap used to identify terminal failures</td>
+</tr>
+<tr>
+<td><code>--audit-db-url</code></td>
+<td><code>FILEDGE_AUDIT_DB_URL</code></td>
+<td>required</td>
+<td>Audit database URL. Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--pipeline</code></td>
+<td>—</td>
+<td>—</td>
+<td>Resolve the Audit DB from this Pipeline Registry id instead of <code>--audit-db-url</code></td>
+</tr>
+<tr>
+<td><code>--workspace</code></td>
+<td>—</td>
+<td><code>.</code></td>
+<td>Workspace root holding <code>pipeline-registry.yaml</code> (used with <code>--pipeline</code>)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> on error or missing bulk confirmation.</p>
+<p>See the <a href="../../guides/requeue/">Requeue failed files guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-status"><code>filedge status</code></h2>
+<p>Show a summary of file states in the audit database.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>filedge<span class="w"> </span>status<span class="w"> </span>--audit-db-url<span class="w"> </span>&lt;url&gt;<span class="w"> </span><span class="o">[</span>--json<span class="o">]</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>filedge<span class="w"> </span>status<span class="w"> </span>--pipeline<span class="w"> </span>&lt;id&gt;<span class="w"> </span><span class="o">[</span>--workspace<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--json<span class="o">]</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>filedge<span class="w"> </span>status<span class="w"> </span>--all<span class="w"> </span><span class="o">[</span>--workspace<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--json<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--audit-db-url</code></td>
+<td><code>FILEDGE_AUDIT_DB_URL</code></td>
+<td>required</td>
+<td>Audit database URL. Mutually exclusive with <code>--pipeline</code> and <code>--all</code></td>
+</tr>
+<tr>
+<td><code>--pipeline</code></td>
+<td>—</td>
+<td>—</td>
+<td>Resolve the Audit DB from this Pipeline Registry id instead of <code>--audit-db-url</code>. Mutually exclusive with <code>--all</code></td>
+</tr>
+<tr>
+<td><code>--all</code></td>
+<td>—</td>
+<td>off</td>
+<td>Fan out across every Pipeline in the Registry, summarizing each Audit DB independently. Mutually exclusive with <code>--pipeline</code> and <code>--audit-db-url</code></td>
+</tr>
+<tr>
+<td><code>--workspace</code></td>
+<td>—</td>
+<td><code>.</code></td>
+<td>Workspace root holding <code>pipeline-registry.yaml</code> (used with <code>--pipeline</code> or <code>--all</code>)</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>—</td>
+<td>off</td>
+<td>Output as JSON</td>
+</tr>
+</tbody>
+</table>
+<p>Example output:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>PENDING:    0
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>PROCESSING: 0
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>COMMITTED:  47
+<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>FAILED:     1
+<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
+<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>Recent failures:
+<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>  bad_data.csv: cannot coerce &#39;n/a&#39; to float
+</code></pre></div>
+<p>With <code>--all</code>, the same summary is printed once per Pipeline, each block keyed by
+its Registry id. Each Audit DB is opened on its own (never joined — one Audit DB
+maps to exactly one Pipeline). A Pipeline whose Audit DB cannot be resolved or
+opened prints inline as <code>&lt;id&gt;: ERROR: &lt;reason&gt;</code> and the others still report:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>alpha:
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>  PENDING:    0
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>  PROCESSING: 0
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>  COMMITTED:  47
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>  FAILED:     0
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>beta: ERROR: Environment variable &#39;BETA_DB&#39; is not set
+</code></pre></div>
+<p>With <code>--all --json</code>, the output is a JSON array with one object per Pipeline:
+<code>{"pipeline": "&lt;id&gt;", ...summary}</code> for healthy entries and
+<code>{"pipeline": "&lt;id&gt;", "error": "&lt;reason&gt;"}</code> for errored ones.</p>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> on error (including a missing or malformed
+Registry, or <code>--all</code> combined with <code>--pipeline</code> / <code>--audit-db-url</code>).</p>
+<hr />
+<h2 id="filedge-lineage"><code>filedge lineage</code></h2>
+<p>Show the full audit record and source-manifest metadata for one file.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>filedge<span class="w"> </span>lineage<span class="w"> </span>&lt;content-hash-or-filename&gt;<span class="w"> </span>--audit-db-url<span class="w"> </span>&lt;url&gt;<span class="w"> </span><span class="o">[</span>--json<span class="o">]</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>filedge<span class="w"> </span>lineage<span class="w"> </span>&lt;content-hash-or-filename&gt;<span class="w"> </span>--pipeline<span class="w"> </span>&lt;id&gt;<span class="w"> </span><span class="o">[</span>--workspace<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>--json<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;content-hash-or-filename&gt;</code></td>
+<td>—</td>
+<td>required</td>
+<td>Exact content hash or filename to inspect</td>
+</tr>
+<tr>
+<td><code>--audit-db-url</code></td>
+<td><code>FILEDGE_AUDIT_DB_URL</code></td>
+<td>required</td>
+<td>Audit database URL. Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--pipeline</code></td>
+<td>—</td>
+<td>—</td>
+<td>Resolve the Audit DB from this Pipeline Registry id instead of <code>--audit-db-url</code></td>
+</tr>
+<tr>
+<td><code>--workspace</code></td>
+<td>—</td>
+<td><code>.</code></td>
+<td>Workspace root holding <code>pipeline-registry.yaml</code> (used with <code>--pipeline</code>)</td>
+</tr>
+<tr>
+<td><code>--json</code></td>
+<td>—</td>
+<td>off</td>
+<td>Emit machine-readable JSON</td>
+</tr>
+<tr>
+<td><code>--dest-table</code></td>
+<td>—</td>
+<td>none</td>
+<td>Destination table name to include in output</td>
+</tr>
+</tbody>
+</table>
+<p>When a filename maps to multiple content hashes, the command prints the matching hashes and exits non-zero. Re-run with one of those hashes to inspect a specific file.</p>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> when no file matches, <code>2</code> when a filename is ambiguous.</p>
+<p>See the <a href="../../guides/source-manifests/">Source manifests guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-export-audit"><code>filedge export-audit</code></h2>
+<p>Generate a self-contained, read-only HTML audit site from the Audit DB.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>filedge<span class="w"> </span>export-audit<span class="w"> </span>--audit-db-url<span class="w"> </span>&lt;url&gt;<span class="w"> </span>--output<span class="w"> </span>&lt;path&gt;<span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>filedge<span class="w"> </span>export-audit<span class="w"> </span>--pipeline<span class="w"> </span>&lt;id&gt;<span class="w"> </span><span class="o">[</span>--workspace<span class="w"> </span>&lt;path&gt;<span class="o">]</span><span class="w"> </span><span class="o">[</span>options<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Env var</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--audit-db-url</code></td>
+<td><code>FILEDGE_AUDIT_DB_URL</code></td>
+<td>required</td>
+<td>Audit database URL. Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--output</code></td>
+<td>—</td>
+<td>required</td>
+<td>Output path for the generated <code>index.html</code>. Mutually exclusive with <code>--pipeline</code></td>
+</tr>
+<tr>
+<td><code>--pipeline</code></td>
+<td>—</td>
+<td>—</td>
+<td>Resolve both the Audit DB and the Audit Export destination from this Pipeline Registry id instead of <code>--audit-db-url</code>/<code>--output</code></td>
+</tr>
+<tr>
+<td><code>--workspace</code></td>
+<td>—</td>
+<td><code>.</code></td>
+<td>Workspace root holding <code>pipeline-registry.yaml</code> (used with <code>--pipeline</code>)</td>
+</tr>
+<tr>
+<td><code>--title</code></td>
+<td>—</td>
+<td>none</td>
+<td>Pipeline label shown in the site header</td>
+</tr>
+<tr>
+<td><code>--dest-table</code></td>
+<td>—</td>
+<td>none</td>
+<td>Destination table name for lineage SQL snippets</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> on success, <code>1</code> on error.</p>
+<p>See the <a href="../../guides/audit-export/">Audit Export guide</a> for full details.</p>
+<hr />
+<h2 id="filedge-completion"><code>filedge completion</code></h2>
+<p>Print shell completion scripts for zsh or bash.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>filedge<span class="w"> </span>completion<span class="w"> </span><span class="o">[</span>--shell<span class="w"> </span>zsh<span class="p">|</span>bash<span class="o">]</span>
+</code></pre></div>
+<hr />
+<h2 id="filedge-fetch"><code>filedge-fetch</code></h2>
+<p>The Reference Fetcher — a <strong>separate entry point</strong>, not a <code>filedge</code> subcommand. It is an external companion to <code>filedge run</code> (ADR-0018): it pulls one API Source described in a Sources Config and lands complete NDJSON Files (each with a Source Manifest sidecar) in the Watched Directory, where <code>filedge run</code> ingests them. It never Commits to a Destination. Supported source types include <code>github</code>, generic HTTP-style sources, and SEC EDGAR <code>companyConcept</code> sources declared as <code>type: edgar</code>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>filedge-fetch<span class="w"> </span>--config<span class="w"> </span>&lt;sources.yaml&gt;<span class="w"> </span>--source<span class="w"> </span>&lt;name&gt;<span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config</code></td>
+<td>required</td>
+<td>Path to the Sources Config (<code>sources.yaml</code>)</td>
+</tr>
+<tr>
+<td><code>--source</code></td>
+<td>required</td>
+<td>Name of the API Source within the Sources Config to fetch</td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>off</td>
+<td>Report the cursor window and target File without fetching</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Exit codes:</strong> <code>0</code> on success (including a clean no-op when there are no new records), <code>1</code> on error (bad config, unreachable/rate-limited API, or a held Fetch Lock).</p>
+<p>See the <a href="../../guides/api-sources/">API Sources guide</a> for the full Sources Config and the fetch → ingest workflow.</p>
+<hr />
+<h2 id="filedge-materialize"><code>filedge-materialize</code></h2>
+<p>The Reference Queue Materializer — a <strong>separate entry point</strong>, not a <code>filedge</code> subcommand. It is an external companion to <code>filedge run</code> (ADR-0007, ADR-0018): it consumes one Kafka Queue Source described in a Sources Config and lands complete NDJSON Files (each with a Source Manifest carrying Offset Range Metadata) in the Watched Directory, where <code>filedge run</code> ingests them. It never Commits to a Destination.</p>
+<p>Requires the <code>kafka</code> extra (<code>pip install filedge[kafka]</code>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>filedge-materialize<span class="w"> </span>--config<span class="w"> </span>&lt;sources.yaml&gt;<span class="w"> </span>--source<span class="w"> </span>&lt;name&gt;<span class="w"> </span><span class="o">[</span>--dry-run<span class="o">]</span>
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config</code></td>
+<td>required</td>
+<td>Path to the Sources Config (<code>sources.yaml</code>)</td>
+</tr>
+<tr>
+<td><code>--source</code></td>
+<td>required</td>
+<td>Name of the kafka Queue Source within the Sources Config</td>
+</tr>
+<tr>
+<td><code>--dry-run</code></td>
+<td>off</td>
+<td>Report the topic and target Watched Directory without consuming</td>
+</tr>
+</tbody>
+</table>
+<p>The Trigger Mode (<code>drain</code> default, or <code>continuous</code>) and batch boundary (<code>batch_size</code> / <code>batch_timeout_seconds</code>) are set per source in the Sources Config.</p>
+<p><strong>Exit codes:</strong> <code>0</code> on success (including a clean no-op when there are no new records), <code>1</code> on error (bad config, unreachable brokers, a decode failure, or a held Fetch Lock).</p>
+<p>See the <a href="../../guides/queue-sources/">Queue Sources guide</a> for the full Sources Config and the materialize → ingest workflow.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
