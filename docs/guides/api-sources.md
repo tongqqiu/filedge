@@ -71,6 +71,9 @@ endpoint. It needs no API key, but SEC policy requires a descriptive
 Fetcher applies the incremental cursor client-side by keeping facts whose
 `filed` date is newer than the stored high-water mark.
 
+For a runnable client-facing walkthrough, see the [EDGAR API to audited SQLite
+demo](edgar-demo.md).
+
 ### Sources Config
 
 A Sources Config (`sources.yaml`) is a Fetcher-only file, separate from `pipeline.yaml`. It declares the endpoint, the incremental cursor, an optional environment-variable credential lookup, and the staging/state/landing paths. No secret is ever written into it.
