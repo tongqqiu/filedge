@@ -165,3 +165,11 @@ The Authoring UI is a [Textual](https://textual.textualize.io) terminal app laun
 Authored artifacts land in visible, version-controllable files at the workspace root: a `pipelines/<id>/` directory per Pipeline (holding `pipeline.yaml` and a Markdown Authoring Runbook) and a single `pipeline-registry.yaml` index. The Registry is created lazily with the first authored Pipeline and grows one independent entry per Pipeline, each pointing at its Pipeline Folder, Watched Directory, Audit DB connection placeholder, and Audit Export destination. It never combines Audit DBs and rejects malformed entries.
 
 [Full ADR](../adr/0017-pipeline-folder-and-registry-layout.md)
+
+---
+
+## ADR-0018: The Reference Fetcher is an external companion, not core {#adr-0018}
+
+Filedge ships a Reference Fetcher (`filedge-fetch`) as a runnable example of the external Fetcher role from ADR-0006, without reopening that boundary. It is a separate console script (not a `filedge` subcommand), the core ingestion path imports nothing from it, and it is never a loader of record — `filedge run` still owns every Destination Commit. It stages a complete NDJSON File, emits the OpenLineage-shaped Source Manifest the reader already consumes (ADR-0011), and promotes the sidecar then the data File into the Watched Directory under a Fetch Lock, advancing the incremental cursor only after promotion. The reference targets one open, no-auth API behind a source-client seam so a fintech API is later config, not a rewrite.
+
+[Full ADR](../adr/0018-reference-fetcher-external-companion.md)

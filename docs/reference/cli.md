@@ -318,3 +318,23 @@ Print shell completion scripts for zsh or bash.
 ```bash
 filedge completion [--shell zsh|bash]
 ```
+
+---
+
+## `filedge-fetch`
+
+The Reference Fetcher — a **separate entry point**, not a `filedge` subcommand. It is an external companion to `filedge run` (ADR-0018): it pulls one API Source described in a Sources Config and lands complete NDJSON Files (each with a Source Manifest sidecar) in the Watched Directory, where `filedge run` ingests them. It never Commits to a Destination.
+
+```bash
+filedge-fetch --config <sources.yaml> --source <name> [--dry-run]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--config` | required | Path to the Sources Config (`sources.yaml`) |
+| `--source` | required | Name of the API Source within the Sources Config to fetch |
+| `--dry-run` | off | Report the cursor window and target File without fetching |
+
+**Exit codes:** `0` on success (including a clean no-op when there are no new records), `1` on error (bad config, unreachable/rate-limited API, or a held Fetch Lock).
+
+See the [API Sources guide](../guides/api-sources.md) for the full Sources Config and the fetch → ingest workflow.

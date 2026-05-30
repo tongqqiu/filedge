@@ -13,3 +13,6 @@ site/
 coverage.xml
 htmlcov/
 .pytest_cache/
+
+# Agent worktrees (transient)
+.claude/worktrees/
