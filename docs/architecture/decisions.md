@@ -173,3 +173,11 @@ Authored artifacts land in visible, version-controllable files at the workspace 
 Filedge ships a Reference Fetcher (`filedge-fetch`) as a runnable example of the external Fetcher role from ADR-0006, without reopening that boundary. It is a separate console script (not a `filedge` subcommand), the core ingestion path imports nothing from it, and it is never a loader of record — `filedge run` still owns every Destination Commit. It stages a complete NDJSON File, emits the OpenLineage-shaped Source Manifest the reader already consumes (ADR-0011), and promotes the sidecar then the data File into the Watched Directory under a Fetch Lock, advancing the incremental cursor only after promotion. The reference targets one open, no-auth API behind a source-client seam so a fintech API is later config, not a rewrite.
 
 [Full ADR](../adr/0018-reference-fetcher-external-companion.md)
+
+---
+
+## ADR-0019: Dead-Letter Quarantine is an opt-in partial commit with a failure threshold {#adr-0019}
+
+Dead-Letter Quarantine is opt-in per Pipeline and off by default, so Strict Mode (ADR-0003) is unchanged for every Pipeline that does not enable it. When enabled, rows that fail Transform/Field Encryption are written to an NDJSON quarantine sidecar and the good rows still commit; the File stays `COMMITTED` but records `quarantined_row_count` alongside `committed_row_count` (committed + quarantined = total), so the partial is explicit, never silent. A configured failure threshold (max invalid fraction and/or count) keeps the Strict signal: a File whose bad rows exceed the threshold fails wholesale — nothing committed, no sidecar — enforced by raising at end-of-stream before the Connector's commit (ADR-0001).
+
+[Full ADR](../adr/0019-dead-letter-quarantine.md)
