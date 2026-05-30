@@ -48,6 +48,10 @@ class MaterializePlan:
     decode_format: str = "json"
     gzip: bool = False
     producer: str = "https://github.com/tongqqiu/filedge#reference-materializer"
+    # Plain (non-secret) Kafka security settings; the credentials below are
+    # env/secrets references resolved on demand.
+    security_protocol: Optional[str] = None
+    sasl_mechanism: Optional[str] = None
     credentials: Dict[str, str] = field(default_factory=dict)
 
     def credential(self, name: str) -> Optional[str]:
@@ -135,6 +139,8 @@ def _parse_kafka_source(raw: dict) -> MaterializePlan:
         decode_format=raw.get("format", "json"),
         gzip=bool(raw.get("gzip", False)),
         producer=raw.get("producer", MaterializePlan.producer),
+        security_protocol=raw.get("security_protocol"),
+        sasl_mechanism=raw.get("sasl_mechanism"),
         credentials=dict(credentials),
     )
 
