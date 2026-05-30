@@ -45,6 +45,68 @@ Offset information is useful traceability metadata, but it is not Filedge's idem
 
 ---
 
+## The Reference Queue Materializer (`filedge-materialize`)
+
+Filedge ships a runnable example of a correct Queue Materializer: `filedge-materialize`. It is an **external companion** to `filedge run`, not part of the core ingestion path and never a loader of record (see ADR-0007, ADR-0018). It is the queue mirror of the Reference Fetcher.
+
+Given a kafka-typed [Sources Config](#sources-config), `filedge-materialize`:
+
+1. consumes the topic into a **Micro-batch per partition** on a count-or-time boundary;
+2. decodes each message (JSON by default) into a row;
+3. writes the batch as one **complete** NDJSON File in a staging area;
+4. emits an OpenLineage-shaped [Source Manifest](source-manifests.md) sidecar carrying the **Offset Range Metadata** (`{topic}.{partition}.{start}-{end}`);
+5. promotes the sidecar **then** the data File into the Watched Directory under a **Fetch Lock**;
+6. **commits the broker offset only after** a successful promotion — a crash re-consumes the same offset range rather than losing it.
+
+Two **Trigger Modes**:
+
+- **`drain`** (default) — snapshot each partition's high-water mark at startup, materialize up to it, then exit. Schedule with cron or a Kubernetes CronJob, the same model as `filedge run`.
+- **`continuous`** — a long-running loop that cuts Micro-batches as the topic fills, stopping cleanly on SIGTERM after the in-flight batch is promoted and its offset committed.
+
+```bash
+# Drain a topic into complete NDJSON Files + manifests in ./landing/
+filedge-materialize --config sources.yaml --source orders
+
+# Preview the topic and target directory without consuming
+filedge-materialize --config sources.yaml --source orders --dry-run
+
+# Then ingest exactly like any file drop
+filedge run --dir ./landing --config pipeline.yaml --audit-db-url $FILEDGE_AUDIT_DB_URL
+```
+
+The Kafka client lives behind an optional `kafka` extra (`pip install filedge[kafka]`), so the core ingestion path and the Reference Fetcher take on no Kafka dependency. The broker-specific code sits behind a small consumer seam, so SQS or Kinesis is a new adapter plus Sources Config, not a rewrite of the staging, promotion, manifest, or batch logic. The Source Manifest emitter and the Fetch-Lock promotion are reusable building blocks (`filedge.companion`) shared with the Reference Fetcher.
+
+### Sources Config
+
+A Queue Source is a kafka-typed entry in the same `sources.yaml` the Reference Fetcher uses. Credentials (SASL/TLS) are named by reference (`env:NAME`) and resolved at consume time — never written into the file.
+
+```yaml
+version: 1
+sources:
+  - name: orders
+    type: kafka
+    brokers: [localhost:9092]      # or a comma-separated string
+    topic: orders
+    consumer_group: filedge-orders
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    batch_size: 1000               # count boundary
+    batch_timeout_seconds: 30      # time boundary (whichever fires first)
+    trigger: drain                 # or: continuous
+    format: json
+    gzip: false
+    # security_protocol: SASL_SSL
+    # sasl_mechanism: PLAIN
+    # credentials:
+    #   sasl_username: env:KAFKA_USER
+    #   sasl_password: env:KAFKA_PASSWORD
+```
+
+The same example ships at `examples/sources.yaml`.
+
+---
+
 ## Example: Kafka Orders -> S3 -> BigQuery
 
 ### 1. Materialize queue records to files
