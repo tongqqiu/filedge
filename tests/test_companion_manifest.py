@@ -5,7 +5,7 @@ API-sourced File carries the same audit provenance as a file drop (ADR-0011).
 
 import os
 
-from filedge.fetch.manifest_emitter import emit_manifest
+from filedge.companion.manifest import emit_manifest
 from filedge.source_manifest import discover_and_parse
 
 

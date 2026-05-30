@@ -16,12 +16,12 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
+from filedge.companion.manifest import emit_manifest
+from filedge.companion.promotion import FetchLock, promote
+from filedge.companion.staging import staged_filename, write_staged_ndjson
 from filedge.fetch.cursor_state import CursorStore
-from filedge.fetch.manifest_emitter import emit_manifest
-from filedge.fetch.promotion import FetchLock, promote
 from filedge.fetch.source_client import HttpSourceClient
 from filedge.fetch.sources_config import FetchPlan, load_sources
-from filedge.fetch.staging_writer import staged_filename, write_staged_ndjson
 
 
 @dataclass(frozen=True)

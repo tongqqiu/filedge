@@ -11,6 +11,7 @@ import sys
 
 import click
 
+from filedge.companion.errors import CompanionError
 from filedge.fetch.errors import FetchError
 from filedge.fetch.orchestrator import run_fetch
 
@@ -27,7 +28,7 @@ def fetch(config_path, source_name, dry_run):
     """Fetch one API Source into complete NDJSON Files in its Watched Directory."""
     try:
         outcome = run_fetch(config_path, source_name, dry_run=dry_run)
-    except FetchError as e:
+    except (FetchError, CompanionError) as e:
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
