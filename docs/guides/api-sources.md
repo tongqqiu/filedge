@@ -65,6 +65,12 @@ Run the two as independent scheduled jobs — the same two-job pattern recommend
 
 The reference targets the public GitHub REST API because it needs no credentials and exercises both pagination and a `since`-style cursor. The API-specific code sits behind a small source-client seam, so adapting it to a fintech API (Stripe, Plaid) is a new client plus Sources Config, not a rewrite of the staging, promotion, manifest, or cursor logic. The Source Manifest emitter and the Fetch-Lock promotion are reusable building blocks for writing your own Python Fetcher.
 
+EDGAR is also supported by the Reference Fetcher through the SEC `companyConcept`
+endpoint. It needs no API key, but SEC policy requires a descriptive
+`User-Agent` contact string. EDGAR returns a whole concept document, so the
+Fetcher applies the incremental cursor client-side by keeping facts whose
+`filed` date is newer than the stored high-water mark.
+
 ### Sources Config
 
 A Sources Config (`sources.yaml`) is a Fetcher-only file, separate from `pipeline.yaml`. It declares the endpoint, the incremental cursor, an optional environment-variable credential lookup, and the staging/state/landing paths. No secret is ever written into it.
@@ -86,9 +92,78 @@ sources:
     # credential_env: GITHUB_TOKEN   # optional; bearer token from this env var
     page_size: 100
     gzip: false
+
+  - name: edgar-apple-revenues
+    type: edgar
+    cik: 320193
+    taxonomy: us-gaap       # optional; defaults to us-gaap
+    concept: Revenues
+    unit: USD
+    user_agent: "Your Company your-email@example.com"
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      field: filed          # client-side high-water mark in each fact
+    gzip: false
 ```
 
 The same example ships at `examples/sources.yaml`.
+
+### EDGAR companyConcept workflow
+
+Run the EDGAR source the same way as the GitHub source:
+
+```bash
+filedge-fetch --config examples/sources.yaml --source edgar-apple-revenues
+filedge run --dir ./landing --config pipeline.yaml --audit-db-url $FILEDGE_AUDIT_DB_URL
+```
+
+For `cik: 320193`, `taxonomy: us-gaap`, and `concept: Revenues`, the loader
+builds:
+
+```text
+https://data.sec.gov/api/xbrl/companyconcept/CIK0000320193/us-gaap/Revenues.json
+```
+
+The Fetcher extracts one NDJSON row per fact from `units.USD`, emits a Source
+Manifest with `source_type: edgar` and the covered `filed` date range, promotes
+the File under the Fetch Lock, then advances the cursor only after promotion.
+The same pattern can support SEC `frames` later: a different URL builder and
+record path, with the staging, manifest, promotion, and cursor rules unchanged.
+
+A matching `pipeline.yaml` sketch for the emitted facts:
+
+```yaml
+format: ndjson
+dest_table: edgar_company_facts
+
+connector:
+  type: sqlite
+  url: sqlite:///filedge.db
+
+columns:
+  - source: filed
+    dest: filed
+    type: string
+    required: true
+  - source: fy
+    dest: fiscal_year
+    type: integer
+    required: false
+  - source: fp
+    dest: fiscal_period
+    type: string
+    required: false
+  - source: form
+    dest: form
+    type: string
+    required: false
+  - source: val
+    dest: value
+    type: integer
+    required: true
+```
 
 ---
 

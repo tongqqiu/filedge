@@ -45,6 +45,24 @@ sources:
     page_size: 100
     gzip: false
 
+  # EDGAR companyConcept source. SEC requires a descriptive User-Agent with
+  # contact info; no API key or secret is involved.
+  # Run it with:
+  #   filedge-fetch --config examples/sources.yaml --source edgar-apple-revenues
+  - name: edgar-apple-revenues
+    type: edgar
+    cik: 320193                   # Apple Inc.; the loader pads to CIK0000320193
+    taxonomy: us-gaap             # default when omitted
+    concept: Revenues
+    unit: USD
+    user_agent: "Filedge Example contact@example.com"
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      field: filed                # client-side high-water mark in each fact
+    gzip: false
+
   # A Kafka Queue Source for the Reference Queue Materializer (filedge-materialize).
   # Run it with:
   #   filedge-materialize --config examples/sources.yaml --source orders
