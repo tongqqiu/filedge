@@ -28,6 +28,7 @@ theme:
   features:
     - navigation.tabs
     - navigation.sections
+    - navigation.indexes
     - navigation.top
     - search.suggest
     - search.highlight
@@ -48,24 +49,34 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
-  - Guides:
-    - Author a pipeline: guides/author.md
-    - Inspect a file: guides/inspect.md
-    - Preview a file: guides/preview.md
-    - Validate a file: guides/validate.md
-    - Compact small files: guides/compact.md
-    - Run a pipeline: guides/run.md
-    - Scale ingestion: guides/scale.md
-    - Healthcheck: guides/healthcheck.md
-    - Crash-retry demo: guides/crash-retry.md
-    - Requeue failed files: guides/requeue.md
-    - Audit Export: guides/audit-export.md
-    - CDC files: guides/cdc-files.md
-    - API sources: guides/api-sources.md
-    - API Source adapters: guides/api-source-adapters.md
-    - EDGAR API demo: guides/edgar-demo.md
-    - Queue sources: guides/queue-sources.md
-    - Source manifests: guides/source-manifests.md
+  - Tutorials:
+    - Tutorials: tutorials/index.md
+    - EDGAR API to SQLite: guides/edgar-demo.md
+    - Crash-safe retry: guides/crash-retry.md
+  - How-to guides:
+    - How-to guides: guides/index.md
+    - Build a pipeline:
+      - Author a pipeline: guides/author.md
+      - Inspect a file: guides/inspect.md
+      - Preview a file: guides/preview.md
+      - Validate a file: guides/validate.md
+    - Run & operate:
+      - Run a pipeline: guides/run.md
+      - Scale ingestion: guides/scale.md
+      - Compact small files: guides/compact.md
+      - Requeue failed files: guides/requeue.md
+      - Healthcheck: guides/healthcheck.md
+      - Observability: guides/observability.md
+      - Export an audit site: guides/audit-export.md
+    - Connect sources:
+      - API sources: guides/api-sources.md
+      - API Source adapters: guides/api-source-adapters.md
+      - Queue sources: guides/queue-sources.md
+      - Source manifests: guides/source-manifests.md
+      - CDC files: guides/cdc-files.md
+    - File formats:
+      - Overview: guides/file-formats.md
+      - Fixed-width files: guides/fixed-width.md
   - Reference:
     - pipeline.yaml: reference/pipeline-yaml.md
     - CLI commands: reference/cli.md
@@ -74,4 +85,3 @@ nav:
   - Architecture:
     - How it works: architecture/index.md
     - Design decisions: architecture/decisions.md
-  - Release checklist: release-checklist.md

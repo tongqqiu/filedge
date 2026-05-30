@@ -104,3 +104,8 @@ Batches written: 3  Files compacted: 2847
 | `--max-files` | 1000 | Max input files per output batch |
 | `--compress` | off | Gzip-compress output files (`.ndjson.gz`) |
 | `--delete-source` | off | Delete source files after each batch commits |
+
+## Related
+
+- [Run a pipeline](run.md) — ingest the compacted output
+- [Scale ingestion](scale.md) — when to compact

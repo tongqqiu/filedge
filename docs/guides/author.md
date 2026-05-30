@@ -172,3 +172,10 @@ The Authoring UI supports every format the Parser does:
 | `--workspace` | `.` | Workspace root for the Pipeline Folder and Pipeline Registry |
 | `--encoding` | auto | File encoding override |
 | `--sheet` | first sheet | Excel sheet name or 0-based index (excel format only) |
+
+## Related
+
+- [Inspect a file](inspect.md) — the non-interactive way to generate a columns block
+- [Validate a file](validate.md) — dry-run the generated config
+- [Run a pipeline](run.md) — ingest with the config you authored
+- [pipeline.yaml reference](../reference/pipeline-yaml.md) — every config option

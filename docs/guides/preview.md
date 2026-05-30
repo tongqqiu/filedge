@@ -148,3 +148,8 @@ filedge preview gs://my-bucket/data.ndjson
 ```
 
 Credentials are picked up from the environment (AWS profile, `GOOGLE_APPLICATION_CREDENTIALS`, etc.).
+
+## Related
+
+- [Inspect a file](inspect.md) — generate a columns block
+- [Validate a file](validate.md) — find the rows worth previewing

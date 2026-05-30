@@ -227,3 +227,11 @@ For parallel workers, large files, and backfills, see [Scale ingestion](scale.md
 | `--json` | off | Emit the Run summary as a JSON line on stdout |
 | `--log-format` | auto (TTY-detect) | `text` or `json` for stderr logs |
 | `--log-level` | `INFO` | Threshold for stderr logs |
+
+## Related
+
+- [Scale ingestion](scale.md) — large files, many files, parallel workers
+- [Requeue failed files](requeue.md) — retry after remediation
+- [Crash-safe retry](crash-retry.md) — how recovery works
+- [Healthcheck](healthcheck.md) — probe before a scheduled run
+- [pipeline.yaml reference](../reference/pipeline-yaml.md) — every config option

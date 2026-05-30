@@ -139,3 +139,10 @@ filedge validate gs://my-bucket/events.ndjson --config pipeline.yaml
 | `--sample-rows` | all rows | Validate only the first N rows |
 | `--json` | off | Emit JSON to stdout in addition to text summary |
 | `--sheet` | from `pipeline.yaml` | Override the `excel:` sheet from `pipeline.yaml` (excel only) |
+
+## Related
+
+- [Inspect a file](inspect.md) — generate the columns block to validate against
+- [Preview a file](preview.md) — jump to a failing row
+- [Run a pipeline](run.md) — ingest once validation is clean
+- [Column types](../reference/column-types.md) — coercion rules

@@ -121,3 +121,8 @@ Files with `attempt_count < retry_cap` are still eligible for automatic retry. `
 | `--yes` | Confirm bulk requeue. Required to execute `--all-terminal-failed`. |
 | `--retry-cap` | Retry cap used to identify terminal-FAILED files (default: `3`). Must match `pipeline.yaml`. |
 | `--audit-db-url` | Audit database URL. Defaults to `$FILEDGE_AUDIT_DB_URL`. |
+
+## Related
+
+- [Run a pipeline](run.md) — retries happen on the next run
+- [Crash-safe retry](crash-retry.md) — automatic recovery vs. manual requeue

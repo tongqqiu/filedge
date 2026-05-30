@@ -240,3 +240,8 @@ The sidecar records the full offset range as structured JSON, plus the Queue Mat
 Filedge stores `source_type`, `source_name`, `producer`, `external_run_id`, and the full source range on each Audit Record. Operators query with `filedge lineage <hash>` or use `filedge status --json` to route Kafka failures back to the materializer team.
 
 See [Source Manifests](source-manifests.md) for the full schema, policy modes, and validation rules. The default `optional` policy preserves the existing filename-only workflow when manifests are absent.
+
+## Related
+
+- [API sources](api-sources.md) — the same File-boundary pattern for HTTP APIs
+- [Source manifests](source-manifests.md) — upstream lineage for materialized Files

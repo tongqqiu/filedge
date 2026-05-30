@@ -129,3 +129,9 @@ and INSERT statements is enough — no applied-files marker table is needed.
 ## Out Of Scope
 
 Filedge does not capture database logs, run Debezium, consume Kafka topics, or manage replication slots. SCD Type 2 history tables are also out of scope for the first CDC implementation.
+
+## Related
+
+- [Run a pipeline](run.md) — applies CDC files via write mode
+- [pipeline.yaml reference](../reference/pipeline-yaml.md) — the cdc: block
+- [Source manifests](source-manifests.md) — provenance for CDC producers
