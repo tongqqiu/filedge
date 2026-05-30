@@ -10,27 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://tongqqiu.github.io/filedge/0.3.0/adr/0002-content-hash-as-idempotency-key/">
+        <link rel="canonical" href="https://tongqqiu.github.io/filedge/0.3.0/tutorials/">
       
       
+        <link rel="prev" href="../getting-started/">
+      
+      
+        <link rel="next" href="../guides/edgar-demo/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>Content hash (SHA-256) as the file idempotency key - Filedge</title>
+        <title>Tutorials - Filedge</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -49,7 +53,7 @@
       
     
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -74,7 +78,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#content-hash-sha-256-as-the-file-idempotency-key" class="md-skip">
+        <a href="#tutorials" class="md-skip">
           Skip to content
         </a>
       
@@ -92,7 +96,7 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Filedge" class="md-header__button md-logo" aria-label="Filedge" data-md-component="logo">
+    <a href=".." title="Filedge" class="md-header__button md-logo" aria-label="Filedge" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -112,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Content hash (SHA-256) as the file idempotency key
+              Tutorials
             
           </span>
         </div>
@@ -225,7 +229,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -244,7 +248,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../getting-started/" class="md-tabs__link">
+      <a href="../getting-started/" class="md-tabs__link">
         
   
   
@@ -261,11 +265,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../tutorials/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="./" class="md-tabs__link">
           
   
   
@@ -287,7 +293,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guides/" class="md-tabs__link">
+        <a href="../guides/" class="md-tabs__link">
           
   
   
@@ -309,7 +315,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../reference/pipeline-yaml/" class="md-tabs__link">
+        <a href="../reference/pipeline-yaml/" class="md-tabs__link">
           
   
   
@@ -331,7 +337,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../architecture/" class="md-tabs__link">
+        <a href="../architecture/" class="md-tabs__link">
           
   
   
@@ -367,7 +373,7 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Filedge" class="md-nav__button md-logo" aria-label="Filedge" data-md-component="logo">
+    <a href=".." title="Filedge" class="md-nav__button md-logo" aria-label="Filedge" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -397,7 +403,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -424,7 +430,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/" class="md-nav__link">
+      <a href="../getting-started/" class="md-nav__link">
         
   
   
@@ -448,6 +454,8 @@
       
   
   
+    
+  
   
   
     
@@ -465,20 +473,23 @@
     
     
       
+        
+        
+      
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" checked>
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../tutorials/" class="md-nav__link ">
+            <a href="./" class="md-nav__link md-nav__link--active">
               
   
   
@@ -496,13 +507,13 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+              <label class="md-nav__link md-nav__link--active" for="__nav_3" id="__nav_3_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_3">
             <span class="md-nav__icon md-icon"></span>
             
@@ -522,7 +533,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/edgar-demo/" class="md-nav__link">
+      <a href="../guides/edgar-demo/" class="md-nav__link">
         
   
   
@@ -550,7 +561,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/crash-retry/" class="md-nav__link">
+      <a href="../guides/crash-retry/" class="md-nav__link">
         
   
   
@@ -616,7 +627,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../guides/" class="md-nav__link ">
+            <a href="../guides/" class="md-nav__link ">
               
   
   
@@ -722,7 +733,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/author/" class="md-nav__link">
+      <a href="../guides/author/" class="md-nav__link">
         
   
   
@@ -750,7 +761,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/inspect/" class="md-nav__link">
+      <a href="../guides/inspect/" class="md-nav__link">
         
   
   
@@ -778,7 +789,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/preview/" class="md-nav__link">
+      <a href="../guides/preview/" class="md-nav__link">
         
   
   
@@ -806,7 +817,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/validate/" class="md-nav__link">
+      <a href="../guides/validate/" class="md-nav__link">
         
   
   
@@ -910,7 +921,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/run/" class="md-nav__link">
+      <a href="../guides/run/" class="md-nav__link">
         
   
   
@@ -938,7 +949,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/scale/" class="md-nav__link">
+      <a href="../guides/scale/" class="md-nav__link">
         
   
   
@@ -966,7 +977,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/compact/" class="md-nav__link">
+      <a href="../guides/compact/" class="md-nav__link">
         
   
   
@@ -994,7 +1005,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/requeue/" class="md-nav__link">
+      <a href="../guides/requeue/" class="md-nav__link">
         
   
   
@@ -1022,7 +1033,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/healthcheck/" class="md-nav__link">
+      <a href="../guides/healthcheck/" class="md-nav__link">
         
   
   
@@ -1050,7 +1061,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/observability/" class="md-nav__link">
+      <a href="../guides/observability/" class="md-nav__link">
         
   
   
@@ -1078,7 +1089,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/audit-export/" class="md-nav__link">
+      <a href="../guides/audit-export/" class="md-nav__link">
         
   
   
@@ -1178,7 +1189,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/api-sources/" class="md-nav__link">
+      <a href="../guides/api-sources/" class="md-nav__link">
         
   
   
@@ -1206,7 +1217,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/api-source-adapters/" class="md-nav__link">
+      <a href="../guides/api-source-adapters/" class="md-nav__link">
         
   
   
@@ -1234,7 +1245,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/queue-sources/" class="md-nav__link">
+      <a href="../guides/queue-sources/" class="md-nav__link">
         
   
   
@@ -1262,7 +1273,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/source-manifests/" class="md-nav__link">
+      <a href="../guides/source-manifests/" class="md-nav__link">
         
   
   
@@ -1290,7 +1301,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/cdc-files/" class="md-nav__link">
+      <a href="../guides/cdc-files/" class="md-nav__link">
         
   
   
@@ -1384,7 +1395,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/file-formats/" class="md-nav__link">
+      <a href="../guides/file-formats/" class="md-nav__link">
         
   
   
@@ -1412,7 +1423,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/fixed-width/" class="md-nav__link">
+      <a href="../guides/fixed-width/" class="md-nav__link">
         
   
   
@@ -1517,7 +1528,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/pipeline-yaml/" class="md-nav__link">
+      <a href="../reference/pipeline-yaml/" class="md-nav__link">
         
   
   
@@ -1545,7 +1556,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/cli/" class="md-nav__link">
+      <a href="../reference/cli/" class="md-nav__link">
         
   
   
@@ -1573,7 +1584,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/connectors/" class="md-nav__link">
+      <a href="../reference/connectors/" class="md-nav__link">
         
   
   
@@ -1601,7 +1612,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/column-types/" class="md-nav__link">
+      <a href="../reference/column-types/" class="md-nav__link">
         
   
   
@@ -1661,7 +1672,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../architecture/" class="md-nav__link ">
+            <a href="../architecture/" class="md-nav__link ">
               
   
   
@@ -1705,7 +1716,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../architecture/decisions/" class="md-nav__link">
+      <a href="../architecture/decisions/" class="md-nav__link">
         
   
   
@@ -1771,8 +1782,34 @@
   
 
 
-<h1 id="content-hash-sha-256-as-the-file-idempotency-key">Content hash (SHA-256) as the file idempotency key</h1>
-<p>Files are identified for deduplication by their SHA-256 content hash, not their filename. Filename is stored as metadata but is not the identity. This prevents a specific failure mode: a file re-dropped with the same name but corrected content would be silently skipped if filename were the key, causing the correction to never land. The inverse is also handled safely: two files with identical content but different names are treated as one load. The tradeoff is that two genuinely distinct files that happen to have the same name and different content both commit — producing two sets of rows in the destination. This is correct behavior for an audit system; downstream deduplication using provenance columns is the operator's responsibility.</p>
+<h1 id="tutorials">Tutorials</h1>
+<p>Start here if you want to <em>see</em> Filedge work end to end before wiring it into
+your own data. Each tutorial is a self-contained walkthrough you can run on a
+laptop in a few minutes — no warehouse, no credentials.</p>
+<table>
+<thead>
+<tr>
+<th>Tutorial</th>
+<th>What it shows</th>
+<th>You'll end with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="../guides/edgar-demo/">EDGAR API to SQLite</a></td>
+<td>An API pull becomes the same audited File contract as every other ingestion path</td>
+<td>Loaded rows in SQLite plus a full audit trail and lineage you can query</td>
+</tr>
+<tr>
+<td><a href="../guides/crash-retry/">Crash-safe retry</a></td>
+<td>A pipeline that dies mid-load recovers without double-writing or corruption</td>
+<td>A re-run that reclaims the failed file and commits exactly once</td>
+</tr>
+</tbody>
+</table>
+<p>Once a tutorial clicks, move on to the <a href="../guides/">How-to guides</a> for
+task-focused recipes, or the <a href="../reference/pipeline-yaml/">Reference</a> for every
+config option.</p>
 
 
 
@@ -1830,10 +1867,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.indexes", "navigation.top", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"alias": true, "default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>

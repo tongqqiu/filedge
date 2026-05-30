@@ -113,6 +113,10 @@
          <lastmod>2026-05-30</lastmod>
     </url>
     <url>
+         <loc>https://tongqqiu.github.io/filedge/0.3.0/guides/</loc>
+         <lastmod>2026-05-30</lastmod>
+    </url>
+    <url>
          <loc>https://tongqqiu.github.io/filedge/0.3.0/guides/api-source-adapters/</loc>
          <lastmod>2026-05-30</lastmod>
     </url>
@@ -142,6 +146,10 @@
     </url>
     <url>
          <loc>https://tongqqiu.github.io/filedge/0.3.0/guides/edgar-demo/</loc>
+         <lastmod>2026-05-30</lastmod>
+    </url>
+    <url>
+         <loc>https://tongqqiu.github.io/filedge/0.3.0/guides/file-formats/</loc>
          <lastmod>2026-05-30</lastmod>
     </url>
     <url>
@@ -202,6 +210,10 @@
     </url>
     <url>
          <loc>https://tongqqiu.github.io/filedge/0.3.0/reference/pipeline-yaml/</loc>
+         <lastmod>2026-05-30</lastmod>
+    </url>
+    <url>
+         <loc>https://tongqqiu.github.io/filedge/0.3.0/tutorials/</loc>
          <lastmod>2026-05-30</lastmod>
     </url>
 </urlset>
