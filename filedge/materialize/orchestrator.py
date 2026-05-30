@@ -15,10 +15,11 @@ no-op: nothing staged, promoted, or committed.
 Drain only here; Continuous Trigger Mode is added in a later slice.
 """
 
+import signal
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 from filedge.companion.manifest import emit_manifest
 from filedge.companion.promotion import FetchLock, promote
@@ -50,8 +51,13 @@ def run_materialize(
     *,
     dry_run: bool = False,
     consumer: Optional[QueueConsumer] = None,
+    should_stop: Optional[Callable[[], bool]] = None,
 ) -> MaterializeOutcome:
-    """Materialize one Kafka Queue Source for a Drain cycle (or report a dry-run)."""
+    """Materialize one Kafka Queue Source (Drain or Continuous), or report a dry-run.
+
+    ``should_stop`` lets a test drive Continuous mode deterministically; in
+    production it defaults to a SIGTERM-set flag.
+    """
     plan = load_kafka_source(config_path, source_name)
 
     if dry_run:
@@ -65,7 +71,7 @@ def run_materialize(
     promoted: List[str] = []
     record_count = 0
     try:
-        for batch in consumer.drain():
+        for batch in _batches(consumer, plan.trigger, should_stop):
             data_path, n = _materialize_batch(plan, decoder, batch)
             # Commit only now — after the File is durably in the Watched Directory.
             consumer.commit_batch(batch)
@@ -83,6 +89,24 @@ def run_materialize(
         topic=plan.topic,
         watched_directory=plan.watched_directory,
     )
+
+
+def _batches(consumer, trigger, should_stop):
+    """Pick the Micro-batch source for the Trigger Mode."""
+    if trigger == "continuous":
+        return consumer.consume_continuous(should_stop or _install_sigterm_stop())
+    return consumer.drain()
+
+
+def _install_sigterm_stop() -> Callable[[], bool]:  # pragma: no cover - signal wiring
+    """A stop predicate flipped by SIGTERM, for Continuous mode in production."""
+    flag = {"stop": False}
+
+    def _handler(signum, frame):
+        flag["stop"] = True
+
+    signal.signal(signal.SIGTERM, _handler)
+    return lambda: flag["stop"]
 
 
 def _materialize_batch(plan: MaterializePlan, decoder, batch: MicroBatch):

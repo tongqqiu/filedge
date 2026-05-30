@@ -168,3 +168,72 @@ def test_close_releases_the_client():
     consumer.close()
 
     assert client.closed is True
+
+
+# --- Continuous Trigger Mode ---
+
+class _StopAfter:
+    """should_stop() that returns False for `n` checks, then True."""
+
+    def __init__(self, n):
+        self._left = n
+
+    def __call__(self):
+        if self._left <= 0:
+            return True
+        self._left -= 1
+        return False
+
+
+def test_continuous_cuts_by_count_then_stops():
+    client = FakeQueueClient(
+        partitions=[("t", 0)],
+        polls=[[_m(0, 0, "a"), _m(0, 1, "b"), _m(0, 2, "c"), _m(0, 3, "d")]],
+        end_offsets={},  # continuous ignores high-water marks
+    )
+    consumer = QueueConsumer(client, _plan(batch_size=2), monotonic=_FROZEN)
+
+    batches = list(consumer.consume_continuous(_StopAfter(1)))
+
+    assert [(b.start_offset, b.end_offset) for b in batches] == [(0, 1), (2, 3)]
+
+
+def test_continuous_flushes_in_flight_batch_on_stop():
+    # Sub-batch-size buffer must still be promoted when SIGTERM stops the loop.
+    client = FakeQueueClient(
+        partitions=[("t", 0)],
+        polls=[[_m(0, 0, "a"), _m(0, 1, "b")]],
+        end_offsets={},
+    )
+    consumer = QueueConsumer(client, _plan(batch_size=100), monotonic=_FROZEN)
+
+    batches = list(consumer.consume_continuous(_StopAfter(1)))
+
+    assert len(batches) == 1
+    assert batches[0].messages == [b"a", b"b"]
+
+
+def test_continuous_stops_immediately_when_already_signalled():
+    client = FakeQueueClient(partitions=[("t", 0)], polls=[[_m(0, 0, "a")]], end_offsets={})
+    consumer = QueueConsumer(client, _plan(), monotonic=_FROZEN)
+
+    assert list(consumer.consume_continuous(lambda: True)) == []
+
+
+def test_continuous_cuts_by_time_window():
+    import itertools
+
+    clock = itertools.count(0, 100)
+    client = FakeQueueClient(
+        partitions=[("t", 0)],
+        polls=[[_m(0, 0, "a")], []],
+        end_offsets={},
+    )
+    consumer = QueueConsumer(
+        client, _plan(batch_size=100, batch_timeout=5.0), monotonic=lambda: next(clock)
+    )
+
+    batches = list(consumer.consume_continuous(_StopAfter(3)))
+
+    assert len(batches) == 1
+    assert batches[0].messages == [b"a"]  # cut by the time window, not the count
