@@ -63,7 +63,7 @@ filedge run --dir ./landing --config pipeline.yaml --audit-db-url $FILEDGE_AUDIT
 
 Run the two as independent scheduled jobs — the same two-job pattern recommended for SFTP sync in ADR-0005.
 
-The reference targets the public GitHub REST API because it needs no credentials and exercises both pagination and a `since`-style cursor. The API-specific code sits behind a small source-client seam, so adapting it to a fintech API (Stripe, Plaid) is a new client plus Sources Config, not a rewrite of the staging, promotion, manifest, or cursor logic. The Source Manifest emitter and the Fetch-Lock promotion are reusable building blocks for writing your own Python Fetcher.
+The reference targets the public GitHub REST API because it needs no credentials and exercises both pagination and a `since`-style cursor. The API-specific code sits behind an API Source adapter seam, so adapting it to a fintech API (Stripe, Plaid) is a new adapter plus Sources Config parsing, not a rewrite of the staging, promotion, manifest, or cursor logic. See [How to add an API Source adapter](api-source-adapters.md) for the extension pattern.
 
 EDGAR is also supported by the Reference Fetcher through the SEC `companyConcept`
 endpoint. It needs no API key, but SEC policy requires a descriptive
