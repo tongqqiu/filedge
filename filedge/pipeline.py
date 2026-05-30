@@ -14,7 +14,7 @@ from filedge.db import (
     reset_eligible_failed,
 )
 from filedge.file_registration import register_files
-from filedge.loader import load_file
+from filedge.loader import QuarantineOutcome, load_file
 from filedge.progress import ProgressReporter, emit_progress
 
 
@@ -59,6 +59,7 @@ def run_pipeline(
         failed = registration.failed_pre_load
         skipped = registration.skipped
         rows_committed = 0
+        quarantined_rows = 0
 
         emit_progress(progress, "loading", "start", total=len(registration.load_candidates))
         for candidate in registration.load_candidates:
@@ -74,6 +75,7 @@ def run_pipeline(
                 progress, "loading", "file_start",
                 path=path, file_hash=content_hash, bytes=candidate.size,
             )
+            quarantine_outcome = QuarantineOutcome()
             rows, error = load_file(
                 connector,
                 config,
@@ -81,6 +83,7 @@ def run_pipeline(
                 content_hash,
                 candidate.fs,
                 progress=progress,
+                quarantine_outcome=quarantine_outcome,
             )
             emit_progress(
                 progress,
@@ -92,10 +95,15 @@ def run_pipeline(
             )
 
             if error is None:
-                mark_committed(db, content_hash, row_count=rows)
+                mark_committed(
+                    db, content_hash, row_count=rows,
+                    quarantined_row_count=quarantine_outcome.count,
+                    quarantine_path=quarantine_outcome.path,
+                )
                 db.commit()
                 committed += 1
                 rows_committed += rows or 0
+                quarantined_rows += quarantine_outcome.count
             else:
                 mark_failed(db, content_hash, error)
                 db.commit()
@@ -118,6 +126,7 @@ def run_pipeline(
             "reclaimed": reclaimed,
             "retried": retried,
             "rows_committed": rows_committed,
+            "quarantined_rows": quarantined_rows,
             "bytes_processed": registration.bytes_processed,
         }
     finally:
