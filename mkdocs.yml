@@ -63,6 +63,7 @@ nav:
     - CDC files: guides/cdc-files.md
     - API sources: guides/api-sources.md
     - API Source adapters: guides/api-source-adapters.md
+    - EDGAR API demo: guides/edgar-demo.md
     - Queue sources: guides/queue-sources.md
     - Source manifests: guides/source-manifests.md
   - Reference:
