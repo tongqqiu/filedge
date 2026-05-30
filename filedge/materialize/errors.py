@@ -16,3 +16,7 @@ class DecodeError(MaterializeError):
     fails the batch rather than silently producing bad rows (Strict Mode at the
     materialization boundary).
     """
+
+
+class MaterializeConfigError(MaterializeError):
+    """Raised when a Queue Source entry in sources.yaml is missing or malformed."""
