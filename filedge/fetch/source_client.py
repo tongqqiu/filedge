@@ -74,16 +74,10 @@ class HttpSourceClient:
 
     def fetch(self, plan: FetchPlan, cursor: Optional[str]) -> FetchResult:
         started_at = self._now()
-        records: List[dict] = []
-        page = 1
-        while True:
-            batch = self._fetch_page(plan, cursor, page)
-            if not batch:
-                break
-            records.extend(batch)
-            if len(batch) < plan.page_size:
-                break
-            page += 1
+        if plan.cursor_mode == "client":
+            records = self._fetch_client(plan, cursor)
+        else:
+            records = self._fetch_server(plan, cursor)
         finished_at = self._now()
         return FetchResult(
             records=records,
@@ -92,8 +86,26 @@ class HttpSourceClient:
             finished_at=finished_at,
         )
 
-    def _fetch_page(self, plan: FetchPlan, cursor: Optional[str], page: int) -> List[dict]:
-        url = self._build_url(plan, cursor, page)
+    def _fetch_server(self, plan: FetchPlan, cursor: Optional[str]) -> List[dict]:
+        """Paginated fetch where the API filters by the cursor query param (GitHub)."""
+        records: List[dict] = []
+        page = 1
+        while True:
+            batch = self._request(plan, self._server_url(plan, cursor, page))
+            if not batch:
+                break
+            records.extend(batch)
+            if len(batch) < plan.page_size:
+                break
+            page += 1
+        return records
+
+    def _fetch_client(self, plan: FetchPlan, cursor: Optional[str]) -> List[dict]:
+        """Single-document fetch; filter to records newer than the cursor locally (EDGAR)."""
+        records = self._request(plan, self._client_url(plan))
+        return [r for r in records if self._is_newer(plan, r, cursor)]
+
+    def _request(self, plan: FetchPlan, url: str) -> List[dict]:
         headers = {"Accept": "application/json"}
         credential = plan.credential()
         if credential:
@@ -115,13 +127,29 @@ class HttpSourceClient:
             f"Exhausted retries fetching {url!r}."
         )
 
-    def _build_url(self, plan: FetchPlan, cursor: Optional[str], page: int) -> str:
+    def _server_url(self, plan: FetchPlan, cursor: Optional[str], page: int) -> str:
         params = dict(plan.query)
         if cursor:
             params[plan.cursor_param] = cursor
         params[plan.page_param] = page
         params[plan.per_page_param] = plan.page_size
         return f"{plan.url}?{urlencode(params)}"
+
+    def _client_url(self, plan: FetchPlan) -> str:
+        if not plan.query:
+            return plan.url
+        return f"{plan.url}?{urlencode(plan.query)}"
+
+    def _is_newer(self, plan: FetchPlan, record: dict, cursor: Optional[str]) -> bool:
+        """True if the record's cursor_field is strictly greater than the cursor.
+
+        A first run (no cursor) keeps every record; a record missing the
+        cursor_field is excluded (it cannot be ordered).
+        """
+        if cursor is None:
+            return True
+        value = _dotted_get(record, plan.cursor_field)
+        return value is not None and str(value) > cursor
 
     def _is_rate_limited(self, headers: dict) -> bool:
         if "Retry-After" in headers:
