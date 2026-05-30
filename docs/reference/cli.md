@@ -338,3 +338,27 @@ filedge-fetch --config <sources.yaml> --source <name> [--dry-run]
 **Exit codes:** `0` on success (including a clean no-op when there are no new records), `1` on error (bad config, unreachable/rate-limited API, or a held Fetch Lock).
 
 See the [API Sources guide](../guides/api-sources.md) for the full Sources Config and the fetch → ingest workflow.
+
+---
+
+## `filedge-materialize`
+
+The Reference Queue Materializer — a **separate entry point**, not a `filedge` subcommand. It is an external companion to `filedge run` (ADR-0007, ADR-0018): it consumes one Kafka Queue Source described in a Sources Config and lands complete NDJSON Files (each with a Source Manifest carrying Offset Range Metadata) in the Watched Directory, where `filedge run` ingests them. It never Commits to a Destination.
+
+Requires the `kafka` extra (`pip install filedge[kafka]`).
+
+```bash
+filedge-materialize --config <sources.yaml> --source <name> [--dry-run]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--config` | required | Path to the Sources Config (`sources.yaml`) |
+| `--source` | required | Name of the kafka Queue Source within the Sources Config |
+| `--dry-run` | off | Report the topic and target Watched Directory without consuming |
+
+The Trigger Mode (`drain` default, or `continuous`) and batch boundary (`batch_size` / `batch_timeout_seconds`) are set per source in the Sources Config.
+
+**Exit codes:** `0` on success (including a clean no-op when there are no new records), `1` on error (bad config, unreachable brokers, a decode failure, or a held Fetch Lock).
+
+See the [Queue Sources guide](../guides/queue-sources.md) for the full Sources Config and the materialize → ingest workflow.

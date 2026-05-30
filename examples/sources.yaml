@@ -44,3 +44,27 @@ sources:
 
     page_size: 100
     gzip: false
+
+  # A Kafka Queue Source for the Reference Queue Materializer (filedge-materialize).
+  # Run it with:
+  #   filedge-materialize --config examples/sources.yaml --source orders
+  # (Needs a reachable Kafka broker and the `kafka` extra: pip install filedge[kafka].)
+  - name: orders
+    type: kafka
+    brokers: [localhost:9092]      # or a comma-separated string
+    topic: orders
+    consumer_group: filedge-orders
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    batch_size: 1000               # count boundary
+    batch_timeout_seconds: 30      # time boundary (whichever fires first)
+    trigger: drain                 # or: continuous
+    format: json
+    gzip: false
+    # Plain security settings + env-resolved credentials (never inline secrets):
+    # security_protocol: SASL_SSL
+    # sasl_mechanism: PLAIN
+    # credentials:
+    #   sasl_username: env:KAFKA_USER
+    #   sasl_password: env:KAFKA_PASSWORD

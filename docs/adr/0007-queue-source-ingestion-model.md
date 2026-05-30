@@ -14,3 +14,7 @@ By requiring Queue Sources to become Files first, queue-originated data receives
 - **Native `filedge consume` with Drain trigger**: preserves a scheduled operational model, but still requires Kafka/SQS/Kinesis client dependencies, offset state, rebalance handling, poison-message policy, and long-running-process edge cases.
 - **Native continuous consumer**: lower latency, but turns Filedge into an always-on service requiring process management, liveness checks, backpressure handling, and shutdown semantics.
 - **Destination-direct queue sinks**: simple for some warehouses, but bypasses Filedge's uniform audit, Content Hash deduplication, strict validation, and row-level provenance model.
+
+## Note: first-party reference Materializer
+
+Filedge ships a first-party **Reference Queue Materializer** (`filedge-materialize`) as a runnable example of the external-materializer role above — not a native consumer. It is a separate console entry point (gated behind the optional `kafka` extra), the core ingestion path imports nothing from it, and it is never a loader of record: it consumes a Kafka topic into per-partition Micro-batches, emits the OpenLineage-shaped Source Manifest with Offset Range Metadata, promotes complete Files under a Fetch Lock, and commits broker offsets only after promotion. This does not change the boundary — `filedge run` still starts at the File. See ADR-0018 (the same stance for the Reference Fetcher).
