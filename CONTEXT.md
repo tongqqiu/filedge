@@ -196,7 +196,7 @@ A data source that delivers records via HTTP API rather than file drops. Example
 _Avoid_: API connector, API pipeline.
 
 ### Fetcher
-A component or external job that pulls data from an API Source on a schedule, handles pagination, authentication, rate limiting, and incremental cursor management, and writes complete NDJSON files to the Watched Directory. The Fetcher is the API-source equivalent of the rclone sync layer for SFTP (ADR-0005): useful upstream plumbing, not Filedge's core ingestion layer. dlt, Airbyte, Meltano, vendor exports, and custom scripts can all be Fetchers. Only complete files should reach the Watched Directory; partial fetches must remain in staging or be deleted.
+A component or external job that pulls data from an API Source on a schedule, handles pagination, authentication, rate limiting, and incremental cursor management, and writes complete NDJSON files to the Watched Directory. The Fetcher is the API-source equivalent of the rclone sync layer for SFTP (ADR-0005): useful upstream plumbing, not Filedge's core ingestion layer. dlt, Airbyte, Meltano, vendor exports, and custom scripts can all be Fetchers. Only complete files should reach the Watched Directory; partial fetches must remain in staging or be deleted. Filedge ships a first-party **Reference Fetcher** (`filedge-fetch`) as a runnable example of this role — an external companion, not part of `filedge run` and never a loader of record; it stages a complete NDJSON File, emits a Source Manifest, and promotes the sidecar then the data File into the Watched Directory under a Fetch Lock, advancing the incremental cursor only after promotion (ADR-0018).
 _Avoid_: API connector, extractor, source connector.
 
 ### Fetch Lock

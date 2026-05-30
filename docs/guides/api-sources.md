@@ -37,6 +37,61 @@ The Fetcher must guarantee:
 
 ---
 
+## The Reference Fetcher (`filedge-fetch`)
+
+Filedge ships a runnable example of a correct Fetcher: `filedge-fetch`. It is an **external companion** to `filedge run`, not part of the core ingestion path and never a loader of record (see ADR-0018). It exists to show — and enforce — the contract above end to end.
+
+Given a Sources Config, `filedge-fetch`:
+
+1. reads the last incremental cursor for the API Source;
+2. pages through the API (rate-limit aware) for records newer than that cursor;
+3. writes them as one **complete** NDJSON File in a staging area;
+4. emits an OpenLineage-shaped [Source Manifest](source-manifests.md) sidecar for that File;
+5. promotes the sidecar **then** the data File into the Watched Directory under a **Fetch Lock** — so a File is never visible without its provenance, and two concurrent fetches cannot race partial files;
+6. advances the cursor **only after** a successful promotion, so a crash retries the same window rather than skipping data.
+
+```bash
+# Pull one API Source into complete NDJSON Files + manifests in ./landing/
+filedge-fetch --config examples/sources.yaml --source github-commits
+
+# Preview the window and target file without fetching
+filedge-fetch --config examples/sources.yaml --source github-commits --dry-run
+
+# Then ingest exactly like any file drop
+filedge run --dir ./landing --config pipeline.yaml --audit-db-url $FILEDGE_AUDIT_DB_URL
+```
+
+Run the two as independent scheduled jobs — the same two-job pattern recommended for SFTP sync in ADR-0005.
+
+The reference targets the public GitHub REST API because it needs no credentials and exercises both pagination and a `since`-style cursor. The API-specific code sits behind a small source-client seam, so adapting it to a fintech API (Stripe, Plaid) is a new client plus Sources Config, not a rewrite of the staging, promotion, manifest, or cursor logic. The Source Manifest emitter and the Fetch-Lock promotion are reusable building blocks for writing your own Python Fetcher.
+
+### Sources Config
+
+A Sources Config (`sources.yaml`) is a Fetcher-only file, separate from `pipeline.yaml`. It declares the endpoint, the incremental cursor, an optional environment-variable credential lookup, and the staging/state/landing paths. No secret is ever written into it.
+
+```yaml
+version: 1
+sources:
+  - name: github-commits
+    type: github
+    url: https://api.github.com/repos/tongqqiu/filedge/commits
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    cursor:
+      param: since          # query param carrying the high-water mark
+      field: commit.committer.date   # dotted path the next cursor is read from
+    query:
+      sha: main
+    # credential_env: GITHUB_TOKEN   # optional; bearer token from this env var
+    page_size: 100
+    gzip: false
+```
+
+The same example ships at `examples/sources.yaml`.
+
+---
+
 ## Example: Stripe Events -> S3 -> BigQuery
 
 ### 1. Fetch to files

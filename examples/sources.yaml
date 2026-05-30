@@ -1,0 +1,46 @@
+# Example Sources Config for the Reference Fetcher (filedge-fetch).
+#
+# The Reference Fetcher is an external companion to `filedge run` (ADR-0018):
+# it pulls an API Source and lands complete NDJSON Files — each with an
+# OpenLineage-shaped Source Manifest sidecar — in the Watched Directory. Then
+# `filedge run --dir ./landing --config pipeline.yaml ...` ingests them.
+#
+# This example targets the public GitHub REST API, which needs no credentials
+# (it is rate-limited unauthenticated). Run it with:
+#
+#   filedge-fetch --config examples/sources.yaml --source github-commits
+#
+# Credentials, when an API needs them, are named by environment variable only —
+# never written here.
+
+version: 1
+
+sources:
+  - name: github-commits
+    type: github
+    # The full endpoint URL. Records must come back as a JSON array.
+    url: https://api.github.com/repos/tongqqiu/filedge/commits
+
+    # Where the Fetcher works. Staged Files are written under staging_dir,
+    # then promoted into watched_directory; the cursor lives under state_dir.
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+
+    # Incremental cursor: `param` is the query parameter that carries the
+    # high-water mark; `field` is the dotted path in each record the next
+    # cursor is read from (the largest value seen becomes the next run's mark).
+    cursor:
+      param: since
+      field: commit.committer.date
+
+    # Optional static query parameters added to every request.
+    query:
+      sha: main
+
+    # Optional: read a bearer token from this environment variable to raise
+    # the GitHub rate limit. Omit entirely to run unauthenticated.
+    # credential_env: GITHUB_TOKEN
+
+    page_size: 100
+    gzip: false

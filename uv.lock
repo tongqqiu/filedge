@@ -723,7 +723,7 @@ requires-dist = [
     { name = "s3fs", marker = "extra == 's3'", specifier = ">=2026.4.0" },
     { name = "textual", marker = "extra == 'authoring'", specifier = ">=5.0" },
 ]
-provides-extras = ["dev", "authoring", "postgres", "bigquery", "databricks", "duckdb", "parquet", "excel", "s3", "gcs", "otel", "docs"]
+provides-extras = ["dev", "authoring", "fetch", "postgres", "bigquery", "databricks", "duckdb", "parquet", "excel", "s3", "gcs", "otel", "docs"]
 
 [[package]]
 name = "frozenlist"
