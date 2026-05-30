@@ -63,7 +63,12 @@ def status_summary(db: Database) -> dict:
         for row in cursor.fetchall()
     ]
 
-    return {**counts, "recent_failures": recent_failures}
+    cursor = db.execute(
+        "SELECT COALESCE(SUM(quarantined_row_count), 0) FROM etl_file_audit"
+    )
+    quarantined_rows = cursor.fetchone()[0] or 0
+
+    return {**counts, "recent_failures": recent_failures, "quarantined_rows": quarantined_rows}
 
 
 def export_records(db: Database) -> list[AuditExportRecord]:
