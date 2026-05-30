@@ -221,3 +221,8 @@ s3://landing/orders-backfill/dt=2025-01-02/
 Run backfill workers with their own schedule and a conservative worker count. They may share the same Audit DB and destination table as normal ingestion; Content Hash idempotency still prevents duplicate file loads.
 
 If the backfill uses a different schema or destination table, use a separate `pipeline.yaml`.
+
+## Related
+
+- [Run a pipeline](run.md) — the command being scaled
+- [Compact small files](compact.md) — fewer, larger files before ingestion

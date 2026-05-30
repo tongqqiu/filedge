@@ -173,49 +173,19 @@ See the [Preview guide](guides/preview.md) for details.
 
 ---
 
-## Parquet files
+## Other file formats
 
-Filedge supports Parquet natively. Install the optional extra first:
-
-```bash
-uv sync --extra parquet
-```
-
-Then use any read command as usual — the format is detected from the `.parquet` extension:
-
-```bash
-filedge inspect events.parquet
-filedge preview events.parquet
-filedge validate events.parquet --config pipeline.yaml
-```
-
----
-
-## Excel files
-
-Filedge supports `.xlsx` workbooks. Install the optional extra first:
-
-```bash
-uv sync --extra excel
-```
-
-Then any read command works on `.xlsx` directly:
-
-```bash
-filedge inspect data.xlsx
-filedge preview data.xlsx --sheet Orders
-filedge validate data.xlsx --config pipeline.yaml
-```
-
-The first sheet is read by default; use `--sheet <name-or-index>` to choose another. See the [inspect](guides/inspect.md#excel-files) guide for the formula-cache and leading-zeros gotchas. Legacy `.xls` files are not supported — re-save as `.xlsx` in Excel first.
+This walkthrough used CSV, but Filedge handles NDJSON, Parquet, Excel, and
+fixed-width files the same way — every read command detects the format from the
+file extension. Parquet and Excel need a one-line optional extra. See
+[File formats](guides/file-formats.md) for the full matrix and gotchas.
 
 ---
 
 ## Next steps
 
-- [Preview guide](guides/preview.md) — spot-check files and jump to specific rows
+- [See it end to end](tutorials/index.md) — the EDGAR and crash-safe-retry tutorials
 - [Run guide](guides/run.md) — scheduling, retry behaviour, write modes
 - [Connectors](reference/connectors.md) — switch from SQLite to PostgreSQL or BigQuery
-- [Compact guide](guides/compact.md) — merge small files before ingestion
-- [API sources](guides/api-sources.md) — materialize API pulls with `filedge-fetch`
-- [Queue sources](guides/queue-sources.md) — materialize Kafka Micro-batches with `filedge-materialize`
+- [How-to guides](guides/index.md) — task-focused recipes for every workflow
+- [Connect a source](guides/api-sources.md) — materialize API pulls and queues into Files

@@ -121,3 +121,8 @@ behind an integration marker when the source is important enough to support.
 Adding an adapter does not make Filedge the loader of record. The Reference
 Fetcher is still an external companion: it materializes complete Files and
 `filedge run` ingests those Files through the normal audited path.
+
+## Related
+
+- [API sources](api-sources.md) — the Fetcher pattern and reference companion
+- [Source manifests](source-manifests.md) — the provenance an adapter must emit

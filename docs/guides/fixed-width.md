@@ -101,3 +101,9 @@ These are deferred per ADR-0013 until a real operator case appears:
 - Fixed-record-length files without newlines.
 - Configurable trim behavior — Filedge always `.strip()`s both sides.
 - A `filedge ruler` byte-position helper subcommand.
+
+## Related
+
+- [File formats](file-formats.md) — the full format matrix
+- [Inspect a file](inspect.md) — generate a starting columns block
+- [Column types](../reference/column-types.md) — coercion after byte extraction

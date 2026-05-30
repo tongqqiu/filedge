@@ -69,3 +69,8 @@ livenessProbe:
   initialDelaySeconds: 10
   periodSeconds: 60
 ```
+
+## Related
+
+- [Run a pipeline](run.md) — the command healthcheck guards
+- [Observability](observability.md) — logs, metrics, and tracing

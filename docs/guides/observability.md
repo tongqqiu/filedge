@@ -107,3 +107,9 @@ When neither OTel flag nor environment variable is set, `opentelemetry.*` is nev
 ## Roadmap
 
 Tier 2 also tracks OTel metrics (#79). Tier 3 adds `filedge healthcheck` for K8s liveness/readiness probes.
+
+## Related
+
+- [Run a pipeline](run.md) — where logs and metrics come from
+- [Healthcheck](healthcheck.md) — liveness/readiness probes
+- [Export an audit site](audit-export.md) — share lineage with stakeholders

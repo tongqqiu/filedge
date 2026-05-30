@@ -75,3 +75,9 @@ Paste this into your BI tool or warehouse query console to see every destination
 
 !!! note "Row data stays in the warehouse"
     The export never contains destination row data. The lineage SQL lets auditors query the warehouse directly — keeping PII out of the static artifact.
+
+## Related
+
+- [Run a pipeline](run.md) — populates the Audit DB this exports
+- [Source manifests](source-manifests.md) — the upstream lineage in the export
+- [Observability](observability.md) — live operational signals

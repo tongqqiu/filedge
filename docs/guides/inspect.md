@@ -213,3 +213,10 @@ Excel stores cells like `01234` as the number `1234` unless the cell is formatte
 | `--sample-rows` | 1000 | Number of rows to sample |
 | `--output` | stdout | Write the YAML block to this file instead of stdout |
 | `--sheet` | first sheet | Excel sheet name or 0-based index (excel format only) |
+
+## Related
+
+- [Author a pipeline](author.md) — do this interactively instead
+- [Validate a file](validate.md) — check the config you build from these columns
+- [File formats](file-formats.md) — CSV, NDJSON, Parquet, Excel, fixed-width
+- [Column types](../reference/column-types.md) — every supported type

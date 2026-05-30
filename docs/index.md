@@ -1,58 +1,53 @@
 # Filedge
 
-A batch ETL system for data engineers who need reliable file ingestion: per-file destination commits, content-hash idempotency, crash-safe retry, and a full audit trail.
+**Reliable file ingestion for data engineers.** Filedge loads files into your
+warehouse with per-file atomic commits, content-hash idempotency, crash-safe
+retry, and a full audit trail — so a failed load never leaves you guessing what
+made it in.
+
+[Get started in 5 minutes](getting-started.md){ .md-button .md-button--primary }
+[See it end to end](tutorials/index.md){ .md-button }
 
 ---
 
-## The Problem
+## The problem
 
-Most ETL pipelines fail in the worst possible way: they write half the rows before crashing, leaving the destination in a corrupt state with no clear record of what happened. Re-running the job then risks double-writing the rows that did succeed.
+Most ETL pipelines fail in the worst possible way: they write half the rows,
+then crash, leaving the destination corrupt with no record of what happened.
+Re-running risks double-writing the rows that already succeeded.
 
-Filedge addresses three root causes:
+## How Filedge is different
 
-- **Partial load corruption** — each destination connector makes a file write retry-safe for the file's content hash.
-- **Filename-based idempotency** — files are identified by SHA-256 content hash, not filename. Renaming a file doesn't re-ingest it; replacing it with new content does.
-- **No audit trail** — every file passes through a `PENDING → PROCESSING → COMMITTED/FAILED` state machine stored alongside row-level provenance.
+Three guarantees, enforced on every file:
 
----
+- **Atomic commits — no partial loads.** Each destination connector makes a
+  file's write retry-safe for its content hash. A crash mid-load never leaves
+  half the rows behind.
+- **Content-hash idempotency — no accidental re-ingestion.** Files are
+  identified by SHA-256 of their content, not filename. Renaming a file doesn't
+  reload it; replacing it with new content does.
+- **A full audit trail — always know what loaded.** Every file moves through a
+  `PENDING → PROCESSING → COMMITTED/FAILED` state machine, stored alongside
+  row-level provenance you can query and export.
 
-## The Toolbox
+The boundary is always the **File**: anything upstream — file drops, API pulls,
+queues, database exports — becomes a complete File in a watched directory, and
+`filedge run` ingests it the same audited way.
 
-Core CLI commands, each useful on its own:
+## 30-second example
 
-| Command | What it does |
-|---------|-------------|
-| `filedge author <file>` | Launch the local Authoring UI to build a pipeline from a sample file (or `--pipeline <folder>` to re-author an existing one) |
-| `filedge inspect <file>` | Sample a file and generate a `pipeline.yaml` columns block |
-| `filedge preview <file>` | Display rows as a table — jump to any row with `--start-row` |
-| `filedge validate <file>` | Dry-run a file against a config — no data written |
-| `filedge compact` | Merge many small files into fewer large ones before ingestion |
-| `filedge run` | Ingest files with retry-safe commits and a full audit trail |
-| `filedge status` | Show counts and recent failures from the audit DB |
-| `filedge lineage <hash\|filename>` | Show one File's full audit + source-manifest lineage |
-| `filedge export-audit` | Generate a read-only static HTML site for compliance and audit stakeholders |
-| `filedge healthcheck` | Probe the audit DB and destination connector without writing rows |
-| `filedge requeue` | Move terminal failed files back to `PENDING` after remediation |
-
-External companion entry points:
-
-| Command | What it does |
-|---------|-------------|
-| `filedge-fetch` | Materialize an API Source, including EDGAR `companyConcept`, into complete NDJSON Files + Source Manifests |
-| `filedge-materialize` | Materialize Kafka Queue Source Micro-batches into complete NDJSON Files + Source Manifests |
-
-The typical workflow for a new pipeline:
-
-```
-filedge inspect data.csv --output pipeline.yaml          # 1. generate columns
-# add format, dest_table, and connector fields
-filedge validate data.csv --config pipeline.yaml         # 2. check it
-filedge run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///filedge.db
+```bash
+filedge inspect data.csv --output pipeline.yaml      # 1. infer the schema
+# add format, dest_table, and a connector: block
+filedge validate data.csv --config pipeline.yaml     # 2. dry-run, no data written
+filedge run --dir ./incoming --config pipeline.yaml \
+  --audit-db-url sqlite:///filedge.db                # 3. ingest with audit trail
+# Committed: 1  Failed: 0  Skipped: 0  New: 1
 ```
 
-Or do steps 1–2 interactively: `filedge author data.csv` runs inference, lets you review the schema, choose write mode, connector, and field encryption, validates, and writes a ready-to-run pipeline folder. See the [Author guide](guides/author.md).
-
----
+Prefer an interactive flow? `filedge author data.csv` walks you through
+inference, schema review, write mode, connector, and validation, then writes a
+ready-to-run pipeline folder. See the [Author guide](guides/author.md).
 
 ## Destinations
 
@@ -66,13 +61,12 @@ Pluggable via a `connector:` block in `pipeline.yaml`:
 
 ---
 
-## Quick Links
+## Where to go next
 
-- [Getting Started](getting-started.md) — install and run your first pipeline in 5 minutes
-- [Guides](guides/run.md) — one page per workflow
-- [Scale ingestion](guides/scale.md) — large files, many files, parallel workers, and backfills
-- [API sources](guides/api-sources.md) — Fetcher pattern and the `filedge-fetch` reference companion
-- [Queue sources](guides/queue-sources.md) — Queue Materializer pattern and the `filedge-materialize` reference companion
-- [Source manifests](guides/source-manifests.md) — upstream lineage for API / Queue / SFTP / vendor exports
-- [pipeline.yaml reference](reference/pipeline-yaml.md) — every config option
-- [Connectors](reference/connectors.md) — destination setup for each backend
+| If you want to… | Go to |
+|-----------------|-------|
+| Install and run your first pipeline | [Getting Started](getting-started.md) |
+| See the full value end to end | [Tutorials](tutorials/index.md) |
+| Get a specific job done | [How-to guides](guides/index.md) |
+| Look up a config option or command | [Reference](reference/pipeline-yaml.md) |
+| Understand how it works under the hood | [Architecture](architecture/index.md) |

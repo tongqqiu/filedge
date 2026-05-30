@@ -234,3 +234,10 @@ Filedge makes them converge:
 
 That is why Filedge is useful: it makes the handoff from upstream systems to the
 Destination repeatable, auditable, and boring.
+
+## Related
+
+- [Getting Started](../getting-started.md) — the 5-minute quickstart
+- [API sources](api-sources.md) — the Fetcher pattern this tutorial uses
+- [Source manifests](source-manifests.md) — the lineage you traced in step 7
+- [Run a pipeline](run.md) — the ingestion half of the demo

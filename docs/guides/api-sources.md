@@ -358,3 +358,10 @@ Filedge reads the sidecar at registration and stores the metadata on the File's 
 ```
 
 See [Source Manifests](source-manifests.md) for the full schema, policy modes (`disabled` / `optional` / `required`), and validation error categories. Direct file drops without manifests continue to work unchanged under the default `optional` policy.
+
+## Related
+
+- [API Source adapters](api-source-adapters.md) — extend the Fetcher to a new API
+- [Source manifests](source-manifests.md) — upstream lineage for fetched Files
+- [Queue sources](queue-sources.md) — the same pattern for message brokers
+- [EDGAR tutorial](edgar-demo.md) — see the Fetcher end to end
