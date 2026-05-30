@@ -53,6 +53,32 @@ class CdcConfig:
 
 
 @dataclass
+class QuarantineConfig:
+    """Opt-in Dead-Letter Quarantine policy for a Pipeline (ADR-0019).
+
+    When enabled, rows that fail Transform/Field Encryption are written to an
+    NDJSON quarantine sidecar in ``dir`` and the good rows still commit — unless
+    the bad-row count exceeds the threshold, in which case the whole File fails
+    (nothing committed), preserving the Strict Mode signal (ADR-0003). At least
+    one of ``max_invalid_fraction`` / ``max_invalid_rows`` bounds the threshold;
+    a File is over-threshold if it exceeds *either* configured limit.
+    """
+
+    dir: str
+    max_invalid_fraction: Optional[float] = None
+    max_invalid_rows: Optional[int] = None
+
+    def is_over_threshold(self, invalid: int, total: int) -> bool:
+        """True when this File's bad rows exceed a configured limit."""
+        if self.max_invalid_rows is not None and invalid > self.max_invalid_rows:
+            return True
+        if self.max_invalid_fraction is not None and total > 0:
+            if (invalid / total) > self.max_invalid_fraction:
+                return True
+        return False
+
+
+@dataclass
 class PipelineConfig:
     format: str
     dest_table: str
@@ -67,6 +93,7 @@ class PipelineConfig:
     file_pattern: Optional[str] = None
     source_manifest: str = "optional"
     excel: Optional[ExcelConfig] = None
+    quarantine: Optional[QuarantineConfig] = None
 
 
 def load_config(path: str) -> PipelineConfig:
@@ -134,6 +161,8 @@ def config_from_dict(data: dict) -> PipelineConfig:
                 f"CDC sequence column {cdc.sequence_by!r} must be declared in columns"
             )
 
+    quarantine = _parse_quarantine_config(data.get("quarantine"))
+
     return PipelineConfig(
         format=data["format"],
         dest_table=data["dest_table"],
@@ -148,6 +177,44 @@ def config_from_dict(data: dict) -> PipelineConfig:
         file_pattern=data.get("file_pattern"),
         source_manifest=_validate_source_manifest(data.get("source_manifest", "optional")),
         excel=excel,
+        quarantine=quarantine,
+    )
+
+
+def _parse_quarantine_config(raw) -> Optional[QuarantineConfig]:
+    """Parse the opt-in `quarantine:` block; absent or `enabled: false` → None.
+
+    A disabled (or absent) block means Strict Mode (ADR-0003) — the default.
+    When enabled, a `dir:` and at least one threshold limit are required, and
+    each limit must be in range.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("quarantine: must be a mapping.")
+    if not raw.get("enabled", False):
+        return None
+
+    directory = raw.get("dir")
+    if not directory:
+        raise ValueError("quarantine: enabled requires a 'dir' for the sidecar output.")
+
+    fraction = raw.get("max_invalid_fraction")
+    rows = raw.get("max_invalid_rows")
+    if fraction is None and rows is None:
+        raise ValueError(
+            "quarantine: enabled requires a threshold "
+            "(max_invalid_fraction and/or max_invalid_rows)."
+        )
+    if fraction is not None and not (0 <= float(fraction) <= 1):
+        raise ValueError("quarantine: max_invalid_fraction must be between 0 and 1.")
+    if rows is not None and int(rows) < 0:
+        raise ValueError("quarantine: max_invalid_rows must be non-negative.")
+
+    return QuarantineConfig(
+        dir=directory,
+        max_invalid_fraction=float(fraction) if fraction is not None else None,
+        max_invalid_rows=int(rows) if rows is not None else None,
     )
 
 
