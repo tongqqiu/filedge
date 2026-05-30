@@ -1,6 +1,7 @@
 """Promote a staged File + its sidecar into the Watched Directory, under a lock.
 
-Two reliability rules from ADR-0006 are structural here:
+Shared by external source companions (Fetcher, Queue Materializer). Two
+reliability rules from ADR-0006/0007 are structural here:
 
 1. **Only complete Files become visible.** The data File is moved into the
    Watched Directory last, with `os.replace` (atomic rename), so `filedge run`
@@ -10,17 +11,18 @@ Two reliability rules from ADR-0006 are structural here:
    discovers) moved. The reverse order could expose a File whose sidecar has not
    landed yet.
 
-The **Fetch Lock** (CONTEXT.md) serializes promotion for one API Source so two
-concurrent fetches cannot race partial files into the landing zone. It is a
-filesystem lock — an atomically-created lock directory — owned by the Fetcher,
-not an Audit DB record and not part of the `filedge run` state machine.
+The **Fetch Lock** (CONTEXT.md) serializes promotion for one source — an API
+Source or a Queue Source — so two concurrent companions cannot race partial
+files into the landing zone. It is a filesystem lock (an atomically-created lock
+directory) owned by the companion, not an Audit DB record and not part of the
+`filedge run` state machine.
 """
 
 import os
 import shutil
 from dataclasses import dataclass
 
-from filedge.fetch.errors import FetchLockHeld
+from filedge.companion.errors import FetchLockHeld
 
 _LOCK_SUFFIX = ".lock"
 

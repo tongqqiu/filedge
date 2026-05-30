@@ -7,8 +7,8 @@ import os
 
 import pytest
 
-from filedge.fetch.errors import FetchLockHeld
-from filedge.fetch.promotion import FetchLock, promote
+from filedge.companion.errors import FetchLockHeld
+from filedge.companion.promotion import FetchLock, promote
 
 
 def _stage(tmp_path):
@@ -51,7 +51,7 @@ def test_data_file_is_never_promoted_without_its_sidecar(tmp_path, monkeypatch):
     data, sidecar = _stage(tmp_path)
     watched = tmp_path / "landing"
 
-    import filedge.fetch.promotion as promotion_mod
+    import filedge.companion.promotion as promotion_mod
 
     real_move = promotion_mod._move
     calls = {"n": 0}
@@ -113,7 +113,7 @@ def test_promote_falls_back_to_copy_when_rename_crosses_filesystems(tmp_path, mo
     data, sidecar = _stage(tmp_path)
     watched = tmp_path / "landing"
 
-    import filedge.fetch.promotion as promotion_mod
+    import filedge.companion.promotion as promotion_mod
 
     def cross_device(src, dest):
         raise OSError("EXDEV: cross-device link")
