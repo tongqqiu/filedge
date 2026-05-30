@@ -156,7 +156,11 @@ The internal mapping from a `connector.type` string (e.g. `bigquery`) to a Conne
 Automatic re-attempt of a FAILED File with exponential backoff, up to a configured max attempt count (default: 3). After the cap is reached, the File enters terminal FAILED state requiring explicit human re-queue (resetting state to PENDING). Prevents bad files from burning retries indefinitely.
 
 ### Strict Mode
-The validation policy for a File load: if any row fails schema validation, the entire File fails — no records are committed. This preserves the ability to reason about completeness. Lenient partial commits are not supported; a dead-letter quarantine is a future addition.
+The validation policy for a File load: if any row fails schema validation, the entire File fails — no records are committed. This preserves the ability to reason about completeness. Lenient partial commits are not supported by default. The one exception is an opt-in Dead-Letter Quarantine (ADR-0019), which commits good rows while setting bad rows aside under an accounted, threshold-gated policy; it is off unless a Pipeline enables it.
+
+### Dead-Letter Quarantine
+An opt-in, per-Pipeline policy (off by default; ADR-0019) that relaxes whole-File failure for a few bad rows without losing completeness reasoning. When enabled, rows that fail Transform or Field Encryption are written to an NDJSON quarantine sidecar (row number, offending column, error, raw row) in a configured location and the good rows still commit; the File's Audit Record stays `COMMITTED` but records `quarantined_row_count` alongside `committed_row_count`, so committed + quarantined = total. A configured failure threshold (max invalid fraction and/or count) preserves the Strict Mode signal: a File whose bad rows exceed the threshold fails wholesale — nothing committed, no sidecar. Quarantined rows never reach the Destination; a corrected sidecar is re-dropped through the normal ingestion path.
+_Avoid_: lenient mode, partial load, error table, reject file.
 
 ### Transform
 A declarative, configuration-driven step that maps source column names to destination column names and coerces types (e.g. string → integer, ISO string → timestamp). Rejects rows that don't conform to the declared schema. No business logic — that belongs in the application layer consuming the destination.
