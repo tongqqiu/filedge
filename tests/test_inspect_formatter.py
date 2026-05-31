@@ -39,6 +39,12 @@ def test_yaml_comment_block_contains_source_and_sample():
     assert "500" in output
 
 
+def test_yaml_header_uses_filedge_branding():
+    output = format_yaml([col("x")], source_path="data.csv", sample_rows=1000)
+    assert "filedge inspect" in output
+    assert "etl inspect" not in output
+
+
 # --- format_summary ---
 
 def test_summary_high_confidence_no_marker():
