@@ -30,9 +30,9 @@ filedge inspect data.csv --output pipeline.yaml
 Example summary (stderr) — one line per column with its inferred type and confidence; a leading `!` marks anything that is not high confidence, and notes (null counts, nested keys) appear indented beneath:
 
 ```
-! order_id                                string, ambiguous
+  order_id                                string, high
 ! amount                                  float, low, nulls=3
-! status                                  string, ambiguous
+  status                                  string, high
   created_at                              timestamp, high
 ```
 
