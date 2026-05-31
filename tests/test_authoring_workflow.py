@@ -213,7 +213,9 @@ def test_authoring_workflow_blocks_generation_until_confidence_tiers_acknowledge
 ):
     workspace = tmp_path / "ws"
     workspace.mkdir()
-    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n2,Bob\n")
+    # `name` mixes text and a numeric-looking value — genuinely conflicting
+    # evidence, so it infers as an ambiguous string the reviewer must acknowledge.
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n2,42\n")
     workflow = AuthoringWorkflow.start(
         file=src,
         workspace=str(workspace),
@@ -238,7 +240,9 @@ def test_authoring_workflow_blocks_generation_until_confidence_tiers_acknowledge
 def test_authoring_workflow_records_confidence_acknowledgements_in_runbook(tmp_path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
-    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n2,Bob\n")
+    # `name` mixes text and a numeric-looking value → ambiguous, so it surfaces
+    # for acknowledgement and is recorded in the runbook.
+    src = _file(tmp_path, "people.csv", "id,name\n1,Alice\n2,42\n")
     workflow = AuthoringWorkflow.start(
         file=src,
         workspace=str(workspace),
@@ -265,8 +269,7 @@ def test_authoring_workflow_blocks_cdc_generation_until_settings_are_valid(tmp_p
     )
 
     workflow.choose_write_mode("cdc")
-    workflow.acknowledge_confidence_tier("op")
-    workflow.acknowledge_confidence_tier("name")
+    _acknowledge_all(workflow)
 
     report = workflow.validate()
     failures = [f.message for f in report.findings_in(SCOPE_WRITE_MODE) if not f.ok]
@@ -290,8 +293,7 @@ def test_authoring_workflow_generates_cdc_pipeline_yaml(tmp_path):
 
     workflow.choose_write_mode("cdc")
     workflow.set_cdc_settings(business_keys=["id"], sequence_by="updated_at")
-    workflow.acknowledge_confidence_tier("op")
-    workflow.acknowledge_confidence_tier("name")
+    _acknowledge_all(workflow)
 
     result = workflow.generate()
     config = load_config(result.config_path)
@@ -324,7 +326,7 @@ def test_authoring_workflow_generates_chosen_connector_and_credentials(tmp_path)
     workflow.choose_connector("bigquery")
     workflow.set_connector_setting("project", "analytics-prod")
     workflow.set_connector_setting("dataset", "landing")
-    workflow.acknowledge_confidence_tier("name")
+    _acknowledge_all(workflow)
 
     result = workflow.generate()
     config = load_config(result.config_path)
@@ -350,7 +352,7 @@ def test_authoring_workflow_blocks_generation_when_connector_settings_missing(tm
     )
     workflow.choose_connector("bigquery")
     workflow.set_connector_setting("project", "analytics-prod")
-    workflow.acknowledge_confidence_tier("name")
+    _acknowledge_all(workflow)
 
     with pytest.raises(ValueError, match="dataset"):
         workflow.generate()
@@ -370,7 +372,7 @@ def test_authoring_workflow_never_exports_credential_values(tmp_path, monkeypatc
     workflow.choose_connector("bigquery")
     workflow.set_connector_setting("project", "analytics-prod")
     workflow.set_connector_setting("dataset", "landing")
-    workflow.acknowledge_confidence_tier("name")
+    _acknowledge_all(workflow)
 
     result = workflow.generate()
 

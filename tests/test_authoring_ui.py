@@ -16,7 +16,9 @@ def _csv_workflow(tmp_path):
     workspace = tmp_path / "ws"
     workspace.mkdir()
     src = tmp_path / "people.csv"
-    src.write_text("id,name\n1,Alice\n")
+    # `name` mixes text and a numeric-looking value → ambiguous, so these UI
+    # tests have a risky Confidence Tier to list, acknowledge, and gate on.
+    src.write_text("id,name\n1,Alice\n2,42\n")
     return AuthoringWorkflow.start(
         file=str(src),
         workspace=str(workspace),

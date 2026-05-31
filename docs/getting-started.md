@@ -46,10 +46,10 @@ The `columns:` block is written to **stdout**; a per-column confidence summary i
 The summary (stderr) flags each column's inferred type and confidence — a leading `!` marks anything that is not high confidence:
 
 ```
-! order_id                                string, ambiguous
+  order_id                                string, high
 ! amount                                  float, low, nulls=3
   order_date                              date, high
-! customer_name                           string, ambiguous
+  customer_name                           string, high
 ```
 
 The `columns:` block (stdout) is ready to paste into `pipeline.yaml`:

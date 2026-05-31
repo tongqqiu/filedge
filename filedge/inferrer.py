@@ -128,8 +128,19 @@ def infer_schema(rows: Iterator[dict], sample_rows: int = 1000) -> list[Inferred
             if formats == {ISO_DATE_FORMAT}:
                 results.append(InferredColumn(name, "date", confidence, null_count, total_seen))
             elif None not in formats:
+                # every value looks like a date, but in mixed / non-ISO formats —
+                # genuinely conflicting evidence.
                 results.append(InferredColumn(name, "string", "ambiguous", null_count, total_seen, [date_like_note(formats)]))
             else:
-                results.append(InferredColumn(name, "string", "ambiguous", null_count, total_seen))
+                numeric = sum(1 for v in non_null if _try_int(v) or _try_float(v))
+                if numeric:
+                    # Some values parse as numbers while others are text — conflicting
+                    # type evidence (e.g. a numeric column with dirty rows). Worth review.
+                    note = f"mixed values — {numeric} of {len(non_null)} look numeric"
+                    results.append(InferredColumn(name, "string", "ambiguous", null_count, total_seen, [note]))
+                else:
+                    # Clean text: no value parses as another type, so `string` is a
+                    # confident inference, not a fallback. Confidence tracks nulls.
+                    results.append(InferredColumn(name, "string", confidence, null_count, total_seen))
 
     return results
