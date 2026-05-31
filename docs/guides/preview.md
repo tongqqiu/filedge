@@ -27,11 +27,11 @@ filedge preview data.csv
 Output is a fixed-width ASCII table with row numbers:
 
 ```
-  # │ name    │ amount │ order_date
-────┼─────────┼────────┼────────────
-  1 │ Alice   │ 9.99   │ 2024-01-15
-  2 │ Bob     │ 14.50  │ 2024-01-16
-  3 │ Carol   │ 0.01   │ 2024-01-16
+# | name  | amount | order_date
+--+-------+--------+-----------
+1 | Alice | 9.99   | 2024-01-15
+2 | Bob   | 14.50  | 2024-01-16
+3 | Carol | 0.01   | 2024-01-16
 ```
 
 ---
@@ -45,13 +45,13 @@ filedge preview data.csv --start-row 5000 --rows 5
 ```
 
 ```
-     # │ name  │ amount │ order_date
-───────┼───────┼────────┼────────────
-  5000 │ Dave  │ n/a    │ 2024-03-01
-  5001 │ Eve   │ 7.25   │ 2024-03-01
-  5002 │ Frank │ 12.00  │ 2024-03-02
-  5003 │ Grace │ -      │ 2024-03-03
-  5004 │ Heidi │ 3.50   │ 2024-03-04
+   # | name  | amount | order_date
+-----+-------+--------+-----------
+5000 | Dave  | n/a    | 2024-03-01
+5001 | Eve   | 7.25   | 2024-03-01
+5002 | Frank | 12.00  | 2024-03-02
+5003 | Grace | -      | 2024-03-03
+5004 | Heidi | 3.50   | 2024-03-04
 ```
 
 This is especially useful for large files that are impractical to open in a text editor.

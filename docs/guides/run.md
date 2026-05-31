@@ -67,7 +67,7 @@ filedge run --dir ./incoming --config pipeline.yaml --json
 ```
 
 ```json
-{"run_id": "f3c8…", "started_at": "2026-05-24T14:00:00+00:00", "finished_at": "…", "duration_s": 1.42, "files_scanned": 12, "new_files": 3, "committed": 3, "failed": 0, "skipped": 0, "reclaimed": 0, "retried": 0, "rows_committed": 4218, "bytes_processed": 184320}
+{"run_id": "f3c8…", "started_at": "2026-05-24T14:00:00+00:00", "finished_at": "…", "duration_s": 1.42, "files_scanned": 12, "new_files": 3, "committed": 3, "failed": 0, "skipped": 0, "reclaimed": 0, "retried": 0, "rows_committed": 4218, "quarantined_rows": 0, "bytes_processed": 184320}
 ```
 
 `run_id` is a UUID4 unique to each Run. It is stamped on every audit row

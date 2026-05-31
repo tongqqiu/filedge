@@ -159,6 +159,11 @@ filedge run --dir ./incoming --config pipeline.yaml --audit-db-url sqlite:///fil
 # Committed: 1  Failed: 0  Skipped: 0  New: 1  Reclaimed: 0  Retried: 0
 ```
 
+The one-line summary above is printed to stdout. `filedge run` also emits structured
+progress logs (one JSON object per line) to **stderr** — handy in production, noisy
+at the prompt. Redirect with `2>/dev/null` to see only the summary, or pass
+`--log-format text` for human-readable logs. See the [Run guide](guides/run.md).
+
 `--audit-db-url` can also be set via the `FILEDGE_AUDIT_DB_URL` environment variable.
 
 Check status any time:
