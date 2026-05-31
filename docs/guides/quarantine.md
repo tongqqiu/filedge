@@ -12,6 +12,125 @@ A **failure threshold** keeps this honest: if too many rows are bad, the File fa
 wholesale (nothing committed, no sidecar) exactly like Strict Mode. A few stragglers
 quarantine; a systemically broken File still fails loudly.
 
+## Try the full loop
+
+This runnable walkthrough takes a partner File with two bad rows all the way through:
+**partial commit → sidecar → status → audit export → investigate → re-drop → corrected
+re-ingest**. The rest of the guide then explains each piece in detail.
+
+Set up a workspace (absolute paths, so it works from any directory):
+
+```bash
+mkdir -p /tmp/filedge-quarantine-demo/landing
+cd /tmp/filedge-quarantine-demo
+
+cat > pipeline.yaml <<'YAML'
+format: ndjson
+dest_table: partner_facts
+connector:
+  type: sqlite
+  url: sqlite:////tmp/filedge-quarantine-demo/dest.db
+quarantine:
+  enabled: true
+  dir: /tmp/filedge-quarantine-demo/quarantine
+  max_invalid_fraction: 0.5
+  max_invalid_rows: 100
+columns:
+  - source: filed
+    dest: filed
+    type: string
+    required: true
+  - source: val
+    dest: value
+    type: float
+    required: true
+YAML
+
+cat > landing/partner-facts.ndjson <<'NDJSON'
+{"filed": "2024-11-01", "val": 391035000000}
+{"filed": "2024-11-01", "val": "n/a"}
+{"filed": "2024-08-01", "val": 85777000000}
+{"filed": "2024-05-01", "val": ""}
+{"filed": "2024-02-01", "val": 119575000000}
+NDJSON
+```
+
+**1. Run it.** Two of five rows have a bad `val` (40%, under the 50% threshold), so the
+good rows commit and the bad rows quarantine:
+
+```bash
+filedge run \
+  --dir /tmp/filedge-quarantine-demo/landing \
+  --config /tmp/filedge-quarantine-demo/pipeline.yaml \
+  --audit-db-url sqlite:////tmp/filedge-quarantine-demo/audit.db \
+  --no-progress
+```
+
+```
+Committed: 1  Failed: 0  Skipped: 0  New: 1  Reclaimed: 0  Retried: 0  Quarantined rows: 2
+```
+
+**2. Confirm the partial in `status`:**
+
+```bash
+filedge status --audit-db-url sqlite:////tmp/filedge-quarantine-demo/audit.db
+```
+
+```
+COMMITTED:  1
+FAILED:     0
+QUARANTINED ROWS: 2
+```
+
+**3. See it in the Audit Export.** The File is badged distinctly from a clean commit,
+with its quarantined count and sidecar path:
+
+```bash
+filedge export-audit \
+  --audit-db-url sqlite:////tmp/filedge-quarantine-demo/audit.db \
+  --output /tmp/filedge-quarantine-demo/site/index.html
+```
+
+**4. Investigate the sidecar** (see [Investigate a sidecar](#investigate-a-sidecar) below):
+
+```bash
+SC=$(ls /tmp/filedge-quarantine-demo/quarantine/*.quarantine.ndjson)
+jq -r '"\(.row_number)\t\(.column)\t\(.error)"' "$SC"
+```
+
+```
+2	val	Cannot coerce 'val'='n/a' to float: could not convert string to float: 'n/a'
+4	val	Required column 'val' is empty
+```
+
+**5. Re-drop the bad rows into a clean NDJSON File:**
+
+```bash
+filedge redrop-quarantine --sidecar "$SC"
+```
+
+```
+Wrote 2 row(s) to /tmp/filedge-quarantine-demo/quarantine/partner-facts.<hash>.redrop.ndjson
+```
+
+**6. Correct the values and re-ingest.** Fix `val` in the `.redrop.ndjson` File, move it
+into the landing directory, and run again — the corrected File ingests under a **new
+Content Hash** (ADR-0002), leaving the original File's Audit Record intact:
+
+```bash
+# edit the .redrop.ndjson to replace "n/a" and "" with real numbers, then:
+mv /tmp/filedge-quarantine-demo/quarantine/partner-facts.*.redrop.ndjson \
+   /tmp/filedge-quarantine-demo/landing/partner-facts-corrected.ndjson
+filedge run \
+  --dir /tmp/filedge-quarantine-demo/landing \
+  --config /tmp/filedge-quarantine-demo/pipeline.yaml \
+  --audit-db-url sqlite:////tmp/filedge-quarantine-demo/audit.db \
+  --no-progress
+```
+
+You now have two `COMMITTED` Files and all five rows in the destination — the three that
+landed first plus the two corrected ones.
+
 ## Enable quarantine
 
 Quarantine is off by default and opt-in per Pipeline. Add a `quarantine:` block to
