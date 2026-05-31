@@ -114,3 +114,64 @@ def test_redrop_no_warning_for_ndjson_pipeline(tmp_path):
 
     assert result.exit_code == 0, result.output
     assert "Warning" not in result.output
+
+
+def test_default_output_appends_suffix_for_non_sidecar_name(tmp_path):
+    # A file not named *.quarantine.ndjson still gets a re-drop output alongside it.
+    sidecar = tmp_path / "weird-name.ndjson"
+    _write_sidecar(sidecar, *_sidecar_records())
+
+    result = CliRunner().invoke(cli, ["redrop-quarantine", "--sidecar", str(sidecar)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "weird-name.ndjson.redrop.ndjson").exists()
+
+
+def test_pipeline_and_config_are_mutually_exclusive(tmp_path):
+    sidecar = tmp_path / "data.quarantine.ndjson"
+    _write_sidecar(sidecar, *_sidecar_records())
+
+    result = CliRunner().invoke(
+        cli,
+        ["redrop-quarantine", "--sidecar", str(sidecar),
+         "--pipeline", "orders", "--config", str(tmp_path / "pipeline.yaml")],
+    )
+
+    assert result.exit_code == 2
+    assert "not both" in result.output
+
+
+def test_pipeline_resolution_checks_format(tmp_path):
+    sidecar = tmp_path / "data.quarantine.ndjson"
+    _write_sidecar(sidecar, *_sidecar_records())
+
+    ws = tmp_path / "ws"
+    folder = ws / "orders"
+    folder.mkdir(parents=True)
+    (folder / "pipeline.yaml").write_text(
+        "format: csv\n"
+        "dest_table: items\n"
+        "connector:\n  type: sqlite\n  url: sqlite:///x.db\n"
+        "columns:\n  - source: id\n    dest: id\n    type: string\n"
+    )
+    (ws / "pipeline-registry.yaml").write_text(
+        "version: 1\n"
+        "pipelines:\n"
+        "  - id: orders\n"
+        "    folder: orders\n"
+        "    watched_directory: ./landing\n"
+        "    audit_db: env:REDROP_PIPELINE_AUDIT\n"
+        "    audit_export: ./site/index.html\n"
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["redrop-quarantine", "--sidecar", str(sidecar),
+         "--pipeline", "orders", "--workspace", str(ws)],
+        env={"REDROP_PIPELINE_AUDIT": f"sqlite:///{tmp_path}/audit.db"},
+    )
+
+    assert result.exit_code == 0, result.output
+    # Resolving the Pipeline reaches its csv format and warns about NDJSON re-drop.
+    assert "Warning" in result.output
+    assert "csv" in result.output
