@@ -20,7 +20,6 @@ Mirrors:
 
 import json
 
-import pytest
 from click.testing import CliRunner
 
 from filedge.cli import cli

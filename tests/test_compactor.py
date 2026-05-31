@@ -41,6 +41,17 @@ def output(tmp_path):
     return out
 
 
+def test_ensure_output_dir_uses_filesystem_makedirs():
+    # Remote output (out_fs is not None) creates the directory via the filesystem.
+    fsspec = pytest.importorskip("fsspec")
+    from filedge.compactor import _ensure_output_dir
+
+    fs = fsspec.filesystem("memory")
+    _ensure_output_dir(fs, "/out/remote-dir")
+
+    assert fs.isdir("/out/remote-dir")
+
+
 def test_compact_creates_missing_output_dir(source, tmp_path):
     # The output directory need not exist beforehand — compact creates it, like
     # the guide's `--output ./compacted` implies (no mkdir step).
