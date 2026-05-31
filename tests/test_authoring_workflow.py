@@ -320,6 +320,7 @@ def test_authoring_workflow_generates_chosen_connector_and_credentials(tmp_path)
         "databricks",
         "duckdb",
         "postgres",
+        "snowflake",
         "sqlite",
     ]
 

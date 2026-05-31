@@ -450,11 +450,11 @@ def test_draft_from_config_rejects_unknown_connector():
         {
             "format": "csv",
             "dest_table": "t",
-            "connector": {"type": "snowflake"},
+            "connector": {"type": "redshift"},
             "columns": [{"source": "id", "dest": "id", "type": "integer"}],
         }
     )
-    with pytest.raises(ValueError, match="snowflake"):
+    with pytest.raises(ValueError, match="redshift"):
         draft_from_config(cfg)
 
 

@@ -7,7 +7,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-**Files are the universal building block of data engineering.** Whether data starts in Kafka, Stripe's API, a partner SFTP, or a CDC stream, every reliable pipeline eventually crystallizes it into a file before it touches the warehouse. Filedge is the load boundary built around that fact: atomic per-file ingestion, content-hash idempotency, and a full audit trail — into SQLite, PostgreSQL, BigQuery, Databricks, or DuckDB.
+**Files are the universal building block of data engineering.** Whether data starts in Kafka, Stripe's API, a partner SFTP, or a CDC stream, every reliable pipeline eventually crystallizes it into a file before it touches the warehouse. Filedge is the load boundary built around that fact: atomic per-file ingestion, content-hash idempotency, and a full audit trail — into SQLite, PostgreSQL, BigQuery, Databricks, Snowflake, or DuckDB.
 
 ## Why files?
 
@@ -42,6 +42,7 @@ uv sync --extra dev                          # core (SQLite)
 uv sync --extra dev --extra postgres         # + PostgreSQL
 uv sync --extra dev --extra bigquery         # + BigQuery
 uv sync --extra dev --extra databricks       # + Databricks
+uv sync --extra dev --extra snowflake        # + Snowflake
 uv sync --extra dev --extra duckdb           # + DuckDB
 uv sync --extra dev --extra authoring        # + Authoring UI
 uv sync --extra dev --extra excel            # + Excel (.xlsx)
@@ -99,6 +100,7 @@ The destination is configured via a `connector:` block in `pipeline.yaml`. Built
 | PostgreSQL   | `postgres`   | `COPY` bulk load; idempotent via per-hash DELETE |
 | BigQuery     | `bigquery`   | NDJSON staging + load job; job-ID-keyed idempotency (7-day window) |
 | Databricks   | `databricks` | Unity Catalog volume staging |
+| Snowflake    | `snowflake`  | Idempotent via per-hash DELETE + INSERT in one transaction |
 | DuckDB       | `duckdb`     | File-based; single-writer, fails fast if locked |
 
 See [docs/guides/run.md](docs/guides/run.md) for full connector config, credentials, and live-integration test setup.

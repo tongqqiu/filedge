@@ -148,6 +148,63 @@ uv sync --extra duckdb
 
 ---
 
+## Snowflake
+
+```yaml
+connector:
+  type: snowflake
+  account: myorg-myaccount
+  user: FILEDGE_LOADER
+  warehouse: LOAD_WH
+  database: RAW
+  schema: PUBLIC
+  # role: FILEDGE_ROLE   # optional
+```
+
+The password is supplied at runtime via the `SNOWFLAKE_PASSWORD` environment
+variable (or secrets mount) — never written to `pipeline.yaml`.
+
+Install the driver:
+
+```bash
+uv sync --extra snowflake
+```
+
+Idempotency in append mode is achieved the same way as PostgreSQL: a
+`DELETE WHERE _source_file_hash = <hash>` followed by a batched `INSERT`, run in
+one transaction. Re-loading the same File is a no-op; a failed load rolls back
+and leaves the table untouched. CDC files apply row-by-row in a transaction.
+
+!!! note "Quoted identifiers"
+    Every identifier is double-quoted, so column and table names are stored in
+    Snowflake exactly as written in `pipeline.yaml` (e.g. `order_id`,
+    `_source_file_hash`) rather than folded to upper case. Reference an
+    `_source_file_hash` lineage query with the same lower-case, quoted name.
+
+### Snowflake integration tests
+
+Live Snowflake integration tests are opt-in and skipped by default. They require
+an account, warehouse, database, and schema the user can create tables in:
+
+```bash
+export FILEDGE_SNOWFLAKE_INTEGRATION=1
+export SNOWFLAKE_ACCOUNT=myorg-myaccount
+export SNOWFLAKE_USER=FILEDGE_LOADER
+export SNOWFLAKE_WAREHOUSE=LOAD_WH
+export SNOWFLAKE_DATABASE=RAW
+export SNOWFLAKE_SCHEMA=PUBLIC
+export SNOWFLAKE_PASSWORD=...
+uv sync --extra dev --extra snowflake
+uv run pytest tests/test_connector_snowflake_integration.py
+```
+
+The included `Snowflake Integration` workflow reads `SNOWFLAKE_ACCOUNT`,
+`SNOWFLAKE_USER`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA`
+(and optional `SNOWFLAKE_ROLE`) from repository variables and `SNOWFLAKE_PASSWORD`
+from secrets.
+
+---
+
 ## Adding a connector
 
 Each connector implements a two-method interface:

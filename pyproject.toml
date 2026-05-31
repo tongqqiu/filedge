@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "filedge"
 version = "0.4.0"
-description = "Atomic file ingestion with content-hash idempotency and a full audit trail — into SQLite, PostgreSQL, BigQuery, Databricks, or DuckDB."
+description = "Atomic file ingestion with content-hash idempotency and a full audit trail — into SQLite, PostgreSQL, BigQuery, Databricks, Snowflake, or DuckDB."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
@@ -61,6 +61,7 @@ kafka = ["confluent-kafka>=2.0"]
 postgres = ["psycopg2-binary>=2.9.12"]
 bigquery = ["google-cloud-bigquery>=3.0"]
 databricks = ["databricks-sql-connector>=3.0", "fsspec>=2023.0"]
+snowflake = ["snowflake-connector-python>=3.0"]
 duckdb = ["duckdb>=1.0", "pyarrow>=14.0"]
 parquet = ["pyarrow>=14.0"]
 excel = ["openpyxl>=3.1"]
