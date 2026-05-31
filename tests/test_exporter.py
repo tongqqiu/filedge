@@ -8,6 +8,7 @@ from filedge.db import (
     mark_committed,
     mark_failed,
 )
+from filedge.audit_records import export_records
 from filedge.exporter import export_audit
 
 
@@ -95,3 +96,56 @@ def test_export_html_includes_title(audit_db, tmp_path):
 
     html = output.read_text()
     assert "KYC Documents Pipeline" in html
+
+
+def test_export_record_carries_quarantine_fields(audit_db):
+    insert_pending(audit_db, "partner.csv", "hash-q")
+    claim_processing(audit_db, "hash-q")
+    mark_committed(
+        audit_db,
+        "hash-q",
+        row_count=98,
+        quarantined_row_count=2,
+        quarantine_path="/q/partner.hash-q.quarantine.ndjson",
+    )
+    audit_db.commit()
+
+    records = export_records(audit_db)
+
+    assert len(records) == 1
+    assert records[0].quarantined_row_count == 2
+    assert records[0].quarantine_path == "/q/partner.hash-q.quarantine.ndjson"
+
+
+def test_export_html_distinguishes_partial_commit_from_clean(audit_db, tmp_path):
+    insert_pending(audit_db, "partner.csv", "hash-partial")
+    insert_pending(audit_db, "clean.csv", "hash-clean")
+    mark_committed(
+        audit_db,
+        "hash-partial",
+        row_count=98,
+        quarantined_row_count=2,
+        quarantine_path="/q/partner.hash-partial.quarantine.ndjson",
+    )
+    mark_committed(audit_db, "hash-clean", row_count=100)
+    audit_db.commit()
+
+    output = tmp_path / "index.html"
+    export_audit(audit_db, str(output))
+
+    html = output.read_text()
+    # The partial commit is visibly flagged with its quarantined count and sidecar path.
+    assert "quarantined" in html
+    assert "/q/partner.hash-partial.quarantine.ndjson" in html
+
+
+def test_export_html_clean_commit_has_no_quarantine_indicator(audit_db, tmp_path):
+    insert_pending(audit_db, "clean.csv", "hash-clean")
+    mark_committed(audit_db, "hash-clean", row_count=100)
+    audit_db.commit()
+
+    output = tmp_path / "index.html"
+    export_audit(audit_db, str(output))
+
+    html = output.read_text()
+    assert "quarantined" not in html.lower()
