@@ -10,6 +10,52 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-31
+
+This release makes Dead-Letter Quarantine operable end-to-end, sharpens Schema
+Inference, and hardens the client-facing guides so they stay accurate.
+
+### Highlights
+
+- **Quarantine is operable end-to-end.** A quarantined File is now visibly
+  distinct in the Audit Export — its quarantined-row count and sidecar path are
+  shown, so a partial commit no longer reads as a clean `COMMITTED` File. A new
+  `filedge redrop-quarantine` command unwraps a quarantine sidecar back into a
+  clean, re-droppable NDJSON File, so corrected rows re-ingest on the normal
+  audited path under a new Content Hash.
+- **Sharper Schema Inference.** `filedge inspect` now reports a clean text
+  column as **high** confidence instead of flagging every text column
+  **ambiguous**, so the review signal means something. `string` is reported
+  ambiguous only on genuinely conflicting evidence — mixed numeric/text values,
+  mixed or non-ISO date formats, or nested objects/arrays (ADR-0008 amended).
+
+### Added
+
+- `filedge redrop-quarantine --sidecar <path>` — re-drop a quarantine sidecar
+  as a clean NDJSON File, with an optional `--pipeline`/`--config` NDJSON
+  re-drop compatibility check.
+- Quarantine surfaced in the Audit Export: per-File quarantined-row count and a
+  quarantine-sidecar path, badged distinctly from a clean commit.
+
+### Fixed
+
+- `filedge compact` now creates its `--output` directory when it does not exist,
+  instead of failing with a cryptic "No such file or directory".
+- `filedge inspect` no longer labels clean text columns `ambiguous`; its YAML
+  header is also correctly branded `filedge inspect` (was `etl inspect`).
+
+### Documentation
+
+- New [Quarantine guide](docs/guides/quarantine.md) with a runnable full-loop
+  walkthrough (partial commit → status → Audit Export → investigate → re-drop)
+  and a DuckDB/jq sidecar-investigation recipe.
+- Adoption accuracy pass: the Getting Started, inspect, preview, run, and EDGAR
+  demo guides were corrected against real CLI output.
+- An executable guide walkthrough harness runs each guide's commands through the
+  real CLI in CI, so the guides can no longer drift silently.
+- ADR-0020 (Iceberg table format via the Materializer) and ADR-0021 (companion
+  output as NDJSON/Parquet at the boundary) recorded.
+
 ## [0.3.0] - 2026-05-30
 
 This pre-release line expands Filedge from the ingestion core into a fuller
@@ -125,6 +171,7 @@ Authoring UI. Plus column-level Field Encryption and two new file formats.
 - ADR-0012 through ADR-0017 added to the architecture decisions index.
 - Versioned documentation site deployment.
 
-[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/tongqqiu/filedge/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tongqqiu/filedge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tongqqiu/filedge/compare/v0.1.2...v0.2.0
