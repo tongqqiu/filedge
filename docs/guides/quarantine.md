@@ -90,16 +90,23 @@ jq -r '"\(.column)=\(.row[.column])"' \
 ### Aggregate with DuckDB
 
 DuckDB reads NDJSON natively and handles sidecars with millions of rows comfortably —
-so even a large sidecar is queryable in a one-liner. Filedge already depends on
-DuckDB for its DuckDB Connector, so it's likely already available.
+so even a large sidecar is queryable in a one-liner.
+
+> These examples use the standalone **DuckDB CLI** (`brew install duckdb`, or see
+> [duckdb.org/docs/installation](https://duckdb.org/docs/installation/)). Filedge's
+> `duckdb` extra installs the *Python library*, not the CLI — if you have that
+> instead, run the same SQL via `python -c "import duckdb; print(duckdb.sql('''…'''))"`.
+>
+> Note that `column` is a SQL reserved word, so the sidecar's `column` field must be
+> quoted as `"column"` in every query below.
 
 Group the failures by column to see where the data quality problem actually is:
 
 ```bash
 duckdb -c "
-  SELECT column, count(*) AS bad_rows
+  SELECT \"column\", count(*) AS bad_rows
   FROM read_json_auto('orders-2026-03-15.a1b2c3d4e5f6.quarantine.ndjson')
-  GROUP BY column
+  GROUP BY \"column\"
   ORDER BY bad_rows DESC;
 "
 ```
@@ -129,7 +136,7 @@ Inspect specific bad rows — the raw row is nested under `row`:
 duckdb -c "
   SELECT row_number, row.id AS id, row.amount AS amount, error
   FROM read_json_auto('orders-2026-03-15.a1b2c3d4e5f6.quarantine.ndjson')
-  WHERE column = 'amount'
+  WHERE \"column\" = 'amount'
   LIMIT 20;
 "
 ```
