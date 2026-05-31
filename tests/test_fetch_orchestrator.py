@@ -301,3 +301,40 @@ def test_edgar_second_fetch_with_no_newer_facts_is_noop(tmp_path):
     assert second.record_count == 0
     assert os.listdir(landing)
     assert sum(name.endswith(".ndjson") for name in os.listdir(landing)) == 1
+
+
+def _stripe_sources_yaml(tmp_path):
+    staging = tmp_path / "staging"
+    landing = tmp_path / "landing"
+    state = tmp_path / "state"
+    cfg = tmp_path / "sources.yaml"
+    cfg.write_text(
+        "version: 1\n"
+        "sources:\n"
+        "  - name: charges\n"
+        "    type: stripe\n"
+        "    resource: charges\n"
+        "    credential_env: STRIPE_API_KEY\n"
+        f"    staging_dir: {staging}\n"
+        f"    watched_directory: {landing}\n"
+        f"    state_dir: {state}\n"
+    )
+    return str(cfg), staging, landing, state
+
+
+def test_stripe_fetch_records_resource_in_manifest_source_range(tmp_path):
+    cfg, staging, landing, state = _stripe_sources_yaml(tmp_path)
+    records = [
+        {"id": "ch_1", "created": 1700000001},
+        {"id": "ch_2", "created": 1700000002},
+    ]
+
+    outcome = run_fetch(cfg, "charges", client=FakeClient(_result(records, "1700000002")))
+
+    assert outcome.record_count == 2
+    assert outcome.to_cursor == "1700000002"
+    result = discover_and_parse(outcome.data_path)
+    assert result.metadata.source_type == "stripe"
+    assert result.metadata.source_range["resource"] == "charges"
+    assert result.metadata.source_range["cursor_field"] == "created"
+    assert result.metadata.source_range["to"] == "1700000002"

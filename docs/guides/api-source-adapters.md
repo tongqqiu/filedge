@@ -1,128 +1,117 @@
-# How to add an API Source adapter
+# How to add an API Source
 
-The Reference Fetcher keeps API-specific behavior behind an API Source adapter.
-The Fetcher orchestration only knows how to:
+The Reference Fetcher keeps API-specific behavior at a small seam. The Fetcher
+orchestration (`filedge/fetch/orchestrator.py`) only knows how to:
 
-1. load a Sources Config entry into a plan;
+1. load a Sources Config entry into a `FetchPlan`;
 2. read the stored cursor;
-3. ask the adapter for records;
-4. publish one complete File with a Source Manifest;
+3. ask the source client for records for that cursor window;
+4. publish one complete File with a Source Manifest under the Fetch Lock;
 5. advance the cursor after promotion.
 
-That seam is the extension point. A new API Source should add behavior in one
-adapter instead of adding conditionals across the Fetcher client and
-orchestrator.
+Steps 4 and 5 — the reliability rules — are shared and never change per source.
+Adding a new API Source means describing its request/pagination/cursor shape; it
+does **not** mean reimplementing staging, manifests, the Fetch Lock, or cursor
+advancement.
 
-## Adapter responsibilities
+## What a source owns
 
-An adapter owns:
+- request URL and query parameters;
+- request headers and an optional bearer credential (resolved from an env var,
+  never stored in the config);
+- its pagination shape (or single-document fetch);
+- the JSON path its records live under;
+- the field the incremental cursor is derived from;
+- its Source Manifest range metadata.
 
-- request URLs and query parameters;
-- request headers and optional bearer credentials;
-- pagination or single-document fetch shape;
-- record extraction path;
-- cursor advancement;
-- Source Manifest range metadata.
+It does **not** own writing NDJSON, emitting Source Manifests, holding the Fetch
+Lock, promoting into the Watched Directory, or advancing the cursor store.
 
-It should not own:
+## The three touch points
 
-- writing NDJSON files;
-- emitting Source Manifests;
-- holding the Fetch Lock;
-- promoting into the Watched Directory;
-- advancing the cursor store.
+A source is expressed entirely through the `FetchPlan` dataclass, so adding one
+is a small, predictable change:
 
-Those reliability rules live in the shared companion publish module.
+1. **`filedge/fetch/sources_config.py`** — add a `_parse_<type>_source(raw)`
+   that validates the entry and returns a `FetchPlan`, and dispatch to it in
+   `_parse_source`. The plan's `cursor_mode`, `record_path`, `cursor_field`,
+   `cursor_param`, and any type-specific fields encode the behavior.
+2. **`filedge/fetch/source_client.py`** — only if the API needs a *new
+   pagination shape*. The client has three `cursor_mode`s today:
+     - `server` — the cursor is a query param and the API returns only newer
+       records, paged by page number (the generic HTTP / GitHub default);
+     - `client` — one document is fetched and records are filtered by
+       `cursor_field` locally (EDGAR);
+     - `stripe` — a cursor-paginated list: walk `starting_after` while
+       `has_more` is true, taking records from `data`.
+   If your API fits an existing mode, you write **no client code** — just set
+   `cursor_mode` in the parser. A genuinely new shape adds one `_fetch_<mode>`
+   method plus its dispatch line.
+3. **`filedge/fetch/orchestrator.py`** — add a branch to `_source_range` if the
+   manifest should carry type-specific provenance (EDGAR records CIK/taxonomy;
+   Stripe records the resource). Omit it and the generic `cursor_param`/`from`/
+   `to` range is used.
 
-## Files to touch
+## Worked example: the Stripe source
 
-For a new source type, expect a small change set:
+Stripe was added as exactly this change set — a new `stripe` pagination dialect.
 
-- `filedge/fetch/source_adapters.py` — add the adapter;
-- `filedge/fetch/sources_config.py` — parse the source-specific config into the adapter;
-- `tests/test_fetch_sources_config.py` — prove config parsing and validation;
-- `tests/test_fetch_source_client.py` or a source-specific client test — prove URL/header/cursor behavior with a fake transport;
-- `tests/test_fetch_orchestrator.py` — only if the end-to-end manifest or ingest behavior changes.
+The Sources Config entry only needs the resource and the env var holding the
+secret key; `api_base` defaults to the live API but can point at a mock:
 
-The Fetcher orchestrator should not need a new `if source_type == ...` branch.
-
-## Tiny generic adapter example
-
-This example is intentionally not a supported source. It shows the shape for an
-API that returns one JSON document with records under `data` and needs
-client-side cursor filtering by `updated_at`.
-
-```python
-from dataclasses import dataclass
-from typing import List, Optional
-
-from filedge.fetch.source_adapters import HttpApiSource, dotted_get
-
-
-@dataclass(frozen=True)
-class AcmeEventsSource(HttpApiSource):
-    account_id: str = ""
-
-    def fetch_records(self, client, cursor: Optional[str]) -> List[dict]:
-        records = client.request_records(
-            f"{self.url}/accounts/{self.account_id}/events",
-            headers=self.request_headers(),
-            record_path="data",
-        )
-        return [
-            record for record in records
-            if cursor is None or str(dotted_get(record, self.cursor_field)) > cursor
-        ]
-
-    def source_range(
-        self, from_cursor: Optional[str], to_cursor: Optional[str]
-    ) -> dict:
-        return {
-            "cursor_param": self.cursor_param,
-            "cursor_field": self.cursor_field,
-            "from": from_cursor,
-            "to": to_cursor,
-            "account_id": self.account_id,
-        }
+```yaml
+version: 1
+sources:
+  - name: stripe-charges
+    type: stripe
+    resource: charges
+    credential_env: STRIPE_API_KEY
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    # api_base: http://localhost:12111   # e.g. stripe-mock, for credential-free runs
 ```
 
-Then parse the matching Sources Config entry into that adapter:
+The parser turns that into a `FetchPlan` with `cursor_mode="stripe"`,
+`record_path="data"`, `cursor_field="created"`, and `cursor_param="created[gt]"`
+(the incremental filter). The client's `_fetch_stripe` walks `starting_after`
+across pages until `has_more` is false; `_source_range` records the `resource`.
+Nothing in staging, manifest emission, the Fetch Lock, promotion, or cursor
+advancement changed.
 
-```python
-source=AcmeEventsSource(
-    source_name=raw["name"],
-    source_type="acme",
-    url=raw["url"],
-    cursor_param=cursor.get("param", cursor["field"]),
-    cursor_field=cursor["field"],
-    query=query,
-    headers=headers,
-    credential_env=raw.get("credential_env"),
-    account_id=str(raw["account_id"]),
-)
-```
+## Testing without a real account
 
-## Test the seam
+Source clients are testable without network or credentials, because the HTTP
+transport is injectable:
 
-Use a fake transport and assert the adapter-facing behavior:
+- **Unit-test the fetch shape with a fake transport.** `HttpSourceClient(transport=...)`
+  takes a `(url, headers) -> (status, headers, body)` callable. Feed it
+  canned, source-shaped JSON and assert the URL/query, headers/bearer, record
+  extraction, pagination, and `next_cursor`. This is how the Stripe pagination,
+  `created[gt]` incremental filter, and bearer auth are all tested — no Stripe
+  account involved.
+- **Integration-smoke against a mock when one exists.** Stripe publishes
+  [`stripe-mock`](https://github.com/stripe/stripe-mock), a server that replays
+  responses from its OpenAPI spec. Point `api_base` at it for a credential-free
+  end-to-end run; a real test-mode key stays optional and never required in CI.
 
-- expected URL was requested;
-- expected headers were sent;
+What to assert in the unit test:
+
+- the expected URL/query parameters were requested;
+- headers (and bearer credential, when configured) were sent;
 - records are extracted from the expected JSON path;
-- cursor filtering includes only records newer than the stored cursor;
-- `next_cursor` advances to the largest cursor field in emitted records;
-- `source_range` contains the source-specific range metadata.
-
-Avoid network calls in unit tests. A real upstream smoke test can be added later
-behind an integration marker when the source is important enough to support.
+- pagination terminates correctly and merges all pages;
+- `next_cursor` advances to the largest `cursor_field` value seen;
+- `source_range` carries the source-specific metadata.
 
 ## Keep the boundary clear
 
-Adding an adapter does not make Filedge the loader of record. The Reference
-Fetcher is still an external companion: it materializes complete Files and
-`filedge run` ingests those Files through the normal audited path.
+Adding a source does not make Filedge the loader of record. The Reference
+Fetcher is still an external companion (ADR-0018): it materializes complete
+Files, and `filedge run` ingests those Files through the normal audited path.
 
 ## Related
 
 - [API sources](api-sources.md) — the Fetcher pattern and reference companion
-- [Source manifests](source-manifests.md) — the provenance an adapter must emit
+- [Source manifests](source-manifests.md) — the provenance every source emits
+- [EDGAR demo](edgar-demo.md) — the `client`-mode source end to end

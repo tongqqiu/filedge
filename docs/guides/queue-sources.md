@@ -144,7 +144,7 @@ connector:
   project: my-gcp-project
   dataset: raw
 
-destination_table: raw_orders
+dest_table: raw_orders
 write_mode: append
 
 columns:

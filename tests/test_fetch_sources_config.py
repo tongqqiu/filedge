@@ -250,3 +250,62 @@ sources:
 """
     with pytest.raises(SourcesConfigError, match="cik"):
         load_sources(_write(tmp_path, text), "apple-revenues")
+
+
+# --- Stripe source -------------------------------------------------------------
+
+_STRIPE = """\
+version: 1
+sources:
+  - name: stripe-charges
+    type: stripe
+    resource: charges
+    credential_env: STRIPE_API_KEY
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+"""
+
+
+def test_loads_a_stripe_source_with_sensible_defaults(tmp_path):
+    plan = load_sources(_write(tmp_path, _STRIPE), "stripe-charges")
+
+    assert plan.source_type == "stripe"
+    assert plan.cursor_mode == "stripe"
+    assert plan.resource == "charges"
+    assert plan.url == "https://api.stripe.com/v1/charges"
+    assert plan.record_path == "data"
+    assert plan.cursor_field == "created"
+    assert plan.cursor_param == "created[gt]"
+    assert plan.credential_env == "STRIPE_API_KEY"
+
+
+def test_stripe_api_base_override_points_at_a_mock(tmp_path):
+    text = _STRIPE.replace(
+        "    credential_env: STRIPE_API_KEY\n",
+        "    credential_env: STRIPE_API_KEY\n    api_base: http://localhost:12111\n",
+    )
+    plan = load_sources(_write(tmp_path, text), "stripe-charges")
+    assert plan.url == "http://localhost:12111/v1/charges"
+
+
+def test_stripe_requires_resource_and_credential_env(tmp_path):
+    no_resource = _STRIPE.replace("    resource: charges\n", "")
+    with pytest.raises(SourcesConfigError, match="resource"):
+        load_sources(_write(tmp_path, no_resource), "stripe-charges")
+
+    no_cred = _STRIPE.replace("    credential_env: STRIPE_API_KEY\n", "")
+    with pytest.raises(SourcesConfigError, match="credential_env"):
+        load_sources(_write(tmp_path, no_cred), "stripe-charges")
+
+
+def test_stripe_version_header_is_set_when_given(tmp_path):
+    text = _STRIPE + "    stripe_version: '2024-06-20'\n"
+    plan = load_sources(_write(tmp_path, text), "stripe-charges")
+    assert plan.headers.get("Stripe-Version") == "2024-06-20"
+
+
+def test_stripe_cursor_must_be_a_mapping(tmp_path):
+    text = _STRIPE + "    cursor: not-a-mapping\n"
+    with pytest.raises(SourcesConfigError, match="cursor"):
+        load_sources(_write(tmp_path, text), "stripe-charges")

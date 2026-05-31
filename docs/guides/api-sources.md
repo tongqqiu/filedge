@@ -174,17 +174,39 @@ columns:
 
 ### 1. Fetch to files
 
-Configure your Fetcher to write complete NDJSON files to a staging prefix, then promote them to the Watched Directory:
+The Reference Fetcher has a first-party `stripe` source. Declare it in a Sources
+Config — only the resource and the env var holding the secret key are required:
 
+```yaml
+version: 1
+sources:
+  - name: stripe-charges
+    type: stripe
+    resource: charges
+    credential_env: STRIPE_API_KEY
+    staging_dir: ./staging
+    watched_directory: ./landing
+    state_dir: ./state
+    # api_base: http://localhost:12111   # point at stripe-mock for a no-account run
 ```
-s3://my-bucket/api-staging/stripe/
-  stripe_events_20260522T140000_0001.ndjson.tmp
 
-s3://my-bucket/landing/stripe/
-  stripe_events_20260522T140000_0001.ndjson
+Set the secret key in the named environment variable (never in the file) and fetch:
+
+```bash
+export STRIPE_API_KEY=sk_live_...
+filedge-fetch --config sources.yaml --source stripe-charges
 ```
 
-The exact Fetcher command is intentionally outside Filedge's contract. For dlt, that may be a small project-specific Python script. For another organization, it may be a scheduled vendor export or an internal platform job.
+It pages the Stripe list API (`starting_after` / `has_more`), writes one complete
+NDJSON File of the `data` records with a Source Manifest, promotes it under the
+Fetch Lock, and advances the incremental `created` cursor only after promotion —
+so a re-run fetches only newer charges (`created[gt]`). To try it without a Stripe
+account, run [stripe-mock](https://github.com/stripe/stripe-mock) and set
+`api_base` to it.
+
+External fetchers (dlt, a scheduled vendor export, an internal platform job)
+remain valid alternatives — anything that lands a complete NDJSON File works. See
+[how to add an API Source](api-source-adapters.md).
 
 ### 2. Ingest
 
@@ -207,7 +229,7 @@ connector:
   project: my-gcp-project
   dataset: raw
 
-destination_table: stripe_events
+dest_table: stripe_events
 write_mode: append
 
 columns:
