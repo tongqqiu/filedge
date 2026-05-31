@@ -50,9 +50,9 @@ sources:
     concept: Revenues
     unit: USD
     user_agent: "Your Name your-email@example.com"
-    staging_dir: ./staging
-    watched_directory: ./landing
-    state_dir: ./state
+    staging_dir: /tmp/filedge-edgar-demo/staging
+    watched_directory: /tmp/filedge-edgar-demo/landing
+    state_dir: /tmp/filedge-edgar-demo/state
     cursor:
       field: filed
     gzip: false
@@ -71,7 +71,7 @@ source_manifest: required
 
 connector:
   type: sqlite
-  url: sqlite:///edgar-demo.db
+  url: sqlite:////tmp/filedge-edgar-demo/edgar-demo.db
 
 columns:
   - source: filed
