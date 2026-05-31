@@ -382,3 +382,34 @@ def test_stripe_non_object_response_raises():
     )
     with pytest.raises(SourceClientError, match="JSON object"):
         client.fetch(_stripe_plan(), None)
+
+
+def test_stripe_non_json_response_raises():
+    client = HttpSourceClient(
+        lambda url, headers: (200, {}, b"not json at all"), sleep=lambda s: None
+    )
+    with pytest.raises(SourceClientError, match="Non-JSON"):
+        client.fetch(_stripe_plan(), None)
+
+
+def test_stripe_non_list_data_raises():
+    body = json.dumps({"object": "list", "has_more": False, "data": {"id": "x"}}).encode()
+    client = HttpSourceClient(lambda url, headers: (200, {}, body), sleep=lambda s: None)
+    with pytest.raises(SourceClientError, match="Expected a JSON array"):
+        client.fetch(_stripe_plan(), None)
+
+
+def test_stripe_stops_when_last_record_has_no_id():
+    # has_more is true, but the last record carries no id to page on — stop rather
+    # than loop forever.
+    calls = []
+
+    def transport(url, headers):
+        calls.append(url)
+        return _stripe_page([{"created": 1700000001}], has_more=True)
+
+    client = HttpSourceClient(transport, sleep=lambda s: None)
+    result = client.fetch(_stripe_plan(), None)
+
+    assert len(calls) == 1
+    assert result.records == [{"created": 1700000001}]

@@ -303,3 +303,9 @@ def test_stripe_version_header_is_set_when_given(tmp_path):
     text = _STRIPE + "    stripe_version: '2024-06-20'\n"
     plan = load_sources(_write(tmp_path, text), "stripe-charges")
     assert plan.headers.get("Stripe-Version") == "2024-06-20"
+
+
+def test_stripe_cursor_must_be_a_mapping(tmp_path):
+    text = _STRIPE + "    cursor: not-a-mapping\n"
+    with pytest.raises(SourcesConfigError, match="cursor"):
+        load_sources(_write(tmp_path, text), "stripe-charges")
