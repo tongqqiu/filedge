@@ -130,6 +130,14 @@ def _source_range(
             "concept": plan.concept,
             "unit": plan.unit,
         }
+    if plan.source_type == "stripe":
+        return {
+            "cursor_param": plan.cursor_param,
+            "cursor_field": plan.cursor_field,
+            "from": from_cursor,
+            "to": to_cursor,
+            "resource": plan.resource,
+        }
     return {
         "cursor_param": plan.cursor_param,
         "from": from_cursor,

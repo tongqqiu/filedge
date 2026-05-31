@@ -76,6 +76,8 @@ class HttpSourceClient:
         started_at = self._now()
         if plan.cursor_mode == "client":
             records = self._fetch_client(plan, cursor)
+        elif plan.cursor_mode == "stripe":
+            records = self._fetch_stripe(plan, cursor)
         else:
             records = self._fetch_server(plan, cursor)
         finished_at = self._now()
@@ -105,7 +107,32 @@ class HttpSourceClient:
         records = self._request(plan, self._client_url(plan))
         return [r for r in records if self._is_newer(plan, r, cursor)]
 
-    def _request(self, plan: FetchPlan, url: str) -> List[dict]:
+    def _fetch_stripe(self, plan: FetchPlan, cursor: Optional[str]) -> List[dict]:
+        """Cursor-paginated fetch (Stripe): walk ``starting_after`` while the list's
+        ``has_more`` is true, taking records from the ``data`` array. The cursor
+        param (default ``created[gt]``) filters incrementally on the server; the
+        next run's cursor is the largest ``cursor_field`` seen, as for every mode.
+        """
+        records: List[dict] = []
+        starting_after: Optional[str] = None
+        while True:
+            payload = self._request_object(plan, self._stripe_url(plan, cursor, starting_after))
+            batch = payload.get(plan.record_path or "data") or []
+            if not isinstance(batch, list):
+                raise SourceClientError(
+                    f"Expected a JSON array at {plan.record_path!r} in {plan.url!r}."
+                )
+            records.extend(batch)
+            if not batch or not payload.get("has_more"):
+                break
+            last = batch[-1]
+            starting_after = last.get("id") if isinstance(last, dict) else None
+            if not starting_after:
+                break
+        return records
+
+    def _get(self, plan: FetchPlan, url: str) -> bytes:
+        """One rate-limit-aware GET; returns the 200 body or raises SourceClientError."""
         headers = {"Accept": "application/json", **plan.headers}
         credential = plan.credential()
         if credential:
@@ -114,7 +141,7 @@ class HttpSourceClient:
         for attempt in range(self._max_retries + 1):
             status, resp_headers, body = self._transport(url, headers)
             if status == 200:
-                return extract_records(body, url, plan.record_path)
+                return body
             if status in _RATE_LIMIT_STATUSES and self._is_rate_limited(resp_headers):
                 if attempt < self._max_retries:
                     self._sleep(self._retry_delay(resp_headers))
@@ -126,6 +153,33 @@ class HttpSourceClient:
         raise SourceClientError(  # pragma: no cover - loop always returns or raises
             f"Exhausted retries fetching {url!r}."
         )
+
+    def _request(self, plan: FetchPlan, url: str) -> List[dict]:
+        return extract_records(self._get(plan, url), url, plan.record_path)
+
+    def _request_object(self, plan: FetchPlan, url: str) -> dict:
+        """GET a JSON object response (Stripe list envelope), not a bare array."""
+        body = self._get(plan, url)
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError as e:
+            raise SourceClientError(f"Non-JSON response from {url!r}.") from e
+        if not isinstance(payload, dict):
+            raise SourceClientError(
+                f"Expected a JSON object from {url!r}, got {type(payload).__name__}."
+            )
+        return payload
+
+    def _stripe_url(
+        self, plan: FetchPlan, cursor: Optional[str], starting_after: Optional[str]
+    ) -> str:
+        params = dict(plan.query)
+        params["limit"] = plan.page_size
+        if cursor:
+            params[plan.cursor_param] = cursor
+        if starting_after:
+            params["starting_after"] = starting_after
+        return f"{plan.url}?{urlencode(params)}"
 
     def _server_url(self, plan: FetchPlan, cursor: Optional[str], page: int) -> str:
         params = dict(plan.query)
