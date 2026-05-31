@@ -6,4 +6,6 @@ the bad-row count stays under the configured threshold. This package holds the
 quarantine-specific pieces:
 
 - ``sink`` — buffer bad rows and flush them to an NDJSON quarantine sidecar
+- ``processor`` — threshold-gated row processor that routes bad rows to the sink
+- ``redrop`` — unwrap a quarantine sidecar back into a clean, re-droppable NDJSON File
 """

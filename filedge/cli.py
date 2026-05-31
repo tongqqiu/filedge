@@ -1015,3 +1015,74 @@ def export_audit_cmd(ctx, pipeline_id, workspace, audit_db_url, output, title, d
         click.echo(f"Exported {count} file records to {output}")
     finally:
         db.close()
+
+
+def _default_redrop_output(sidecar_path: str) -> str:
+    """Derive a re-drop output path next to the sidecar.
+
+    Replaces the ``.quarantine.ndjson`` suffix with ``.redrop.ndjson``; falls
+    back to appending ``.redrop.ndjson`` for any other name.
+    """
+    from filedge.quarantine.sink import SIDECAR_SUFFIX
+
+    if sidecar_path.endswith(SIDECAR_SUFFIX):
+        return sidecar_path[: -len(SIDECAR_SUFFIX)] + ".redrop.ndjson"
+    return sidecar_path + ".redrop.ndjson"
+
+
+@cli.command("redrop-quarantine")
+@click.option("--sidecar", "sidecar_path", required=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="Path to the quarantine sidecar to re-drop (from the Audit Export "
+                   "or `filedge status`).")
+@click.option("--output", default=None,
+              help="Where to write the clean NDJSON File "
+                   "(default: alongside the sidecar as <name>.redrop.ndjson).")
+@click.option("--pipeline", "pipeline_id", default=None,
+              help="Pipeline Registry id to check NDJSON re-drop compatibility against.")
+@click.option("--workspace", default=".", show_default=True,
+              type=click.Path(file_okay=False),
+              help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
+@click.option("--config", "config_path", default=None,
+              help="Pipeline Config to check NDJSON re-drop compatibility against.")
+def redrop_quarantine_cmd(sidecar_path, output, pipeline_id, workspace, config_path):
+    """Turn a quarantine sidecar into a clean, re-droppable NDJSON File.
+
+    Unwraps each quarantined row back to its source columns (dropping the
+    row_number/column/error diagnostics) and writes NDJSON. Correct the bad
+    values in the output and drop it through `filedge run` on the normal audited
+    path — it ingests under a new Content Hash, leaving the original quarantined
+    File's Audit Record intact. Read-only: it never touches the Audit DB, a
+    Destination, or the input sidecar.
+    """
+    from filedge.quarantine.redrop import MalformedSidecarError, redrop_quarantine
+
+    if pipeline_id is not None and config_path is not None:
+        click.echo("Error: pass either --pipeline or --config, not both.", err=True)
+        raise SystemExit(2)
+
+    resolved_config = config_path
+    if pipeline_id is not None:
+        resolved_config = _resolve_pipeline_or_exit(workspace, pipeline_id).config_path
+    if resolved_config is not None:
+        fmt = load_config(resolved_config).format
+        if fmt != "ndjson":
+            click.echo(
+                f"Warning: Pipeline format is {fmt!r}, but the re-dropped File is NDJSON. "
+                "Re-drop it through an NDJSON-accepting Pipeline, not this one.",
+                err=True,
+            )
+
+    out_path = output or _default_redrop_output(sidecar_path)
+    try:
+        with open(sidecar_path, encoding="utf-8") as sidecar, \
+                open(out_path, "w", encoding="utf-8") as out:
+            count = redrop_quarantine(sidecar, out)
+    except MalformedSidecarError as e:
+        # Don't leave a half-written File behind — a malformed sidecar fails wholesale.
+        if os.path.exists(out_path):
+            os.remove(out_path)
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
+
+    click.echo(f"Wrote {count} row(s) to {out_path}")
