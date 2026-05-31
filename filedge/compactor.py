@@ -50,6 +50,8 @@ def compact(
         if not files:
             return {"batches": 0, "files_compacted": 0}
 
+    _ensure_output_dir(out_fs, out_root)
+
     timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y%m%dT%H%M%S%f")
     extension = ".ndjson.gz" if compress else ".ndjson"
 
@@ -112,6 +114,19 @@ def _append_manifest(out_fs, out_root: str, batch_name: str, sources: List[str])
             pass
         with out_fs.open(path, "w", encoding="utf-8") as f:
             f.write(existing + entry)
+
+
+def _ensure_output_dir(out_fs, out_root: str) -> None:
+    """Create the output directory if it does not yet exist.
+
+    The compact output directory is operator-specified and need not exist; create
+    it (like `export-audit` does for its site) so a first run doesn't fail with a
+    cryptic "No such file or directory" on the batch's temp file.
+    """
+    if out_fs is not None:
+        out_fs.makedirs(out_root, exist_ok=True)
+    else:
+        os.makedirs(out_root, exist_ok=True)
 
 
 def _write_batch(src_fs, files: List[str], out_fs, out_path: str, compress: bool) -> None:
