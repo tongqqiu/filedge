@@ -41,6 +41,20 @@ def output(tmp_path):
     return out
 
 
+def test_compact_creates_missing_output_dir(source, tmp_path):
+    # The output directory need not exist beforehand — compact creates it, like
+    # the guide's `--output ./compacted` implies (no mkdir step).
+    _write_ndjson(source / "a.ndjson", [{"id": 1}])
+    missing = tmp_path / "does-not-exist-yet"
+    assert not missing.exists()
+
+    result = compact(str(source), str(missing))
+
+    assert result["files_compacted"] == 1
+    assert missing.is_dir()
+    assert len(_data_files(missing)) == 1
+
+
 def test_compact_merges_files(source, output):
     _write_ndjson(source / "a.ndjson", [{"id": 1}, {"id": 2}])
     _write_ndjson(source / "b.ndjson", [{"id": 3}])
