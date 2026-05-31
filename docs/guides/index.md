@@ -21,6 +21,7 @@ Ingest files and keep the pipeline healthy in production.
 - [Scale ingestion](scale.md) — large files, many files, parallel workers, backfills
 - [Compact small files](compact.md) — merge many small files into fewer large ones
 - [Requeue failed files](requeue.md) — move terminal failures back to `PENDING` after remediation
+- [Quarantine bad rows](quarantine.md) — let good rows land, set bad rows aside, investigate and re-drop them
 - [Healthcheck](healthcheck.md) — probe the audit DB and destination without writing rows
 - [Observability](observability.md) — logs, metrics, and tracing
 - [Export an audit site](audit-export.md) — generate a read-only HTML site for audit stakeholders

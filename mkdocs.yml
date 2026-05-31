@@ -65,6 +65,7 @@ nav:
       - Scale ingestion: guides/scale.md
       - Compact small files: guides/compact.md
       - Requeue failed files: guides/requeue.md
+      - Quarantine bad rows: guides/quarantine.md
       - Healthcheck: guides/healthcheck.md
       - Observability: guides/observability.md
       - Export an audit site: guides/audit-export.md
