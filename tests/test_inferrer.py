@@ -32,6 +32,32 @@ def test_mixed_column_is_string_ambiguous():
     assert col.confidence == "ambiguous"
 
 
+def test_clean_text_column_is_high():
+    # No value parses as another type — `string` is a confident inference, not a fallback.
+    result = infer_schema(rows({"name": "Alice"}, {"name": "Bob"}, {"name": "Carol"}))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "high"
+    assert col.null_count == 0
+
+
+def test_clean_text_column_with_nulls_is_low():
+    result = infer_schema(rows({"name": "Alice"}, {"name": ""}, {"name": "Carol"}))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "low"
+    assert col.null_count == 1
+
+
+def test_text_with_some_numeric_values_stays_ambiguous():
+    # Conflicting evidence: some values numeric, some text — worth operator review.
+    result = infer_schema(rows({"code": "100"}, {"code": "N/A-ish"}, {"code": "200"}))
+    col = result[0]
+    assert col.inferred_type == "string"
+    assert col.confidence == "ambiguous"
+    assert any("look numeric" in n for n in col.notes)
+
+
 def test_integer_with_nulls_is_low_confidence():
     result = infer_schema(rows({"n": "1"}, {"n": None}, {"n": ""}, {"n": "3"}))
     col = result[0]
