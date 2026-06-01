@@ -8,6 +8,8 @@ venv/
 *.db
 .env
 site/
+demo/duckdb/out/
+demo/duckdb/incoming/orders_bad.csv
 .coverage
 .coverage.*
 coverage.xml

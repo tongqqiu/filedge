@@ -1,0 +1,4 @@
+order_id,customer_id,order_date,amount,currency,status
+1004,cus_002,2026-05-30,210.00,USD,paid
+1005,cus_004,2026-05-30,74.10,USD,paid
+1006,cus_005,2026-05-31,12.00,USD,pending
