@@ -1,66 +1,80 @@
 name: Bug report
-description: A reproducible bug in filedge
-title: "[bug]: "
-labels: ["bug", "needs-triage"]
+description: Report a reproducible problem with Filedge.
+title: "Bug: "
+labels:
+  - needs-triage
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug. The more reproducible the
-        report, the faster it can be fixed.
-
-  - type: textarea
-    id: what-happened
-    attributes:
-      label: What happened?
-      description: What did you expect, and what actually occurred?
-      placeholder: |
-        Expected: ...
-        Actual: ...
-    validations:
-      required: true
-
-  - type: textarea
-    id: reproduce
-    attributes:
-      label: Steps to reproduce
-      description: Minimal `pipeline.yaml`, sample input file, and CLI invocation.
-      render: shell
-    validations:
-      required: true
-
+        Thanks for helping make Filedge more reliable. Please include enough detail for maintainers to reproduce the issue.
   - type: input
     id: version
     attributes:
-      label: Filedge version / commit SHA
+      label: Filedge version or commit
+      description: Use `filedge --version`, the package version, or the commit SHA you tested.
       placeholder: "0.1.0 or abc1234"
     validations:
       required: true
-
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11.9"
+    validations:
+      required: true
   - type: dropdown
     id: connector
     attributes:
       label: Connector
       options:
-        - sqlite
-        - postgres
-        - bigquery
-        - databricks
-        - other / not applicable
+        - SQLite
+        - PostgreSQL
+        - BigQuery
+        - Databricks
+        - Snowflake
+        - DuckDB
+        - Other / not connector-specific
     validations:
       required: true
-
-  - type: input
-    id: python
+  - type: textarea
+    id: summary
     attributes:
-      label: Python version
-      placeholder: "3.13"
+      label: What happened?
+      description: Describe the failure, including any error messages or surprising audit state.
     validations:
       required: true
-
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include the command, minimal `pipeline.yaml`, and a small sample input shape if possible.
+      placeholder: |
+        1. Configure ...
+        2. Run `filedge ...`
+        3. Observe ...
+    validations:
+      required: true
   - type: textarea
     id: logs
     attributes:
-      label: Logs / traceback
-      description: Full traceback if there was one. Audit DB state (`filedge status --json`) helps too.
-      render: shell
+      label: Logs, traceback, or audit rows
+      description: Paste relevant output. Please redact credentials and secrets.
+      render: text
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I have searched existing issues.
+          required: true
+        - label: I have removed or redacted secrets, credentials, and private data.
+          required: true
+        - label: This is not a security vulnerability. Security issues should be reported privately using SECURITY.md.
+          required: true

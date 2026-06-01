@@ -1,32 +1,70 @@
 name: Feature request
-description: Suggest a new capability or enhancement
-title: "[feat]: "
-labels: ["enhancement", "needs-triage"]
+description: Propose an improvement or new capability for Filedge.
+title: "Feature: "
+labels:
+  - needs-triage
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for opening a proposal. For anything that changes behavior, configuration, connectors, or architecture, please describe the use case first.
   - type: textarea
     id: problem
     attributes:
-      label: What problem would this solve?
-      description: Describe the use case or pain point. Avoid jumping to a solution.
+      label: Problem or use case
+      description: What workflow is hard, unreliable, or unsupported today?
     validations:
       required: true
-
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed change
-      description: Optional. What would the API / CLI / config look like?
-
+      label: Proposed behavior
+      description: Describe the smallest Filedge behavior change that would solve the problem.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Audit DB / state machine
+        - Schema inference or validation
+        - Connector
+        - Authoring UI
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: connector
+    attributes:
+      label: Connector, if relevant
+      options:
+        - Not connector-specific
+        - SQLite
+        - PostgreSQL
+        - BigQuery
+        - Databricks
+        - Snowflake
+        - DuckDB
+        - New connector
   - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered
-      description: Workarounds you have tried or other approaches you considered.
-
-  - type: checkboxes
-    id: scope
+      description: Mention any workaround, adjacent tool, or different design you considered.
+  - type: textarea
+    id: compatibility
     attributes:
-      label: Scope
+      label: Compatibility notes
+      description: Call out config changes, migration needs, or possible impact on existing pipelines.
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-flight checklist
       options:
-        - label: This is a breaking change to config or CLI surface
-        - label: I would be willing to send a PR for this
+        - label: I have searched existing issues.
+          required: true
+        - label: I am willing to help test or review this change.
+          required: false
