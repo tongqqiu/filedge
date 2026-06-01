@@ -1,0 +1,4 @@
+order_id,customer_id,order_date,amount,currency,status
+1007,cus_006,2026-06-01,42.00,USD,paid
+,cus_007,2026-06-01,15.20,USD,paid
+1009,cus_008,not-a-date,19.99,USD,paid

@@ -1,0 +1,4 @@
+order_id,customer_id,order_date,amount,currency,status
+1001,cus_001,2026-05-28,129.50,USD,paid
+1002,cus_002,2026-05-28,49.99,USD,paid
+1003,cus_003,2026-05-29,18.25,USD,refunded
