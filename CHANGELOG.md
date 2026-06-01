@@ -10,18 +10,40 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-31
+
+This release widens Filedge's source and destination coverage for the fintech
+Target User: a first-party Stripe API Source upstream, and a Snowflake
+destination connector downstream — both behind their respective seams, with no
+change to the core ingestion path.
+
+### Highlights
+
+- **Snowflake connector** (`type: snowflake`) — Filedge now loads into Snowflake
+  alongside SQLite, PostgreSQL, BigQuery, Databricks, and DuckDB. Content-hash
+  idempotency comes from a per-hash `DELETE` + batched `INSERT` in one
+  transaction (re-loading a File is a no-op; a failed load rolls back), with
+  transactional CDC. Identifiers are double-quoted so names land in Snowflake
+  exactly as written in `pipeline.yaml`.
+- **First-party Stripe API Source** (`type: stripe`) — the Reference Fetcher can
+  pull a Stripe-style list API directly: cursor pagination (`starting_after` /
+  `has_more`), bearer auth, and an incremental `created[gt]` cursor. Proves the
+  auth + pagination + rate-limit case that the open EDGAR source did not.
+
 ### Added
 
-- **Snowflake connector** (`type: snowflake`, `snowflake` extra) — load Files
-  into a Snowflake table with content-hash idempotency (per-hash `DELETE` +
-  `INSERT` in one transaction, like PostgreSQL) and transactional CDC. The
-  password is supplied at runtime via `SNOWFLAKE_PASSWORD`, never in
-  `pipeline.yaml`. Unit-tested for SQL generation; a gated
-  `Snowflake Integration` workflow runs the live round trip.
-- **First-party Stripe API Source** (`type: stripe`) for the Reference Fetcher —
-  cursor pagination (`starting_after` / `has_more`), bearer auth from an env
-  var, and an incremental `created[gt]` cursor; `api_base` can point at
-  `stripe-mock` for credential-free runs.
+- Snowflake connector (`snowflake` extra). The password is supplied at runtime
+  via `SNOWFLAKE_PASSWORD`, never in `pipeline.yaml`. Unit-tested for SQL
+  generation; a gated `Snowflake Integration` workflow runs the live round trip.
+- Stripe API Source for `filedge-fetch`. `api_base` can point at `stripe-mock`
+  for credential-free runs, so the source is exercisable without an account.
+
+### Documentation
+
+- The connectors reference and README document the Snowflake connector.
+- The API Source adapter guide was rewritten to match the real extension pattern
+  (it had described modules that did not exist), with Stripe as the worked
+  example; `dest_table` examples corrected (were `destination_table`).
 
 ## [0.4.0] - 2026-05-31
 
@@ -184,7 +206,8 @@ Authoring UI. Plus column-level Field Encryption and two new file formats.
 - ADR-0012 through ADR-0017 added to the architecture decisions index.
 - Versioned documentation site deployment.
 
-[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/tongqqiu/filedge/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tongqqiu/filedge/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tongqqiu/filedge/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tongqqiu/filedge/compare/v0.1.2...v0.2.0
