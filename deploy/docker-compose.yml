@@ -1,0 +1,48 @@
+# Runnable reference of the Filedge two-job pattern (ADR-0005, ADR-0018):
+# one job materializes complete Files upstream, a separate job ingests them.
+# Both share a /data volume; neither is a daemon, so each loops on a fixed
+# interval to stand in for an external scheduler (cron / Kubernetes CronJob).
+#
+#   docker compose -f deploy/docker-compose.yml up --build
+#
+# Credential-free: it pulls Apple's open EDGAR facts into a SQLite warehouse.
+services:
+  # Upstream: pull the API Source into complete NDJSON Files + Source Manifests.
+  fetch:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: filedge:local
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          echo "[fetch] $(date -u +%FT%TZ) pulling apple-revenues";
+          filedge-fetch --config /work/edgar/sources.yaml --source apple-revenues || true;
+          sleep "$${FETCH_INTERVAL:-60}";
+        done
+    volumes:
+      - ./edgar:/work/edgar:ro
+      - filedge-data:/data
+
+  # Downstream: ingest the landed Files into the Destination under the Audit DB.
+  run:
+    image: filedge:local
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        mkdir -p /data/landing;
+        while true; do
+          echo "[run] $(date -u +%FT%TZ) scanning /data/landing";
+          filedge run --dir /data/landing --config /work/edgar/pipeline.yaml \
+            --audit-db-url sqlite:////data/audit.db --no-progress || true;
+          sleep "$${RUN_INTERVAL:-60}";
+        done
+    volumes:
+      - ./edgar:/work/edgar:ro
+      - filedge-data:/data
+    depends_on:
+      - fetch
+
+volumes:
+  filedge-data:

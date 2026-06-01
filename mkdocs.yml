@@ -69,6 +69,7 @@ nav:
       - Quarantine bad rows: guides/quarantine.md
       - Healthcheck: guides/healthcheck.md
       - Observability: guides/observability.md
+      - Deploy Filedge: guides/deploy.md
       - Export an audit site: guides/audit-export.md
     - Connect sources:
       - API sources: guides/api-sources.md
