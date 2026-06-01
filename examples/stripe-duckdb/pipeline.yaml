@@ -1,0 +1,29 @@
+format: ndjson
+dest_table: stripe_charges
+source_manifest: required
+
+connector:
+  type: duckdb
+  path: ./stripe-demo/stripe.duckdb
+
+columns:
+  - source: id
+    dest: charge_id
+    type: string
+    required: true
+  - source: created
+    dest: created_at_epoch
+    type: integer
+    required: true
+  - source: amount
+    dest: amount_cents
+    type: integer
+    required: true
+  - source: currency
+    dest: currency
+    type: string
+    required: true
+  - source: status
+    dest: status
+    type: string
+    required: true

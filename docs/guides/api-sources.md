@@ -71,8 +71,9 @@ endpoint. It needs no API key, but SEC policy requires a descriptive
 Fetcher applies the incremental cursor client-side by keeping facts whose
 `filed` date is newer than the stored high-water mark.
 
-For a runnable client-facing walkthrough, see the [EDGAR API to audited SQLite
-demo](edgar-demo.md).
+For runnable client-facing walkthroughs, start with the [Stripe-style API to
+audited DuckDB demo](stripe-duckdb-demo.md), then compare the no-credential
+[EDGAR API to audited SQLite demo](edgar-demo.md).
 
 ### Sources Config
 

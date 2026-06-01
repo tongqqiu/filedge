@@ -1,0 +1,21 @@
+# Stripe-style API Source for the golden local walkthrough.
+#
+# For a no-account run, start stripe-mock and keep api_base pointed at it:
+#
+#   docker run --rm -p 12111:12111 stripe/stripe-mock:latest
+#   export STRIPE_API_KEY=sk_test_anything
+#   filedge-fetch --config examples/stripe-duckdb/sources.yaml --source stripe-charges
+
+version: 1
+
+sources:
+  - name: stripe-charges
+    type: stripe
+    resource: charges
+    credential_env: STRIPE_API_KEY
+    api_base: http://localhost:12111
+    staging_dir: ./stripe-demo/staging
+    watched_directory: ./stripe-demo/landing
+    state_dir: ./stripe-demo/state
+    page_size: 100
+    gzip: false

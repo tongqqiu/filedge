@@ -51,6 +51,7 @@ nav:
   - Getting Started: getting-started.md
   - Tutorials:
     - Tutorials: tutorials/index.md
+    - Stripe API to DuckDB: guides/stripe-duckdb-demo.md
     - EDGAR API to SQLite: guides/edgar-demo.md
     - Crash-safe retry: guides/crash-retry.md
   - How-to guides:
