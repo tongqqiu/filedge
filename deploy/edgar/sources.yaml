@@ -1,0 +1,19 @@
+version: 1
+
+# The Reference Fetcher pulls Apple's EDGAR revenue facts — an open, no-auth API,
+# so this reference deployment runs with zero credentials. All paths are absolute
+# under the shared /data volume so they resolve the same in every container.
+sources:
+  - name: apple-revenues
+    type: edgar
+    cik: 320193
+    taxonomy: us-gaap
+    concept: Revenues
+    unit: USD
+    user_agent: "Filedge Reference Deployment filedge@example.com"
+    staging_dir: /data/staging
+    watched_directory: /data/landing
+    state_dir: /data/state
+    cursor:
+      field: filed
+    gzip: false

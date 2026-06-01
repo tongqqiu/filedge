@@ -1,0 +1,37 @@
+format: ndjson
+dest_table: edgar_revenues
+source_manifest: required
+
+connector:
+  type: sqlite
+  url: sqlite:////data/edgar.db
+
+columns:
+  - source: filed
+    dest: filed
+    type: string
+    required: true
+  - source: end
+    dest: period_end
+    type: string
+    required: false
+  - source: fy
+    dest: fiscal_year
+    type: integer
+    required: false
+  - source: fp
+    dest: fiscal_period
+    type: string
+    required: false
+  - source: form
+    dest: form
+    type: string
+    required: false
+  - source: accn
+    dest: accession
+    type: string
+    required: false
+  - source: val
+    dest: value
+    type: float
+    required: true

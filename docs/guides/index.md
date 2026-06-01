@@ -24,6 +24,7 @@ Ingest files and keep the pipeline healthy in production.
 - [Quarantine bad rows](quarantine.md) — let good rows land, set bad rows aside, investigate and re-drop them
 - [Healthcheck](healthcheck.md) — probe the audit DB and destination without writing rows
 - [Observability](observability.md) — logs, metrics, and tracing
+- [Deploy Filedge](deploy.md) — container image, docker-compose, and Kubernetes CronJobs
 - [Export an audit site](audit-export.md) — generate a read-only HTML site for audit stakeholders
 
 ## Connect sources

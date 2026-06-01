@@ -12,6 +12,12 @@ merged pull requests is appended automatically beneath them on each release.
 
 ### Added
 
+- **Reference deployment** under `deploy/` — a slim container image
+  (`deploy/Dockerfile`, non-root, build-arg extras) and a runnable
+  `docker compose` stack demonstrating the two-job fetch + run pattern against
+  the open EDGAR → SQLite path (zero credentials). A new
+  [Deploy guide](docs/guides/deploy.md) documents the image, compose, and the
+  Kubernetes CronJob production pattern.
 - Snowflake **key-pair (RSA) authentication**, preferred over password — set
   `SNOWFLAKE_PRIVATE_KEY_PATH` (and `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` if the key
   is encrypted). Required on Snowflake accounts where single-factor password
