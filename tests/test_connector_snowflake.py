@@ -125,10 +125,35 @@ def test_requires_connection_fields(fake_snowflake):
         SnowflakeConnector(account="a", user="u", warehouse="w", schema="public")
 
 
-def test_requires_password(fake_snowflake, monkeypatch):
+def test_requires_a_credential(fake_snowflake, monkeypatch):
     monkeypatch.delenv("SNOWFLAKE_PASSWORD", raising=False)
-    with pytest.raises(ValueError, match="SNOWFLAKE_PASSWORD"):
+    monkeypatch.delenv("SNOWFLAKE_PRIVATE_KEY_PATH", raising=False)
+    with pytest.raises(ValueError, match="SNOWFLAKE_PRIVATE_KEY_PATH"):
         _connector()
+
+
+def test_password_auth_used_when_no_key(fake_snowflake):
+    # The fixture sets SNOWFLAKE_PASSWORD and no key path.
+    _connector()
+    kw = fake_snowflake.connect_kwargs[0]
+    assert kw["password"] == "secret"
+    assert "private_key_file" not in kw
+
+
+def test_key_pair_auth_is_preferred_over_password(fake_snowflake, monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY_PATH", "/keys/rsa_key.p8")
+    _connector()  # password is also set by the fixture
+    kw = fake_snowflake.connect_kwargs[0]
+    assert kw["private_key_file"] == "/keys/rsa_key.p8"
+    assert "password" not in kw
+
+
+def test_key_pair_passphrase_is_passed_when_set(fake_snowflake, monkeypatch):
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY_PATH", "/keys/rsa_key.p8")
+    monkeypatch.setenv("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE", "topsecret")
+    _connector()
+    kw = fake_snowflake.connect_kwargs[0]
+    assert kw["private_key_file_pwd"] == "topsecret"
 
 
 def test_missing_sdk_raises_install_hint(monkeypatch):

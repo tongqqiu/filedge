@@ -93,14 +93,9 @@ class SnowflakeConnector(Connector):
                 + ", ".join(missing)
             )
 
-        password = os.environ.get("SNOWFLAKE_PASSWORD")
-        if not password:
-            raise ValueError("SnowflakeConnector requires SNOWFLAKE_PASSWORD to be set")
-
         connect_kwargs = dict(
             account=account,
             user=user,
-            password=password,
             warehouse=warehouse,
             database=database,
             schema=schema,
@@ -108,10 +103,36 @@ class SnowflakeConnector(Connector):
         )
         if role:
             connect_kwargs["role"] = role
+        self._apply_credentials(connect_kwargs)
         self._conn = snowflake.connector.connect(**connect_kwargs)
         self._schema = str(schema)
         self._write_mode = write_mode
         self._batch_size = batch_size
+
+    @staticmethod
+    def _apply_credentials(connect_kwargs: dict) -> None:
+        """Resolve Snowflake auth from the environment into connect kwargs.
+
+        Key-pair (RSA) auth is preferred and is the only programmatic option on
+        Snowflake accounts where single-factor password sign-in is disabled: set
+        `SNOWFLAKE_PRIVATE_KEY_PATH` to a PEM private-key file (and
+        `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` if it is encrypted). `SNOWFLAKE_PASSWORD`
+        remains a fallback. The key is never read from pipeline.yaml.
+        """
+        private_key_path = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH")
+        password = os.environ.get("SNOWFLAKE_PASSWORD")
+        if private_key_path:
+            connect_kwargs["private_key_file"] = private_key_path
+            passphrase = os.environ.get("SNOWFLAKE_PRIVATE_KEY_PASSPHRASE")
+            if passphrase:
+                connect_kwargs["private_key_file_pwd"] = passphrase
+        elif password:
+            connect_kwargs["password"] = password
+        else:
+            raise ValueError(
+                "SnowflakeConnector requires SNOWFLAKE_PRIVATE_KEY_PATH (key-pair "
+                "auth, recommended) or SNOWFLAKE_PASSWORD to be set"
+            )
 
     def ensure_table(self, config: PipelineConfig) -> None:
         with self._conn.cursor() as cur:

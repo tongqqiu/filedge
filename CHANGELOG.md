@@ -10,6 +10,13 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+### Added
+
+- Snowflake **key-pair (RSA) authentication**, preferred over password — set
+  `SNOWFLAKE_PRIVATE_KEY_PATH` (and `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` if the key
+  is encrypted). Required on Snowflake accounts where single-factor password
+  sign-in is disabled; `SNOWFLAKE_PASSWORD` remains a fallback.
+
 ## [0.5.0] - 2026-05-31
 
 This release widens Filedge's source and destination coverage for the fintech

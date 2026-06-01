@@ -82,7 +82,10 @@ def test_registry_exposes_authoring_metadata_without_loading_optional_sdks():
     assert [setting.name for setting in snowflake.settings] == [
         "account", "user", "warehouse", "database", "schema", "role"
     ]
-    assert [p.env_var for p in snowflake.credential_placeholders] == ["SNOWFLAKE_PASSWORD"]
+    assert [p.env_var for p in snowflake.credential_placeholders] == [
+        "SNOWFLAKE_PRIVATE_KEY_PATH",
+        "SNOWFLAKE_PASSWORD",
+    ]
 
     postgres = connector_descriptor("postgres")
     assert postgres.settings == ()

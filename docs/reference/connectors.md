@@ -161,8 +161,20 @@ connector:
   # role: FILEDGE_ROLE   # optional
 ```
 
-The password is supplied at runtime via the `SNOWFLAKE_PASSWORD` environment
-variable (or secrets mount) — never written to `pipeline.yaml`.
+Credentials are supplied at runtime via environment variables — never written
+to `pipeline.yaml`. **Key-pair (RSA) auth is recommended** and is the only
+programmatic option on Snowflake accounts where single-factor password sign-in
+is disabled:
+
+| Env var | Purpose |
+|---|---|
+| `SNOWFLAKE_PRIVATE_KEY_PATH` | Path to a PEM private-key file (key-pair auth, recommended) |
+| `SNOWFLAKE_PRIVATE_KEY_PASSPHRASE` | Passphrase, if the private key is encrypted (optional) |
+| `SNOWFLAKE_PASSWORD` | Password auth — fallback, used only when no key path is set |
+
+Key-pair auth takes precedence: if `SNOWFLAKE_PRIVATE_KEY_PATH` is set it is used
+even when a password is also present. Register the matching public key on the
+Snowflake user (`ALTER USER … SET RSA_PUBLIC_KEY = '…'`).
 
 Install the driver:
 
