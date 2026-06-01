@@ -68,6 +68,7 @@ def test_registry_exposes_authoring_metadata_without_loading_optional_sdks():
         "databricks",
         "duckdb",
         "postgres",
+        "snowflake",
         "sqlite",
     ]
 
@@ -76,6 +77,12 @@ def test_registry_exposes_authoring_metadata_without_loading_optional_sdks():
     assert [p.env_var for p in bigquery.credential_placeholders] == [
         "GOOGLE_APPLICATION_CREDENTIALS"
     ]
+
+    snowflake = connector_descriptor("snowflake")
+    assert [setting.name for setting in snowflake.settings] == [
+        "account", "user", "warehouse", "database", "schema", "role"
+    ]
+    assert [p.env_var for p in snowflake.credential_placeholders] == ["SNOWFLAKE_PASSWORD"]
 
     postgres = connector_descriptor("postgres")
     assert postgres.settings == ()

@@ -61,6 +61,7 @@ _REGISTRY = {
     "bigquery": "filedge.connectors.bigquery.BigQueryConnector",
     "databricks": "filedge.connectors.databricks.DatabricksConnector",
     "duckdb": "filedge.connectors.duckdb.DuckDBConnector",
+    "snowflake": "filedge.connectors.snowflake.SnowflakeConnector",
 }
 
 _INSTALL_HINTS = {
@@ -68,6 +69,7 @@ _INSTALL_HINTS = {
     "bigquery": "pip install filedge[bigquery]",
     "databricks": "pip install filedge[databricks]",
     "duckdb": "pip install filedge[duckdb]",
+    "snowflake": "pip install filedge[snowflake]",
 }
 
 
@@ -133,6 +135,20 @@ _DESCRIPTORS = {
     "duckdb": ConnectorDescriptor(
         type="duckdb",
         settings=(ConnectorSetting("path", default="./analytics.duckdb"),),
+    ),
+    "snowflake": ConnectorDescriptor(
+        type="snowflake",
+        settings=(
+            ConnectorSetting("account"),
+            ConnectorSetting("user"),
+            ConnectorSetting("warehouse"),
+            ConnectorSetting("database"),
+            ConnectorSetting("schema"),
+            ConnectorSetting("role", required=False),
+        ),
+        credential_placeholders=(
+            CredentialPlaceholder("SNOWFLAKE_PASSWORD", "Snowflake account password"),
+        ),
     ),
 }
 

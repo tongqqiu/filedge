@@ -10,6 +10,19 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+### Added
+
+- **Snowflake connector** (`type: snowflake`, `snowflake` extra) — load Files
+  into a Snowflake table with content-hash idempotency (per-hash `DELETE` +
+  `INSERT` in one transaction, like PostgreSQL) and transactional CDC. The
+  password is supplied at runtime via `SNOWFLAKE_PASSWORD`, never in
+  `pipeline.yaml`. Unit-tested for SQL generation; a gated
+  `Snowflake Integration` workflow runs the live round trip.
+- **First-party Stripe API Source** (`type: stripe`) for the Reference Fetcher —
+  cursor pagination (`starting_after` / `has_more`), bearer auth from an env
+  var, and an incremental `created[gt]` cursor; `api_base` can point at
+  `stripe-mock` for credential-free runs.
+
 ## [0.4.0] - 2026-05-31
 
 This release makes Dead-Letter Quarantine operable end-to-end, sharpens Schema
