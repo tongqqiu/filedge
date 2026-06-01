@@ -22,12 +22,17 @@ jobs:
       - run: uv sync --extra dev --extra snowflake
 
       # Key-pair auth (preferred): materialize the PEM key from a secret, if set.
+      # The secret check is done in the shell — the `secrets` context is not
+      # allowed in a step `if:` condition.
       - name: Write Snowflake private key
-        if: ${{ secrets.SNOWFLAKE_PRIVATE_KEY != '' }}
+        env:
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
         run: |
-          install -m 600 /dev/null "$RUNNER_TEMP/snowflake_key.p8"
-          printf '%s' "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > "$RUNNER_TEMP/snowflake_key.p8"
-          echo "SNOWFLAKE_PRIVATE_KEY_PATH=$RUNNER_TEMP/snowflake_key.p8" >> "$GITHUB_ENV"
+          if [ -n "$SNOWFLAKE_PRIVATE_KEY" ]; then
+            install -m 600 /dev/null "$RUNNER_TEMP/snowflake_key.p8"
+            printf '%s' "$SNOWFLAKE_PRIVATE_KEY" > "$RUNNER_TEMP/snowflake_key.p8"
+            echo "SNOWFLAKE_PRIVATE_KEY_PATH=$RUNNER_TEMP/snowflake_key.p8" >> "$GITHUB_ENV"
+          fi
 
       - name: Test Snowflake connector
         env:

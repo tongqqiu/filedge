@@ -61,6 +61,32 @@ def test_file_registration_discovers_files_and_returns_load_candidates(db, tmp_p
     ]
 
 
+def test_watched_dir_missing_uses_filesystem_isdir_for_remote():
+    from filedge.file_registration import _watched_dir_missing
+
+    class FakeFS:
+        def __init__(self, present):
+            self._present = present
+
+        def isdir(self, path):
+            return self._present
+
+    assert _watched_dir_missing(FakeFS(present=False), "s3://bucket/missing") is True
+    assert _watched_dir_missing(FakeFS(present=True), "s3://bucket/landing") is False
+
+
+def test_missing_watched_dir_is_a_clean_noop(db, tmp_path):
+    missing = tmp_path / "not-created-yet"
+    assert not missing.exists()
+
+    result = register_files(str(missing), _config(), db)
+
+    assert result.new_files == 0
+    assert result.failed_pre_load == 0
+    assert result.skipped == 0
+    assert result.load_candidates == []
+
+
 def test_required_manifest_policy_fails_before_load_candidates(db, tmp_path):
     watched = tmp_path / "watch"
     watched.mkdir()
