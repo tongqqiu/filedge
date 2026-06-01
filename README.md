@@ -123,7 +123,7 @@ The audit DB and the destination are separate systems. A crash between connector
 
 ## More
 
-- Guides: [author](docs/guides/author.md) · [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [audit export](docs/guides/audit-export.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [queue sources](docs/guides/queue-sources.md) · [source manifests](docs/guides/source-manifests.md)
+- Guides: [author](docs/guides/author.md) · [run](docs/guides/run.md) · [scale](docs/guides/scale.md) · [inspect](docs/guides/inspect.md) · [preview](docs/guides/preview.md) · [validate](docs/guides/validate.md) · [compact](docs/guides/compact.md) · [healthcheck](docs/guides/healthcheck.md) · [requeue](docs/guides/requeue.md) · [audit export](docs/guides/audit-export.md) · [CDC files](docs/guides/cdc-files.md) · [API sources](docs/guides/api-sources.md) · [Stripe API to DuckDB](docs/guides/stripe-duckdb-demo.md) · [queue sources](docs/guides/queue-sources.md) · [source manifests](docs/guides/source-manifests.md)
 - Release notes: [CHANGELOG.md](CHANGELOG.md)
 - Domain model: [CONTEXT.md](CONTEXT.md)
 - Architecture decisions:

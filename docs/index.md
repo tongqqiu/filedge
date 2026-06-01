@@ -57,6 +57,7 @@ Pluggable via a `connector:` block in `pipeline.yaml`:
 - **PostgreSQL** — production workloads
 - **BigQuery** — GCP data warehouses
 - **Databricks** — Databricks SQL warehouses
+- **Snowflake** — cloud data warehouse workloads
 - **DuckDB** — local analytics
 
 ---

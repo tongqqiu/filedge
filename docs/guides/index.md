@@ -31,6 +31,7 @@ Ingest files and keep the pipeline healthy in production.
 Bring upstream systems in through the same File contract.
 
 - [API sources](api-sources.md) — the Fetcher pattern and the `filedge-fetch` reference companion
+- [Stripe API to DuckDB](stripe-duckdb-demo.md) — local golden path for API Source → File → audited load
 - [API Source adapters](api-source-adapters.md) — extend the Fetcher to a new API
 - [Queue sources](queue-sources.md) — the Materializer pattern and the `filedge-materialize` reference companion
 - [Source manifests](source-manifests.md) — upstream lineage for API / Queue / SFTP / vendor exports
