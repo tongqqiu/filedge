@@ -19,14 +19,18 @@ _REQUIRED = [
     "SNOWFLAKE_WAREHOUSE",
     "SNOWFLAKE_DATABASE",
     "SNOWFLAKE_SCHEMA",
-    "SNOWFLAKE_PASSWORD",
 ]
+_HAS_CREDENTIAL = bool(
+    os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or os.environ.get("SNOWFLAKE_PASSWORD")
+)
 pytestmark = pytest.mark.skipif(
     os.environ.get("FILEDGE_SNOWFLAKE_INTEGRATION") != "1"
-    or any(not os.environ.get(k) for k in _REQUIRED),
+    or any(not os.environ.get(k) for k in _REQUIRED)
+    or not _HAS_CREDENTIAL,
     reason=(
-        "Snowflake integration tests require FILEDGE_SNOWFLAKE_INTEGRATION=1 and "
-        "SNOWFLAKE_ACCOUNT/USER/WAREHOUSE/DATABASE/SCHEMA/PASSWORD"
+        "Snowflake integration tests require FILEDGE_SNOWFLAKE_INTEGRATION=1, "
+        "SNOWFLAKE_ACCOUNT/USER/WAREHOUSE/DATABASE/SCHEMA, and a credential "
+        "(SNOWFLAKE_PRIVATE_KEY_PATH for key-pair auth, or SNOWFLAKE_PASSWORD)"
     ),
 )
 

@@ -147,7 +147,14 @@ _DESCRIPTORS = {
             ConnectorSetting("role", required=False),
         ),
         credential_placeholders=(
-            CredentialPlaceholder("SNOWFLAKE_PASSWORD", "Snowflake account password"),
+            CredentialPlaceholder(
+                "SNOWFLAKE_PRIVATE_KEY_PATH",
+                "Snowflake key-pair auth: PEM private-key file (recommended)",
+            ),
+            CredentialPlaceholder(
+                "SNOWFLAKE_PASSWORD",
+                "Snowflake password auth (fallback; disabled on many accounts)",
+            ),
         ),
     ),
 }

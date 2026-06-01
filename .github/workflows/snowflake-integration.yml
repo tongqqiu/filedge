@@ -21,6 +21,14 @@ jobs:
 
       - run: uv sync --extra dev --extra snowflake
 
+      # Key-pair auth (preferred): materialize the PEM key from a secret, if set.
+      - name: Write Snowflake private key
+        if: ${{ secrets.SNOWFLAKE_PRIVATE_KEY != '' }}
+        run: |
+          install -m 600 /dev/null "$RUNNER_TEMP/snowflake_key.p8"
+          printf '%s' "${{ secrets.SNOWFLAKE_PRIVATE_KEY }}" > "$RUNNER_TEMP/snowflake_key.p8"
+          echo "SNOWFLAKE_PRIVATE_KEY_PATH=$RUNNER_TEMP/snowflake_key.p8" >> "$GITHUB_ENV"
+
       - name: Test Snowflake connector
         env:
           FILEDGE_SNOWFLAKE_INTEGRATION: "1"
@@ -30,5 +38,6 @@ jobs:
           SNOWFLAKE_DATABASE: ${{ vars.SNOWFLAKE_DATABASE }}
           SNOWFLAKE_SCHEMA: ${{ vars.SNOWFLAKE_SCHEMA }}
           SNOWFLAKE_ROLE: ${{ vars.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_PRIVATE_KEY_PASSPHRASE: ${{ secrets.SNOWFLAKE_PRIVATE_KEY_PASSPHRASE }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: uv run pytest tests/test_connector_snowflake_integration.py
