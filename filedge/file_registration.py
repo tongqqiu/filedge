@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 from filedge.config import PipelineConfig
@@ -40,6 +41,13 @@ class FileRegistrationResult:
     bytes_processed: int
 
 
+def _watched_dir_missing(fs, root: str) -> bool:
+    """True when the Watched Directory does not exist yet (local or remote)."""
+    if fs is None:
+        return not os.path.isdir(root)
+    return not fs.isdir(root)
+
+
 def register_files(
     watched_dir: str,
     config: PipelineConfig,
@@ -48,7 +56,13 @@ def register_files(
     run_id: str | None = None,
 ) -> FileRegistrationResult:
     fs, root = get_filesystem(watched_dir)
-    files = list_files(fs, root, file_pattern=config.file_pattern)
+    # A not-yet-created Watched Directory is treated as empty rather than an
+    # error, so a scheduled run that fires before the first File is dropped
+    # (e.g. before the first fetch on a fresh volume) is a clean no-op.
+    if _watched_dir_missing(fs, root):
+        files = []
+    else:
+        files = list_files(fs, root, file_pattern=config.file_pattern)
 
     emit_progress(progress, "hashing", "start", total=len(files))
     file_hashes = {}

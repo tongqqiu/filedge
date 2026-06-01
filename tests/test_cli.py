@@ -226,6 +226,28 @@ def test_run_accepts_no_progress_flag(tmp_path):
     assert "Committed: 1" in result.output
 
 
+def test_run_missing_watched_dir_is_a_clean_noop(tmp_path):
+    # A scheduled run can fire before the Watched Directory exists (e.g. before
+    # the first fetch on a fresh volume). That must be a clean no-op, not an error.
+    config_file = tmp_path / "pipeline.yaml"
+    _write_run_config(config_file, f"sqlite:///{tmp_path}/dest.db")
+    missing = tmp_path / "not-created-yet"
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "run",
+            "--dir", str(missing),
+            "--config", str(config_file),
+            "--audit-db-url", f"sqlite:///{tmp_path}/audit.db",
+            "--no-progress",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Committed: 0" in result.output
+
+
 # --- run --pipeline (Registry resolution) ---
 
 def _write_run_pipeline_workspace(tmp_path, dest_db_url):

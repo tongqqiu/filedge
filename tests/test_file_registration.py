@@ -61,6 +61,18 @@ def test_file_registration_discovers_files_and_returns_load_candidates(db, tmp_p
     ]
 
 
+def test_missing_watched_dir_is_a_clean_noop(db, tmp_path):
+    missing = tmp_path / "not-created-yet"
+    assert not missing.exists()
+
+    result = register_files(str(missing), _config(), db)
+
+    assert result.new_files == 0
+    assert result.failed_pre_load == 0
+    assert result.skipped == 0
+    assert result.load_candidates == []
+
+
 def test_required_manifest_policy_fails_before_load_candidates(db, tmp_path):
     watched = tmp_path / "watch"
     watched.mkdir()

@@ -163,8 +163,9 @@ def cli():
               type=click.Path(file_okay=False),
               help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
 @click.option("--dir", "watched_dir", required=False, default=None,
-              type=click.Path(exists=True, file_okay=False, dir_okay=True),
-              help="Watched directory path")
+              type=click.Path(file_okay=False, dir_okay=True),
+              help="Watched directory path. A not-yet-created directory is a clean "
+                   "no-op, so a scheduled run that fires before the first drop exits 0.")
 @click.option("--config", "config_path", required=False, default=None,
               type=click.Path(exists=True, dir_okay=False),
               help="Path to pipeline.yaml")

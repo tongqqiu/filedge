@@ -17,6 +17,13 @@ merged pull requests is appended automatically beneath them on each release.
   is encrypted). Required on Snowflake accounts where single-factor password
   sign-in is disabled; `SNOWFLAKE_PASSWORD` remains a fallback.
 
+### Changed
+
+- `filedge run` treats a not-yet-created Watched Directory as a clean no-op
+  (exit 0, nothing to do) instead of erroring. A scheduled run that fires before
+  the first File is dropped — e.g. before the first fetch on a fresh volume — no
+  longer fails.
+
 ## [0.5.0] - 2026-05-31
 
 This release widens Filedge's source and destination coverage for the fintech
