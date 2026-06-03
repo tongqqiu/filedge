@@ -10,8 +10,28 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-03
+
+This release makes Filedge easier to try, package, and deploy: a zero-credential
+DuckDB live demo gives new users the full audit-grade load story from a fresh
+checkout, while the reference deployment and Snowflake auth updates harden the
+production path.
+
+### Highlights
+
+- **DuckDB live demo** — A new zero-credential demo runs entirely from a fresh
+  clone or Codespace: inspect and validate CSV Files, load them into DuckDB,
+  prove content-hash idempotency on rerun, surface a bad File in the Audit DB,
+  and generate a static Audit Export evidence page.
+- **Reference deployment** — Filedge now ships a slim container image and
+  runnable `docker compose` example for the two-job fetch + run pattern, giving
+  operators a concrete path from local demo to scheduled production workloads.
+
 ### Added
 
+- **DuckDB live demo** under `demo/duckdb/` with good and bad sample Files,
+  `pipeline.yaml`, reset/run helper scripts, row-inspection utility, and a
+  presenter README.
 - **Reference deployment** under `deploy/` — a slim container image
   (`deploy/Dockerfile`, non-root, build-arg extras) and a runnable
   `docker compose` stack demonstrating the two-job fetch + run pattern against
@@ -29,6 +49,11 @@ merged pull requests is appended automatically beneath them on each release.
   (exit 0, nothing to do) instead of erroring. A scheduled run that fires before
   the first File is dropped — e.g. before the first fetch on a fresh volume — no
   longer fails.
+
+### Documentation
+
+- The DuckDB live demo documents a credential-free presenter flow and cloud
+  connector variants that keep the same operational File contract.
 
 ## [0.5.0] - 2026-05-31
 
@@ -226,7 +251,8 @@ Authoring UI. Plus column-level Field Encryption and two new file formats.
 - ADR-0012 through ADR-0017 added to the architecture decisions index.
 - Versioned documentation site deployment.
 
-[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/tongqqiu/filedge/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/tongqqiu/filedge/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/tongqqiu/filedge/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/tongqqiu/filedge/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/tongqqiu/filedge/compare/v0.2.0...v0.3.0
