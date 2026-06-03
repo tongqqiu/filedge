@@ -10,6 +10,11 @@
 # CronJob, or the looping services in deploy/docker-compose.yml).
 FROM python:3.13-slim
 
+LABEL org.opencontainers.image.title="Filedge" \
+      org.opencontainers.image.description="Atomic file ingestion with content-hash idempotency and a full audit trail." \
+      org.opencontainers.image.source="https://github.com/tongqqiu/filedge" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
 ENV PIP_NO_CACHE_DIR=1 \
     PYTHONUNBUFFERED=1
 

@@ -12,8 +12,16 @@ and runs the open EDGAR → SQLite path, so it works with **zero credentials**.
 
 [`deploy/Dockerfile`](https://github.com/tongqqiu/filedge/blob/main/deploy/Dockerfile)
 builds `filedge`, `filedge-fetch`, and `filedge-materialize` into a slim image.
-The core build carries only the file-ingestion path (SQLite); select
-destination/source extras at build time:
+The official image is published to GitHub Container Registry:
+
+```bash
+docker run --rm ghcr.io/tongqqiu/filedge:0.6.0 --help
+docker run --rm ghcr.io/tongqqiu/filedge:latest --help
+```
+
+The published image carries the core file-ingestion path (SQLite). To build a
+custom image with optional destination/source extras, use the reference
+Dockerfile directly:
 
 ```bash
 # Core (SQLite)
@@ -80,7 +88,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: filedge-fetch
-              image: your-registry/filedge:latest
+              image: ghcr.io/tongqqiu/filedge:latest
               command: ["filedge-fetch", "--config", "/config/sources.yaml",
                         "--source", "apple-revenues"]
               volumeMounts:
@@ -107,7 +115,7 @@ spec:
           restartPolicy: OnFailure
           containers:
             - name: filedge-run
-              image: your-registry/filedge:latest
+              image: ghcr.io/tongqqiu/filedge:latest
               command: ["filedge", "run", "--dir", "/data/landing",
                         "--config", "/config/pipeline.yaml", "--no-progress"]
               env:
@@ -125,11 +133,11 @@ spec:
 Schedulers should key off the **exit code** (`0` = clean, non-zero = failures);
 see [Run a pipeline](run.md#scheduling).
 
-!!! note "Ensure the Watched Directory exists on cold start"
-    `filedge run --dir` requires the directory to exist. On a brand-new volume
-    the runner can fire before the first fetch has created it. The compose
-    reference runs `mkdir -p /data/landing` before its loop; in Kubernetes,
-    create the path in an init step or seed it on the PVC.
+!!! note "Cold starts with an empty Watched Directory"
+    `filedge run --dir` treats a missing Watched Directory as a clean no-op, so
+    the runner can safely start before the first fetch has created `/data/landing`.
+    The compose reference still runs `mkdir -p /data/landing` so local inspection
+    commands have a predictable path.
 
 ## Credentials
 
