@@ -10,17 +10,18 @@ from filedge.audit_records import (
     LineageAmbiguous,
     LineageFound,
     LineageMissing,
+    Requeued,
+    RequeueAmbiguous,
+    RequeueNotEligible,
     lineage_record,
+    requeue_file,
     status_summary,
 )
 from filedge.db import (
     Database,
     create_audit_tables,
-    find_file_by_hash,
-    find_terminal_failed_by_filename,
     list_terminal_failed,
     requeue_all_terminal_failed,
-    requeue_by_hash,
 )
 from filedge.authoring import AuthoringSession
 from filedge.config import load_config
@@ -815,45 +816,44 @@ def requeue(ctx, filename, content_hash, all_terminal_failed, dry_run, yes, retr
             click.echo(f"Requeued: {n}")
 
         else:
-            if content_hash:
-                record = find_file_by_hash(db, content_hash)
-                if record is None:
-                    click.echo(f"Error: no record found for hash {content_hash!r}.", err=True)
-                    sys.exit(1)
-                if record.state != "FAILED" or record.attempt_count < retry_cap:
+            outcome = requeue_file(
+                db,
+                retry_cap=retry_cap,
+                content_hash=content_hash or None,
+                filename=filename,
+            )
+            if isinstance(outcome, Requeued):
+                r = outcome.record
+                click.echo(f"Requeued: {r.filename} ({r.content_hash[:12]}…)")
+            elif isinstance(outcome, RequeueNotEligible):
+                r = outcome.record
+                click.echo(
+                    f"Error: {r.filename!r} is in state {r.state!r} with"
+                    f" attempt_count={r.attempt_count} — not eligible for requeue"
+                    f" (retry_cap={retry_cap}).",
+                    err=True,
+                )
+                sys.exit(1)
+            elif isinstance(outcome, RequeueAmbiguous):
+                click.echo(
+                    f"Error: {len(outcome.matches)} terminal-FAILED records found for {filename!r}."
+                    f" Use --hash to disambiguate:",
+                    err=True,
+                )
+                for r in outcome.matches:
                     click.echo(
-                        f"Error: {record.filename!r} is in state {record.state!r} with"
-                        f" attempt_count={record.attempt_count} — not eligible for requeue"
-                        f" (retry_cap={retry_cap}).",
+                        f"  --hash {r.content_hash}  (error: {r.error_message or 'unknown'})",
                         err=True,
                     )
-                    sys.exit(1)
-                requeue_by_hash(db, content_hash)
-                db.commit()
-                click.echo(f"Requeued: {record.filename} ({content_hash[:12]}…)")
-            else:
-                records = find_terminal_failed_by_filename(db, filename, retry_cap)
-                if not records:
+                sys.exit(1)
+            else:  # RequeueNotFound
+                if content_hash:
+                    click.echo(f"Error: no record found for hash {content_hash!r}.", err=True)
+                else:
                     click.echo(
                         f"Error: no terminal-FAILED record found for {filename!r}.", err=True
                     )
-                    sys.exit(1)
-                if len(records) > 1:
-                    click.echo(
-                        f"Error: {len(records)} terminal-FAILED records found for {filename!r}."
-                        f" Use --hash to disambiguate:",
-                        err=True,
-                    )
-                    for r in records:
-                        click.echo(
-                            f"  --hash {r.content_hash}  (error: {r.error_message or 'unknown'})",
-                            err=True,
-                        )
-                    sys.exit(1)
-                record = records[0]
-                requeue_by_hash(db, record.content_hash)
-                db.commit()
-                click.echo(f"Requeued: {record.filename} ({record.content_hash[:12]}…)")
+                sys.exit(1)
     finally:
         db.close()
 

@@ -159,6 +159,10 @@ _Avoid_: driver, backend, SQL adapter (adapter is overloaded with Connector).
 ### Retry
 Automatic re-attempt of a FAILED File with exponential backoff, up to a configured max attempt count (default: 3). After the cap is reached, the File enters terminal FAILED state requiring explicit human re-queue (resetting state to PENDING). Prevents bad files from burning retries indefinitely.
 
+### Requeue Eligibility
+The single rule that decides what may return to PENDING. A File is **terminal-FAILED** — eligible for explicit human re-queue, not automatic retry — once `state = FAILED` and `attempt_count >= retry_cap`; below the cap the same FAILED File is still **auto-retryable** and a Run resets it on its own. This one boundary is the source of truth for both `filedge run`'s automatic reset and the operator's `filedge requeue`; it is defined once (the Audit DB owns it) and never re-spelled at a call site. Resolution of a requeue target is by Content Hash (exact) or filename (terminal-FAILED matches only, so a duplicate filename in another state is ignored and multiple terminal-FAILED matches are reported as ambiguous rather than guessed).
+_Avoid_: stuck, dead, exhausted (for terminal-FAILED); force-retry.
+
 ### Strict Mode
 The validation policy for a File load: if any row fails schema validation, the entire File fails — no records are committed. This preserves the ability to reason about completeness. Lenient partial commits are not supported by default. The one exception is an opt-in Dead-Letter Quarantine (ADR-0019), which commits good rows while setting bad rows aside under an accounted, threshold-gated policy; it is off unless a Pipeline enables it.
 

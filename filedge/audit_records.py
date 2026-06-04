@@ -1,7 +1,15 @@
 from dataclasses import dataclass
 from typing import Dict, Optional
 
-from filedge.db import Database, FileRecord, find_file_by_hash, find_files_by_filename
+from filedge.db import (
+    Database,
+    FileRecord,
+    find_file_by_hash,
+    find_files_by_filename,
+    find_terminal_failed_by_filename,
+    is_terminal_failed,
+    requeue_by_hash,
+)
 
 
 @dataclass(frozen=True)
@@ -114,6 +122,65 @@ def lineage_record(
     if len(matches) > 1:
         return LineageAmbiguous(identifier=identifier, matches=matches)
     return _lineage_found(db, matches[0])
+
+
+@dataclass(frozen=True)
+class Requeued:
+    record: FileRecord
+
+
+@dataclass(frozen=True)
+class RequeueNotFound:
+    target: str
+
+
+@dataclass(frozen=True)
+class RequeueNotEligible:
+    record: FileRecord
+
+
+@dataclass(frozen=True)
+class RequeueAmbiguous:
+    matches: list[FileRecord]
+
+
+RequeueOutcome = Requeued | RequeueNotFound | RequeueNotEligible | RequeueAmbiguous
+
+
+def requeue_file(
+    db: Database,
+    *,
+    retry_cap: int,
+    content_hash: Optional[str] = None,
+    filename: Optional[str] = None,
+) -> RequeueOutcome:
+    """Resolve a single requeue target and reset it, or report why it cannot be.
+
+    Owns the requeue decision: identity resolution (by Content Hash or filename),
+    terminal-FAILED eligibility, and duplicate-filename disambiguation. The caller
+    renders the outcome and never re-derives eligibility. Resolution by hash is
+    exact; resolution by filename considers only terminal-FAILED matches so a
+    re-dropped duplicate filename in another state is ignored.
+    """
+    if content_hash is not None:
+        record = find_file_by_hash(db, content_hash)
+        if record is None:
+            return RequeueNotFound(target=content_hash)
+        if not is_terminal_failed(record, retry_cap):
+            return RequeueNotEligible(record=record)
+        requeue_by_hash(db, content_hash)
+        db.commit()
+        return Requeued(record=record)
+
+    matches = find_terminal_failed_by_filename(db, filename, retry_cap)
+    if not matches:
+        return RequeueNotFound(target=filename)
+    if len(matches) > 1:
+        return RequeueAmbiguous(matches=matches)
+    record = matches[0]
+    requeue_by_hash(db, record.content_hash)
+    db.commit()
+    return Requeued(record=record)
 
 
 def _lineage_found(db: Database, record: FileRecord) -> LineageFound:
