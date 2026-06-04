@@ -152,6 +152,10 @@ _Avoid_: checkpoint, CDC ledger.
 ### Connector Registry
 The internal mapping from a `connector.type` string (e.g. `bigquery`) to a Connector implementation class. Resolved lazily at instantiation time so that missing optional SDK dependencies surface as a clear error only when the Connector is actually used. Declared in `pipeline.yaml` under a `connector:` block; secrets (API tokens, service account credentials) come from environment variables, never from YAML.
 
+### SqlDialect
+The value object that carries the per-Destination data varying across SQL Connectors that share one write algorithm. The deep `SqlConnector` owns the common implementation — `ensure_table` schema-diff, the idempotent `DELETE WHERE _source_file_hash` + batched `INSERT`, and transactional SCD Type 1 CDC — executed over a DB-API cursor. A SqlDialect supplies only the deltas: the Column Type → SQL type map, identifier quoting, parameter placeholder style, identity-column DDL, the truncate verb, the `_ingested_at` literal format, whether a secondary index is created, and the schema-introspection query. A SqlDialect carries data, not connection or credential logic — connection setup and auth stay in the concrete Connector, which is the part that legitimately differs per backend. Only Connectors whose write path is a batched cursor `executemany` are SqlDialects: `sqlite`, `postgres`, and `snowflake`. The DuckDB Connector (Arrow bulk path) and the warehouse Connectors (BigQuery, Databricks — staging plus a native MERGE) do not share that algorithm and are not expressed as SqlDialects.
+_Avoid_: driver, backend, SQL adapter (adapter is overloaded with Connector).
+
 ### Retry
 Automatic re-attempt of a FAILED File with exponential backoff, up to a configured max attempt count (default: 3). After the cap is reached, the File enters terminal FAILED state requiring explicit human re-queue (resetting state to PENDING). Prevents bad files from burning retries indefinitely.
 
