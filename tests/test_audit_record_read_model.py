@@ -2,11 +2,25 @@ from filedge.audit_records import (
     LineageAmbiguous,
     LineageFound,
     LineageMissing,
+    RequeueAmbiguous,
+    RequeueNotEligible,
+    RequeueNotFound,
+    Requeued,
     export_records,
     lineage_record,
+    requeue_file,
     status_summary,
 )
-from filedge.db import claim_processing, insert_pending, mark_committed, mark_failed
+from filedge.db import (
+    FileState,
+    FileRecord,
+    claim_processing,
+    find_file_by_hash,
+    insert_pending,
+    is_terminal_failed,
+    mark_committed,
+    mark_failed,
+)
 
 
 def test_status_summary_counts_states_and_recent_failures(db):
@@ -99,3 +113,91 @@ def test_lineage_record_resolves_hash_filename_missing_and_ambiguous(db):
         "hash-shared-1",
         "hash-shared-2",
     ]
+
+
+# --- Requeue Eligibility predicate ---------------------------------------------
+
+def _record(state: str, attempt_count: int) -> FileRecord:
+    return FileRecord(
+        id=1, filename="f.csv", source_dir=None, content_hash="h",
+        state=state, attempt_count=attempt_count, error_message=None,
+        worker_id=None, claimed_at=None,
+    )
+
+
+def test_is_terminal_failed_at_and_above_cap():
+    assert is_terminal_failed(_record(FileState.FAILED, 3), retry_cap=3) is True
+    assert is_terminal_failed(_record(FileState.FAILED, 5), retry_cap=3) is True
+
+
+def test_is_terminal_failed_false_below_cap_or_other_state():
+    assert is_terminal_failed(_record(FileState.FAILED, 2), retry_cap=3) is False
+    assert is_terminal_failed(_record(FileState.COMMITTED, 9), retry_cap=3) is False
+    assert is_terminal_failed(_record(FileState.PENDING, 9), retry_cap=3) is False
+
+
+# --- requeue_file use-case -----------------------------------------------------
+
+def _make_terminal_failed(db, filename, content_hash, retry_cap=3):
+    insert_pending(db, filename, content_hash)
+    claim_processing(db, content_hash)
+    for _ in range(retry_cap):
+        mark_failed(db, content_hash, "boom")
+    db.commit()
+
+
+def test_requeue_file_by_hash_resets_to_pending(db):
+    _make_terminal_failed(db, "orders.csv", "h1")
+
+    outcome = requeue_file(db, retry_cap=3, content_hash="h1")
+
+    assert isinstance(outcome, Requeued)
+    assert outcome.record.content_hash == "h1"
+    after = find_file_by_hash(db, "h1")
+    assert after.state == FileState.PENDING
+    assert after.attempt_count == 0
+
+
+def test_requeue_file_by_hash_missing_is_not_found(db):
+    outcome = requeue_file(db, retry_cap=3, content_hash="nope")
+    assert outcome == RequeueNotFound(target="nope")
+
+
+def test_requeue_file_by_hash_below_cap_is_not_eligible(db):
+    insert_pending(db, "orders.csv", "h2")
+    claim_processing(db, "h2")
+    mark_failed(db, "h2", "boom")  # attempt_count=1, below cap
+    db.commit()
+
+    outcome = requeue_file(db, retry_cap=3, content_hash="h2")
+
+    assert isinstance(outcome, RequeueNotEligible)
+    assert outcome.record.content_hash == "h2"
+    assert find_file_by_hash(db, "h2").state == FileState.FAILED  # untouched
+
+
+def test_requeue_file_by_filename_single_match(db):
+    _make_terminal_failed(db, "orders.csv", "h3")
+
+    outcome = requeue_file(db, retry_cap=3, filename="orders.csv")
+
+    assert isinstance(outcome, Requeued)
+    assert find_file_by_hash(db, "h3").state == FileState.PENDING
+
+
+def test_requeue_file_by_filename_none_is_not_found(db):
+    outcome = requeue_file(db, retry_cap=3, filename="missing.csv")
+    assert outcome == RequeueNotFound(target="missing.csv")
+
+
+def test_requeue_file_by_filename_multiple_is_ambiguous(db):
+    _make_terminal_failed(db, "orders.csv", "hA")
+    _make_terminal_failed(db, "orders.csv", "hB")
+
+    outcome = requeue_file(db, retry_cap=3, filename="orders.csv")
+
+    assert isinstance(outcome, RequeueAmbiguous)
+    assert {r.content_hash for r in outcome.matches} == {"hA", "hB"}
+    # Ambiguous resolution touches nothing.
+    assert find_file_by_hash(db, "hA").state == FileState.FAILED
+    assert find_file_by_hash(db, "hB").state == FileState.FAILED
