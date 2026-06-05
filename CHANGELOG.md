@@ -10,6 +10,24 @@ merged pull requests is appended automatically beneath them on each release.
 
 ## [Unreleased]
 
+### Added
+
+- **`filedge serve`** — serve the read-only Audit Export over localhost and open
+  it in a browser, the `dbt docs serve` analogue. It renders the same static
+  Audit Export and regenerates the page from the Audit DB on each request, so a
+  long-lived viewer reflects files committed by a concurrent `filedge run`
+  without a restart. Binds to `127.0.0.1` by default, only ever reads the Audit
+  DB, and adds no control surface — a local viewer of the static export, not a
+  hosted dashboard. Resolves the Audit DB from `--pipeline`/`--workspace` or
+  `--audit-db-url`, mirroring `filedge export-audit`.
+
+### Changed
+
+- The **Audit Export** now opens with a summary strip of counts by File state,
+  rows loaded, and quarantined rows (the same figures `filedge status` prints),
+  and each File's detail surfaces its Source Manifest lineage (`source_type`,
+  `source_name`, `producer`, `external_run_id`) when present.
+
 ## [0.6.0] - 2026-06-03
 
 This release makes Filedge easier to try, package, and deploy: a zero-credential

@@ -27,6 +27,10 @@ class AuditExportRecord:
     updated_at: Optional[str]
     quarantined_row_count: Optional[int]
     quarantine_path: Optional[str]
+    source_type: Optional[str]
+    source_name: Optional[str]
+    producer: Optional[str]
+    external_run_id: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -85,7 +89,8 @@ def export_records(db: Database) -> list[AuditExportRecord]:
     cursor = db.execute(
         "SELECT id, filename, source_dir, content_hash, state, attempt_count,"
         " error_message, worker_id, claimed_at, row_count, updated_at,"
-        " quarantined_row_count, quarantine_path"
+        " quarantined_row_count, quarantine_path,"
+        " source_type, source_name, producer, external_run_id"
         " FROM etl_file_audit ORDER BY updated_at DESC"
     )
     return [
@@ -103,6 +108,10 @@ def export_records(db: Database) -> list[AuditExportRecord]:
             updated_at=row[10],
             quarantined_row_count=row[11],
             quarantine_path=row[12],
+            source_type=row[13],
+            source_name=row[14],
+            producer=row[15],
+            external_run_id=row[16],
         )
         for row in cursor.fetchall()
     ]
