@@ -1018,6 +1018,41 @@ def export_audit_cmd(ctx, pipeline_id, workspace, audit_db_url, output, title, d
         db.close()
 
 
+@cli.command("serve")
+@click.option("--pipeline", "pipeline_id", default=None,
+              help="Resolve the Audit DB from this Pipeline Registry id "
+                   "instead of --audit-db-url.")
+@click.option("--workspace", default=".", show_default=True,
+              type=click.Path(file_okay=False),
+              help="Workspace root holding pipeline-registry.yaml (used with --pipeline).")
+@click.option("--audit-db-url", default=None, envvar="FILEDGE_AUDIT_DB_URL", help="Audit database URL")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Interface to bind")
+@click.option("--port", default=8000, show_default=True, type=int, help="Port to bind (0 picks a free port)")
+@click.option("--title", default=None, help="Pipeline label shown in the site header")
+@click.option("--dest-table", default=None, help="Destination table name for lineage SQL")
+@click.option("--no-open", "no_open", is_flag=True, help="Do not open a browser window")
+@click.pass_context
+def serve_cmd(ctx, pipeline_id, workspace, audit_db_url, host, port, title, dest_table, no_open):
+    """Serve the read-only Audit Export locally and open it in a browser."""
+    from filedge.serve import serve_audit
+
+    audit_db_url = _operator_audit_db_url(ctx, pipeline_id, workspace, audit_db_url)
+
+    try:
+        serve_audit(
+            audit_db_url,
+            host=host,
+            port=port,
+            title=title,
+            dest_table=dest_table,
+            open_browser=not no_open,
+            log=click.echo,
+        )
+    except OSError as e:
+        click.echo(f"Error: cannot serve on {host}:{port}: {e}", err=True)
+        sys.exit(1)
+
+
 def _default_redrop_output(sidecar_path: str) -> str:
     """Derive a re-drop output path next to the sidecar.
 

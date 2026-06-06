@@ -1208,3 +1208,37 @@ def test_author_rejects_sheet_without_excel_format(tmp_path):
     )
     assert result.exit_code == 2
     assert "--sheet is only valid with --format excel" in result.output
+
+
+def test_serve_cmd_invokes_serve_audit_with_resolved_db(db_url, monkeypatch):
+    captured = {}
+
+    def fake_serve_audit(url, **kwargs):
+        captured["url"] = url
+        captured.update(kwargs)
+
+    monkeypatch.setattr("filedge.serve.serve_audit", fake_serve_audit)
+
+    result = CliRunner().invoke(
+        cli,
+        ["serve", "--audit-db-url", db_url, "--title", "Orders", "--no-open"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert captured["url"] == db_url
+    assert captured["title"] == "Orders"
+    assert captured["open_browser"] is False
+
+
+def test_serve_cmd_reports_bind_failure(db_url, monkeypatch):
+    def fake_serve_audit(url, **kwargs):
+        raise OSError("address already in use")
+
+    monkeypatch.setattr("filedge.serve.serve_audit", fake_serve_audit)
+
+    result = CliRunner().invoke(
+        cli, ["serve", "--audit-db-url", db_url, "--port", "8000"]
+    )
+
+    assert result.exit_code == 1
+    assert "cannot serve on 127.0.0.1:8000" in result.output

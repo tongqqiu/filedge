@@ -311,6 +311,36 @@ See the [Audit Export guide](../guides/audit-export.md) for full details.
 
 ---
 
+## `filedge serve`
+
+Serve the read-only Audit Export over localhost and open it in a browser — the
+`dbt docs serve` analogue. Renders the same static site as `export-audit` and
+regenerates the page from the Audit DB on each request, so a long-lived viewer
+reflects files committed by a concurrent `filedge run` without a restart. It
+binds to `127.0.0.1` by default, only ever reads the Audit DB, and adds no
+control surface; all state-changing operations stay in the Operator CLI.
+
+```bash
+filedge serve --audit-db-url <url> [options]
+filedge serve --pipeline <id> [--workspace <path>] [options]
+```
+
+| Option | Env var | Default | Description |
+|--------|---------|---------|-------------|
+| `--audit-db-url` | `FILEDGE_AUDIT_DB_URL` | required | Audit database URL. Mutually exclusive with `--pipeline` |
+| `--pipeline` | — | — | Resolve the Audit DB from this Pipeline Registry id instead of `--audit-db-url` |
+| `--workspace` | — | `.` | Workspace root holding `pipeline-registry.yaml` (used with `--pipeline`) |
+| `--host` | — | `127.0.0.1` | Interface to bind |
+| `--port` | — | `8000` | Port to bind (`0` picks a free port) |
+| `--title` | — | none | Pipeline label shown in the site header |
+| `--dest-table` | — | none | Destination table name for lineage SQL snippets |
+| `--no-open` | — | off | Do not open a browser window |
+
+**Exit codes:** `0` on success, `1` if the address cannot be bound. Runs until
+interrupted (Ctrl-C).
+
+---
+
 ## `filedge completion`
 
 Print shell completion scripts for zsh or bash.

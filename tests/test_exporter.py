@@ -149,3 +149,42 @@ def test_export_html_clean_commit_has_no_quarantine_indicator(audit_db, tmp_path
 
     html = output.read_text()
     assert "quarantined" not in html.lower()
+
+
+def test_export_html_summary_strip_shows_state_counts_and_rows(audit_db, tmp_path):
+    insert_pending(audit_db, "a.csv", "hash-a")
+    insert_pending(audit_db, "b.csv", "hash-b")
+    insert_pending(audit_db, "c.csv", "hash-c")
+    mark_committed(audit_db, "hash-a", row_count=100)
+    mark_committed(audit_db, "hash-b", row_count=50)
+    mark_failed(audit_db, "hash-c", "bad row")
+    audit_db.commit()
+
+    output = tmp_path / "index.html"
+    export_audit(audit_db, str(output))
+
+    html = output.read_text()
+    # Overview strip labels and the total rows-loaded figure (100 + 50).
+    assert "Rows loaded" in html
+    assert "Committed" in html
+    assert "150" in html
+
+
+def test_export_html_surfaces_source_manifest_lineage(audit_db, tmp_path):
+    insert_pending(audit_db, "stripe.ndjson", "hash-stripe")
+    audit_db.execute(
+        "UPDATE etl_file_audit SET source_type=?, source_name=?, producer=?,"
+        " external_run_id=? WHERE content_hash=?",
+        ["api", "stripe.charges", "filedge-fetch", "run-2026-06-05", "hash-stripe"],
+    )
+    mark_committed(audit_db, "hash-stripe", row_count=10)
+    audit_db.commit()
+
+    output = tmp_path / "index.html"
+    export_audit(audit_db, str(output))
+
+    html = output.read_text()
+    assert "Source manifest" in html
+    assert "stripe.charges" in html
+    assert "filedge-fetch" in html
+    assert "run-2026-06-05" in html

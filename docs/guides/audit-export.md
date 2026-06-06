@@ -17,6 +17,17 @@ export FILEDGE_AUDIT_DB_URL=sqlite:///filedge.db
 filedge export-audit --output ./site/index.html
 ```
 
+## Browsing locally with `filedge serve`
+
+To skip picking an output path and just look at the audit trail in a browser, use `filedge serve` — the `dbt docs serve` analogue:
+
+```bash
+filedge serve --audit-db-url sqlite:///filedge.db --title "KYC Documents"
+# Serving Audit Export (42 files) at http://127.0.0.1:8000/
+```
+
+It renders the same static Audit Export and serves it on localhost, opening a browser window (pass `--no-open` to suppress). The page is regenerated from the Audit DB on each request, so leaving `filedge serve` running while a scheduled `filedge run` ingests new files lets you refresh the browser to see them — no restart, no re-export. It binds to `127.0.0.1` by default (use `--host`/`--port` to change), only ever reads the Audit DB, and adds no control surface: every state-changing operation stays in the Operator CLI. Use `export-audit` when you want a file to publish or archive; use `serve` for an ad-hoc local look.
+
 ## Options
 
 | Flag | Description |
@@ -54,12 +65,12 @@ Access control is handled by your static hosting layer (signed URLs, SSO-gated C
 
 ## What the export shows
 
-The site presents a sortable, filterable Files table. For each file:
+The site opens with a summary strip — total files, counts by state (`COMMITTED` / `PROCESSING` / `PENDING` / `FAILED`), rows loaded, and quarantined rows — the same figures `filedge status` prints. Below it is a sortable, filterable Files table. For each file:
 
 - Filename, state chip (`COMMITTED` / `FAILED` / `PENDING` / `PROCESSING`)
 - Row count committed to the destination (blank `—` for files ingested before row count tracking was added)
 - Attempt count and last-updated timestamp
-- Click to expand: full content hash, source directory, error message (for FAILED files), and a copyable lineage SQL query
+- Click to expand: full content hash, source directory, [Source Manifest](source-manifests.md) lineage (`source_type`, `source_name`, `producer`, `external_run_id`) when present, error message (for FAILED files), and a copyable lineage SQL query
 
 ### Lineage SQL
 

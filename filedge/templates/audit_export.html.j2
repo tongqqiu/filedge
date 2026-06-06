@@ -39,6 +39,15 @@
   .detail-label { font-weight: 600; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
   .empty { text-align: center; padding: 48px; color: #94a3b8; }
   .summary { font-size: 12px; color: #64748b; margin-bottom: 8px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+  .stat { flex: 1; min-width: 120px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .stat .num { font-size: 24px; font-weight: 700; line-height: 1.1; color: #1e293b; }
+  .stat .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #64748b; margin-top: 4px; }
+  .stat.s-COMMITTED .num { color: #15803d; }
+  .stat.s-FAILED .num { color: #b91c1c; }
+  .stat.s-PENDING .num { color: #854d0e; }
+  .stat.s-PROCESSING .num { color: #1d4ed8; }
+  .stat.s-warn .num { color: #c2410c; }
 </style>
 </head>
 <body>
@@ -47,6 +56,18 @@
   <span class="meta">Generated {{ generated_at }} &nbsp;·&nbsp; {{ records | length }} files</span>
 </header>
 <main>
+  {% if summary %}
+  <div class="stats">
+    <div class="stat"><div class="num">{{ "{:,}".format(summary.total) }}</div><div class="lbl">Files</div></div>
+    {% for state in ["COMMITTED", "PROCESSING", "PENDING", "FAILED"] %}
+    <div class="stat s-{{ state }}"><div class="num">{{ "{:,}".format(summary.by_state[state]) }}</div><div class="lbl">{{ state | capitalize }}</div></div>
+    {% endfor %}
+    <div class="stat"><div class="num">{{ "{:,}".format(summary.total_rows) }}</div><div class="lbl">Rows loaded</div></div>
+    {% if summary.quarantined_rows %}
+    <div class="stat s-warn"><div class="num">{{ "{:,}".format(summary.quarantined_rows) }}</div><div class="lbl">Quarantined</div></div>
+    {% endif %}
+  </div>
+  {% endif %}
   <div class="toolbar">
     <input id="search" type="search" placeholder="Search by filename, content hash, or state…" oninput="applyFilters()">
     <select id="state-filter" onchange="applyFilters()">
@@ -96,6 +117,10 @@
           <div class="detail-label">Full content hash</div>
           <pre>{{ r.content_hash }}</pre>
           {% if r.source_dir %}<div class="detail-label" style="margin-top:8px">Source directory</div><pre>{{ r.source_dir }}</pre>{% endif %}
+          {% if r.source_type or r.source_name or r.producer or r.external_run_id %}<div class="detail-label" style="margin-top:8px">Source manifest</div><pre>{% if r.source_type %}source_type: {{ r.source_type }}
+{% endif %}{% if r.source_name %}source_name: {{ r.source_name }}
+{% endif %}{% if r.producer %}producer: {{ r.producer }}
+{% endif %}{% if r.external_run_id %}external_run_id: {{ r.external_run_id }}{% endif %}</pre>{% endif %}
           {% if r.error_message %}<div class="detail-label" style="margin-top:8px">Error</div><pre>{{ r.error_message }}</pre>{% endif %}
           {% if r.quarantined_row_count %}<div class="detail-label" style="margin-top:8px">Quarantined rows</div><pre>{{ r.quarantined_row_count }} row(s) set aside, not loaded</pre>
           {% if r.quarantine_path %}<div class="detail-label" style="margin-top:8px">Quarantine sidecar</div><pre>{{ r.quarantine_path }}</pre>{% endif %}{% endif %}
